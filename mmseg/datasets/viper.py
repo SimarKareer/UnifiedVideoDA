@@ -1,14 +1,14 @@
 from .builder import DATASETS
 from .custom import CustomDataset
-from . import CityscapesSegDataset
+from .cityscapes_seq import CityscapesSeqDataset
 
 @DATASETS.register_module()
 class ViperDataset(CustomDataset):
     """Viper dataset.
     """
     #grab the classes and coloring from cityscapes dataset
-    CLASSES = CityscapesSegDataset.CLASSES
-    PALETTE = CityscapesSegDataset.PALETTE
+    CLASSES = CityscapesSeqDataset.CLASSES
+    PALETTE = CityscapesSeqDataset.PALETTE
 
     def __init__(self,split, **kwargs):
         super(ViperDataset, self).__init__(
