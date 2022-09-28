@@ -6,4 +6,24 @@ model = dict(
         init_cfg=dict(type='Pretrained', checkpoint=checkpoint),
         embed_dims=64,
         num_layers=[3, 6, 40, 3]),
-    decode_head=dict(in_channels=[64, 128, 320, 512]))
+    decode_head=dict(
+        in_channels=[64, 128, 320, 512],
+        num_classes = 31
+    )
+)
+
+log_config = dict(
+    interval=10,
+    hooks=[
+        dict(type='TextLoggerHook', by_epoch=False),
+        # dict(type='MMSegWandbHook',
+        #         init_kwargs={
+        #             'entity': "video-da",
+        #             'project': "viper-baseline"
+        #         },
+        #         interval=50,
+        #         log_checkpoint=True,
+        #         log_checkpoint_metadata=True,
+        #         num_eval_images=100,
+        #         bbox_score_thr=0.3)
+    ])

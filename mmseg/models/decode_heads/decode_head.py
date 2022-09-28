@@ -79,6 +79,7 @@ class BaseDecodeHead(BaseModule, metaclass=ABCMeta):
                      type='Normal', std=0.01, override=dict(name='conv_seg'))):
         super(BaseDecodeHead, self).__init__(init_cfg)
         self._init_inputs(in_channels, in_index, input_transform)
+        self.mem_loss = None
         self.channels = channels
         self.dropout_ratio = dropout_ratio
         self.conv_cfg = conv_cfg
@@ -229,8 +230,18 @@ class BaseDecodeHead(BaseModule, metaclass=ABCMeta):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        torch.cuda.empty_cache()
+        # print("Mem allocated: ", torch.cuda.memory_allocated())
+        # print("Mem reserved: ", torch.cuda.memory_reserved())
         seg_logits = self(inputs)
+        # print(f"{seg_logits.shape=}")
+        # print(f"{gt_semantic_seg.shape=}")
+        # print(f"{gt_semantic_seg.min()=}")
+        # print(f"{gt_semantic_seg.max()=}")
+
         losses = self.losses(seg_logits, gt_semantic_seg)
+
+        # print(f"{losses=}")
         return losses
 
     def forward_test(self, inputs, img_metas, test_cfg):
