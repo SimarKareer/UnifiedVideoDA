@@ -13,17 +13,16 @@ model = dict(
 )
 
 log_config = dict(
-    interval=10,
+    interval=50,
     hooks=[
         dict(type='TextLoggerHook', by_epoch=False),
-        # dict(type='MMSegWandbHook',
-        #         init_kwargs={
-        #             'entity': "video-da",
-        #             'project': "viper-baseline"
-        #         },
-        #         interval=50,
-        #         log_checkpoint=True,
-        #         log_checkpoint_metadata=True,
-        #         num_eval_images=100,
-        #         bbox_score_thr=0.3)
+        dict(type='MMSegWandbHook',
+                init_kwargs={
+                    'entity': "video-da",
+                    'project': "viper-baseline"
+                },
+                interval=50,
+                log_checkpoint=True,
+                log_checkpoint_metadata=True,
+                num_eval_images=100)
     ])

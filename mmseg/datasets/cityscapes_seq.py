@@ -8,7 +8,8 @@ from PIL import Image
 
 from .builder import DATASETS
 from .custom import CustomDataset
-
+import cityscapesscripts.helpers.labels as CSLabels
+import pdb
 
 @DATASETS.register_module()
 class CityscapesSeqDataset(CustomDataset):
@@ -19,15 +20,15 @@ class CityscapesSeqDataset(CustomDataset):
     """
 
     CLASSES = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
-               'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky',
-               'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle',
-               'bicycle')
+            'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky',
+            'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle',
+            'bicycle')
 
     PALETTE = [[128, 64, 128], [244, 35, 232], [70, 70, 70], [102, 102, 156],
-               [190, 153, 153], [153, 153, 153], [250, 170, 30], [220, 220, 0],
-               [107, 142, 35], [152, 251, 152], [70, 130, 180], [220, 20, 60],
-               [255, 0, 0], [0, 0, 142], [0, 0, 70], [0, 60, 100],
-               [0, 80, 100], [0, 0, 230], [119, 11, 32]]
+        [190, 153, 153], [153, 153, 153], [250, 170, 30], [220, 220, 0],
+        [107, 142, 35], [152, 251, 152], [70, 130, 180], [220, 20, 60],
+        [255, 0, 0], [0, 0, 142], [0, 0, 70], [0, 60, 100],
+        [0, 80, 100], [0, 0, 230], [119, 11, 32]]
 
     def __init__(self,split,**kwargs):
         super(CityscapesSeqDataset, self).__init__(
@@ -36,6 +37,23 @@ class CityscapesSeqDataset(CustomDataset):
             split=split,
             **kwargs)
 
+        
+        viperClasses = ("unlabeled", "ambiguous", "sky","road","sidewalk","railtrack","terrain","tree","vegetation","building","infrastructure","fence","billboard","traffic light","traffic sign","mobilebarrier","firehydrant","chair","trash","trashcan","person","animal","bicycle","motorcycle","car","van","bus","truck","trailer","train","plane","boat")
+
+        self.label_map = {}
+        self.adaptation_map = {k: 255 for k in range(255)}
+        
+        for _, label in CSLabels.trainId2label.items():
+            name = label.name
+            if name in viperClasses:
+                self.adaptation_map[viperClasses.index(name)] = label.trainId
+
+        for _, label in CSLabels.trainId2label.items():
+            self.label_map[label.id] = label.trainId
+        
+        # After label map: license plate, road, sidewalk, ...    unlabelled
+        #                  -1             0,     1,              255
+        
     @staticmethod
     def _convert_to_label_id(result):
         """Convert trainId to id for cityscapes-seq."""
@@ -89,7 +107,7 @@ class CityscapesSeqDataset(CustomDataset):
 
         return result_files
 
-    def format_results(self, results, imgfile_prefix=None, to_label_id=True):
+    def format_results(self, results, imgfile_prefix=None, to_label_id=True, indices=None):
         """Format the results into dir (standard format for Cityscapes
         evaluation).
 
@@ -157,8 +175,8 @@ class CityscapesSeqDataset(CustomDataset):
             metrics.remove('cityscapes')
         if len(metrics) > 0:
             eval_results.update(
-                super(CityscapesDataset,
-                      self).evaluate(results, metrics, logger, efficient_test))
+                super(CityscapesSeqDataset,
+                      self).evaluate(results, metrics, logger, efficient_test, label_map=self.label_map))
 
         return eval_results
 
