@@ -4,7 +4,7 @@
 #SBATCH --error=logs$1.err
 #SBATCH --gpus-per-task 1  # This gives 1 GPU to each process (or task)
 #SBATCH --nodes 1
-#SBATCH --ntasks-per-node 2 # The number of processes for slurm to start on each node
+#SBATCH --ntasks-per-node 4 # The number of processes for slurm to start on each node
 #SBATCH --partition=short
 #SBATCH --constraint="a40"
 
