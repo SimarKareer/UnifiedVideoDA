@@ -147,6 +147,8 @@ def main():
 
     cfg.auto_resume = args.auto_resume
 
+    # print("CUDA LAUNCH BLOCKING: ", os.environ["CUDA_LAUNCH_BLOCKING"])
+    # os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
         distributed = False

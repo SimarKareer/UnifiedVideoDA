@@ -4,6 +4,8 @@ from collections import OrderedDict
 import mmcv
 import numpy as np
 import torch
+from torchvision.utils import save_image
+import cv2
 
 
 def f_score(precision, recall, beta=1):
@@ -71,6 +73,10 @@ def intersect_and_union(pred_label,
         label[label == 0] = 255
         label = label - 1
         label[label == 254] = 255
+
+    # cv2.imwrite("work_dirs/ims/label.png", label.numpy())
+    # cv2.imwrite("work_dirs/ims/pred_label.png", pred_label.numpy())
+    
 
     mask = (label != ignore_index)
     pred_label = pred_label[mask]

@@ -118,3 +118,10 @@ mmseg/.mim
 
 # Pytorch
 *.pth
+
+#exports
+.format_cityscapes/
+wandb/
+artifacts/
+*.out
+*.err

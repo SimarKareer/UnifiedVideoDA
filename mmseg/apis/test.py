@@ -206,6 +206,11 @@ def multi_gpu_test(model,
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
             result = model(return_loss=False, rescale=True, **data)
+            if dataset.adaptation_map is not None:
+                for res in result:
+                    result_copy = res.copy()
+                    for old_id, new_id in dataset.adaptation_map.items():
+                        res[result_copy == old_id] = new_id
 
         if efficient_test:
             result = [np2tmp(_, tmpdir='.efficient_test') for _ in result]

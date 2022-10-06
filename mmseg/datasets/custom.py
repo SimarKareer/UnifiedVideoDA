@@ -103,6 +103,7 @@ class CustomDataset(Dataset):
         self.ignore_index = ignore_index
         self.reduce_zero_label = reduce_zero_label
         self.label_map = None
+        self.adaptation_map = None
         self.CLASSES, self.PALETTE = self.get_classes_and_palette(
             classes, palette)
         self.gt_seg_map_loader = LoadAnnotations(
@@ -308,7 +309,7 @@ class CustomDataset(Dataset):
                     # should be `dict()`, see
                     # https://github.com/open-mmlab/mmsegmentation/issues/1415
                     # for more ditails
-                    label_map=dict(),
+                    label_map=self.label_map,
                     reduce_zero_label=self.reduce_zero_label))
 
         return pre_eval_results
@@ -390,6 +391,7 @@ class CustomDataset(Dataset):
                  metric='mIoU',
                  logger=None,
                  gt_seg_maps=None,
+                 label_map=dict(),
                  **kwargs):
         """Evaluate the dataset.
 
@@ -426,7 +428,7 @@ class CustomDataset(Dataset):
                 num_classes,
                 self.ignore_index,
                 metric,
-                label_map=dict(),
+                label_map=label_map,
                 reduce_zero_label=self.reduce_zero_label)
         # test a list of pre_eval_results
         else:

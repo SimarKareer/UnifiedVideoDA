@@ -218,6 +218,7 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
                     img,
                     result,
                     palette=None,
+                    classes=None,
                     win_name='',
                     show=False,
                     wait_time=0,
@@ -245,6 +246,9 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
         Returns:
             img (Tensor): Only if not `show` or `out_file`
         """
+        if classes == None:
+            classes = self.CLASSES
+        
         img = mmcv.imread(img)
         img = img.copy()
         seg = result[0]
@@ -259,12 +263,14 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
                 np.random.seed(42)
                 # random palette
                 palette = np.random.randint(
-                    0, 255, size=(len(self.CLASSES), 3))
+                    0, 255, size=(len(classes), 3))
                 np.random.set_state(state)
             else:
                 palette = self.PALETTE
         palette = np.array(palette)
-        assert palette.shape[0] == len(self.CLASSES)
+        # print("Palette: ", palette)
+        # print("CLASSES: ", classes)
+        assert palette.shape[0] == len(classes)
         assert palette.shape[1] == 3
         assert len(palette.shape) == 2
         assert 0 < opacity <= 1.0
