@@ -6,6 +6,8 @@ import numpy as np
 import torch
 from torchvision.utils import save_image
 import cv2
+import linecache
+import os
 
 
 def f_score(precision, recall, beta=1):
@@ -24,13 +26,52 @@ def f_score(precision, recall, beta=1):
         (beta**2 * precision) + recall)
     return score
 
+def error_viz(pred_label, label, indices, split="/srv/share4/datasets/VIPER/splits/val.txt"):
+    if len(pred_label.shape) != 2:
+        raise NotImplementedError("Error viz only works with batch size 1 currently")
+
+    source_im_path = linecache.getline(split, indices[0] + 1).strip() #"/srv/share4/datasets/VIPER/val/img/001/001_00001.jpg"
+    source_im = mmcv.imread(f"/srv/share4/datasets/VIPER/val/img/{source_im_path}.jpg", flag='unchanged', backend='pillow')
+    for classId in range(32):
+        print("making dir")
+        if not os.path.exists(f"work_dirs/ims/error_vis/cls{classId}"):
+            os.mkdir(f"work_dirs/ims/error_vis/cls{classId}")
+    for classId in range(32): #let's look at sidewalk errors
+        # print(type(label))
+        # print(type(pred_label))
+        # print("Label shape: ", label.shape)
+
+        # out_image = label.numpy().copy()[None, :, :].repeat(3, axis=0)
+        out_image = np.transpose(source_im.copy(), (2, 0, 1))
+
+        # print("Out image shape: ", out_image.shape)
+        # print("l=i", (label==i).shape)
+        # print("predl=i", (pred_label==i).shape)
+        labeln = label.numpy()
+        pred_labeln = pred_label.numpy()
+        tp = np.logical_and(labeln == classId, pred_labeln==classId).astype(bool)
+        fp = np.logical_and(labeln != classId, pred_labeln==classId).astype(bool)
+        fn = np.logical_and(labeln == classId, pred_labeln!=classId).astype(bool)
+        # print("TP shape: ", tp.shape)
+        # print(tp)
+        # print("Out image shape: ", out_image.shape)
+        out_image[:, tp] = np.array([0, 255, 0]).reshape(3, 1)
+        out_image[:, fp] = np.array([255, 0, 0]).reshape(3, 1)
+        out_image[:, fn] = np.array([0, 0, 255]).reshape(3, 1)
+        # print("indices: ", indices)
+        # print(f"workdirs/ims/pred_errors_t={indices[0]}class={classId}.png")
+        # print(f"{out_image.shape=}")
+        cv2.imwrite(f"work_dirs/ims/error_vis/cls{classId}/t={indices[0]}.png", np.transpose(out_image, (1, 2, 0)))
+
 
 def intersect_and_union(pred_label,
                         label,
                         num_classes,
                         ignore_index,
+                        error_viz_split=None,
                         label_map=dict(),
-                        reduce_zero_label=False):
+                        reduce_zero_label=False,
+                        indices=None):
     """Calculate intersection and Union.
 
     Args:
@@ -65,6 +106,9 @@ def intersect_and_union(pred_label,
     else:
         label = torch.from_numpy(label)
 
+    if error_viz_split is not None:
+        error_viz(pred_label, label, indices, split=error_viz_split)
+
     if label_map is not None:
         label_copy = label.clone()
         for old_id, new_id in label_map.items():
@@ -73,10 +117,6 @@ def intersect_and_union(pred_label,
         label[label == 0] = 255
         label = label - 1
         label[label == 254] = 255
-
-    # cv2.imwrite("work_dirs/ims/label.png", label.numpy())
-    # cv2.imwrite("work_dirs/ims/pred_label.png", pred_label.numpy())
-    
 
     mask = (label != ignore_index)
     pred_label = pred_label[mask]

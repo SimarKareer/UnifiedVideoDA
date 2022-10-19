@@ -310,7 +310,8 @@ class CustomDataset(Dataset):
                     # https://github.com/open-mmlab/mmsegmentation/issues/1415
                     # for more ditails
                     label_map=self.label_map,
-                    reduce_zero_label=self.reduce_zero_label))
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices))
 
         return pre_eval_results
 

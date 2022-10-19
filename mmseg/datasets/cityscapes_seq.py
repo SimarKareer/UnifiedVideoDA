@@ -40,8 +40,8 @@ class CityscapesSeqDataset(CustomDataset):
         
         viperClasses = ("unlabeled", "ambiguous", "sky","road","sidewalk","railtrack","terrain","tree","vegetation","building","infrastructure","fence","billboard","traffic light","traffic sign","mobilebarrier","firehydrant","chair","trash","trashcan","person","animal","bicycle","motorcycle","car","van","bus","truck","trailer","train","plane","boat")
 
-        self.label_map = {}
-        self.adaptation_map = {k: 255 for k in range(255)}
+        self.label_map = {k: 200 for k in range(255)}
+        self.adaptation_map = {k: 201 for k in range(255)}
         
         for _, label in CSLabels.trainId2label.items():
             name = label.name
