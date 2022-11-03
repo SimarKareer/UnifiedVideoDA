@@ -20,7 +20,7 @@ class ViperSeqDataset(CustomDataset):
 
     PALETTE = [[0,0,0], [111,74,0], [70,130,180], [128,64,128], [244,35,232], [230,150,140], [152,251,152], [87,182,35], [35,142,35], [70,70,70], [153,153,153], [190,153,153], [150,20,20], [250,170,30], [220,220,0], [180,180,100], [173,153,153], [168,153,153], [81,0,21], [81,0,81], [220,20,60], [255,0,0], [119,11,32], [0,0,230], [0,0,142], [0,80,100], [0,60,100], [0,0,70], [0,0,90], [0,80,100], [0,100,100], [50,0,90]]
 
-    def __init__(self, split, flow_dir=None, **kwargs):
+    def __init__(self, split, flow_dir=None, frame_offset=1, **kwargs):
         super(ViperSeqDataset, self).__init__(
             img_suffix='.jpg',
             seg_map_suffix='.png',
@@ -29,7 +29,7 @@ class ViperSeqDataset(CustomDataset):
             **kwargs)
         
         self.flow_dir = flow_dir
-        self.past_images = self.load_annotations2(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=1)
+        self.past_images = self.load_annotations2(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
         self.flows = None if self.flow_dir == None else self.load_annotations2(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=1)
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flowv2/train/flow_occ" #TODO Temporary, must fix or will give horrible error
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flow/train/flow"
