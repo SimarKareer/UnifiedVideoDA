@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 # from benchmark_viper import VIPER
-from util_flow import ReadKittiPngFile
+from .util_flow import ReadKittiPngFile
 
 
 def visFlow(flow, image=None, threshold=2.0, skip_amount=30):
@@ -59,6 +59,12 @@ def imshow(img, scale=1):
     IPython.display.display(i)
 
 def loadFlow(im_path):
+    """
+    Args
+        im_path: path of flow to load.
+    Returns
+        flow with shape H, W, 2 (I think)
+    """
     im = cv2.imread(im_path)
     flow = ReadKittiPngFile(im_path)
     w, h, u, v, mask = ReadKittiPngFile(im_path)
@@ -142,6 +148,7 @@ def backpropFlow(flow, im):
     """
     assert(flow.shape[:2] == im.shape[:2])
     H, W, _ = flow.shape
+    flow[920:, :, :] = 0
     flow = np.transpose(flow, (2, 0, 1))
     im = np.transpose(im, (2, 0, 1)) 
 
@@ -149,13 +156,27 @@ def backpropFlow(flow, im):
     # out_im = np.zeros_like(im)
     
     # print(flow1[1])
-    indices[0] = np.clip(
-        np.arange(flow.shape[1])[:, None] + flow[1], 0, H-1
-    )
-    indices[1] = np.clip(
-        np.arange(flow.shape[2])[None, :] + flow[0], 0, W-1
-    )
-    
+    # indices[0] = np.clip(
+    #     np.arange(flow.shape[1])[:, None] + flow[1], 0, H-1
+    # )
+    # indices[1] = np.clip(
+    #     np.arange(flow.shape[2])[None, :] + flow[0], 0, W-1
+    # )
+    indices[0] = np.arange(flow.shape[1])[:, None] + flow[1]
+    indices[1] = np.arange(flow.shape[2])[None, :] + flow[0]
+
+    flow[:, indices[0] > 920] = 0
+    flow[:, indices[0] < 0] = 0
+    flow[:, indices[1] >= 1920] = 0
+    flow[:, indices[1] < 0] = 0
+    # indices[0] = np.clip(
+    #     np.arange(flow.shape[1])[:, None] + flow[1], 0, H-1
+    # )
+    # indices[1] = np.clip(
+    #     np.arange(flow.shape[2])[None, :] + flow[0], 0, W-1
+    # )
+    indices[0] = np.arange(flow.shape[1])[:, None] + flow[1]
+    indices[1] = np.arange(flow.shape[2])[None, :] + flow[0]
     
     # print(indices[0])
     # print(indices[1])

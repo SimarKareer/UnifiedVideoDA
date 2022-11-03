@@ -1,10 +1,10 @@
 import math
-import png
+from . import png
 import struct
 import array
 import numpy as np
 
-from util import *
+from .util import *
 
 UNKNOWN_FLOW_THRESH = 1e9;
 UNKNOWN_FLOW = 1e10;

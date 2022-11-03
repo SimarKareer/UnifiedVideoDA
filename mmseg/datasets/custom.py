@@ -92,7 +92,12 @@ class CustomDataset(Dataset):
                  palette=None,
                  gt_seg_map_loader_cfg=None,
                  file_client_args=dict(backend='disk')):
-        self.pipeline = Compose(pipeline)
+        if type(pipeline == dict):
+            self.pipeline = {}
+            for k, v in pipeline.items():
+                self.pipeline[k] = Compose(v)
+        else:
+            self.pipeline = Compose(pipeline)
         self.img_dir = img_dir
         self.img_suffix = img_suffix
         self.ann_dir = ann_dir

@@ -28,7 +28,7 @@ class ViperSeqDataset(CustomDataset):
             split=split,
             **kwargs)
         
-        self.flow_dir = flow_dir #TODO pass through init
+        self.flow_dir = flow_dir
         self.past_images = self.load_annotations2(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=1)
         self.flows = None if self.flow_dir == None else self.load_annotations2(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=1)
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flowv2/train/flow_occ" #TODO Temporary, must fix or will give horrible error
@@ -100,7 +100,12 @@ class ViperSeqDataset(CustomDataset):
         else:
             # im_tk_infos = self.past_images.copy()
             # im_tk_infos["prefix"] = self.flow_dir
-            imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.past_images, flow_infos=self.flows) #TODO: for now it's fine that these are the same bc the flow is just the same file as past im.  Eventually change
+            if self.flows is None:
+                print("flow off")
+                imt_imtk_flow = self.prepare_train_img_no_flow(self.img_infos, idx, im_tk_infos=self.past_images)
+            else:
+                print("flow on")
+                imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.past_images, flow_infos=self.flows)
 
             # im_tk = self.prepare_train_img(self.past_images, idx)
             # for k, v in im_tk.items():
@@ -115,7 +120,7 @@ class ViperSeqDataset(CustomDataset):
     def merge(self, ims, imtk, flows=None):
         # print("merge input: ", ims["img"].data, imtk["img"].data, flows["flow"].data)
         # print("merge input: ", type(ims["img"]), type(imtk["img"]), type(flows["flow"]))
-        print("merge input: ", ims["img"].shape, imtk["img"].shape, flows["flow"].shape)
+        # print("merge input: ", ims["img"].shape, imtk["img"].shape, flows["flow"].shape)
         if flows is None:
             ims["img"] = np.concatenate(
                 (ims["img"], imtk["img"]), axis=2

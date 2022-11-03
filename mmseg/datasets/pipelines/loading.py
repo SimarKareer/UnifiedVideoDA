@@ -5,7 +5,7 @@ import mmcv
 import numpy as np
 
 from ..builder import PIPELINES
-
+from tools.aggregate_flows.flow.my_utils import loadFlow
 
 @PIPELINES.register_module()
 class LoadImageFromFile(object):
@@ -156,3 +156,14 @@ class LoadAnnotations(object):
         repr_str += f'(reduce_zero_label={self.reduce_zero_label},'
         repr_str += f"imdecode_backend='{self.imdecode_backend}')"
         return repr_str
+
+@PIPELINES.register_module()
+class LoadFlowFromFile(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, results):
+        flow = loadFlow(osp.join(results['flow_prefix'], results['flow_info']["filename"]))
+        results["flow"] = flow
+
+        return dict(flow=flow)
