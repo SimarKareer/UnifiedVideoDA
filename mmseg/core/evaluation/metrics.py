@@ -8,7 +8,7 @@ from torchvision.utils import save_image
 import cv2
 import linecache
 import os
-
+from tools.aggregate_flows.flow.my_utils import imshow, visFlow, loadVisFlow, loadFlow, mergeFlow, backpropFlow, imageMap, labelMapToIm, palette_to_id
 
 def f_score(precision, recall, beta=1):
     """calculate the f-score value.
@@ -63,6 +63,16 @@ def error_viz(pred_label, label, indices, split="/srv/share4/datasets/VIPER/spli
         # print(f"{out_image.shape=}")
         cv2.imwrite(f"work_dirs/ims/error_vis/cls{classId}/t={indices[0]}.png", np.transpose(out_image, (1, 2, 0)))
 
+def flow_prop_iou(gt_t, gt_tk, flow_t_tk, *kwargs):
+    #TODO: currently hardcoded for cityscapes
+    mlabel2_1 = backpropFlow(flow_t_tk.numpy(), gt_t.numpy())
+    viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
+    # print(f"{viz.shape=}")
+    # imshow(viz, scale=0.5)
+    intersect, union, _, _ = intersect_and_union(gt_t.numpy(), mlabel2_1, num_classes=31, ignore_index=0)
+    # print(t.shape, tk.shape, flow_t_tk.shape)
+
+    return intersect, union
 
 def intersect_and_union(pred_label,
                         label,

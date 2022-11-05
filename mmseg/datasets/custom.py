@@ -92,7 +92,8 @@ class CustomDataset(Dataset):
                  palette=None,
                  gt_seg_map_loader_cfg=None,
                  file_client_args=dict(backend='disk')):
-        if type(pipeline == dict):
+        print("PL: ", pipeline)
+        if type(pipeline) == dict:
             self.pipeline = {}
             for k, v in pipeline.items():
                 self.pipeline[k] = Compose(v)

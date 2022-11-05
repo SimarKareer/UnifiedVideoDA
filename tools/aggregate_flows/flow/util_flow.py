@@ -1,10 +1,10 @@
 import math
-from . import png
+import tools.aggregate_flows.flow.png as png
 import struct
 import array
 import numpy as np
 
-from .util import *
+from tools.aggregate_flows.flow.util import *
 
 UNKNOWN_FLOW_THRESH = 1e9;
 UNKNOWN_FLOW = 1e10;

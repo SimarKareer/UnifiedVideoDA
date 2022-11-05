@@ -20,7 +20,7 @@ common_rvc_subfolder = os.path.realpath(
 )
 if common_rvc_subfolder not in sys.path:
     sys.path.insert(0, common_rvc_subfolder)
-from rvc_download_helper import download_file_with_resume
+# from rvc_download_helper import download_file_with_resume
 
 
 class VIPER(Benchmark):
@@ -87,35 +87,35 @@ class VIPER(Benchmark):
     def GetOptions(self, metadata_dict):
         return  # No options
 
-    def DownloadAndUnpack(self, archive_dir_path, unpack_dir_path, metadata_dict):
+    # def DownloadAndUnpack(self, archive_dir_path, unpack_dir_path, metadata_dict):
 
-        archives_to_download = [
-            "archives_imgjpg_train",
-            "archives_flow_train",
-            "archives_imgjpg_test",
-        ]
+    #     archives_to_download = [
+    #         "archives_imgjpg_train",
+    #         "archives_flow_train",
+    #         "archives_imgjpg_test",
+    #     ]
 
-        for archive in archives_to_download:
-            archive_dict = getattr(self, archive)
-            for archive_id, gdrive_id in archive_dict.items():
-                archive_path = os.path.join(
-                    archive_dir_path, archive[9:] + "_" + archive_id + ".zip"
-                )
-                if not os.path.exists(archive_path):
-                    url = "https://viper-dataset.s3.amazonaws.com/" + gdrive_id
-                    download_file_with_resume(
-                        url, archive_path, try_resume_bytes=-1, total_sz=None
-                    )
+    #     for archive in archives_to_download:
+    #         archive_dict = getattr(self, archive)
+    #         for archive_id, gdrive_id in archive_dict.items():
+    #             archive_path = os.path.join(
+    #                 archive_dir_path, archive[9:] + "_" + archive_id + ".zip"
+    #             )
+    #             if not os.path.exists(archive_path):
+    #                 url = "https://viper-dataset.s3.amazonaws.com/" + gdrive_id
+    #                 download_file_with_resume(
+    #                     url, archive_path, try_resume_bytes=-1, total_sz=None
+    #                 )
 
-                    # DownloadFileFromGDrive(gdrive_id, archive_path)
-                    pass
-                if os.path.exists(archive_path):
-                    print(archive_path)
-                    UnzipFile(archive_path, unpack_dir_path, overwrite=False)
-                    pass
-                pass
-            pass
-        pass
+    #                 # DownloadFileFromGDrive(gdrive_id, archive_path)
+    #                 pass
+    #             if os.path.exists(archive_path):
+    #                 print(archive_path)
+    #                 UnzipFile(archive_path, unpack_dir_path, overwrite=False)
+    #                 pass
+    #             pass
+    #         pass
+    #     pass
 
     def CanConvertOriginalToFormat(self, dataset_format):
         return isinstance(dataset_format, MiddleburyFormat) or isinstance(
@@ -242,7 +242,11 @@ class VIPER(Benchmark):
             for flow in flows:
                 frame = int(flow[4:-4])
                 flow_src_path = os.path.join(seq_src_dir, flow)
-                flow_dst_path = os.path.join(seq_dst_dir, "%s_%05d.png" % (seq, frame))
+                
+                seq_folder = os.path.join(seq_dst_dir, f"{seq}")
+                if not os.path.exists(seq_folder):
+                    os.mkdir(seq_folder)
+                flow_dst_path = os.path.join(seq_dst_dir, f"{seq}/{seq}_{frame:05d}.png")
 
                 d = np.load(flow_src_path)
                 u = d["u"]

@@ -60,9 +60,9 @@ class ViperSeqDataset(CustomDataset):
                 img_name = line.strip()
                 img_name = f"{img_name.split('_')[0]}_{int(img_name.split('_')[1]) - frame_offset:05d}"
                 img_info = dict(filename=img_name + img_suffix)
-                # if ann_dir is not None:
-                #     seg_map = img_name + seg_map_suffix
-                #     img_info['ann'] = dict(seg_map=seg_map)
+                if ann_dir is not None:
+                    seg_map = img_name + seg_map_suffix
+                    img_info['ann'] = dict(seg_map=seg_map)
                 img_infos.append(img_info)
         else:
             raise NotImplementedError("must specify split")
@@ -101,10 +101,10 @@ class ViperSeqDataset(CustomDataset):
             # im_tk_infos = self.past_images.copy()
             # im_tk_infos["prefix"] = self.flow_dir
             if self.flows is None:
-                print("flow off")
+                # print("flow off")
                 imt_imtk_flow = self.prepare_train_img_no_flow(self.img_infos, idx, im_tk_infos=self.past_images)
             else:
-                print("flow on")
+                # print("flow on")
                 imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.past_images, flow_infos=self.flows)
 
             # im_tk = self.prepare_train_img(self.past_images, idx)
@@ -142,7 +142,7 @@ class ViperSeqDataset(CustomDataset):
 
         imtk = copy_no_img(merged)
 
-        print(merged["img"].shape)
+        # print(merged["img"].shape)
         imtk["img"] = merged["img"][:, :, 3:6]
 
         if self.flows is not None:
@@ -183,7 +183,10 @@ class ViperSeqDataset(CustomDataset):
         self.pre_pipeline(resultsImtk)
 
         ims = self.pipeline["im_load_pipeline"](results)
-        imtk = self.pipeline["load_no_ann_pipeline"](resultsImtk)
+        #TODO can improve performance if we only run the im_load_pipeline when we want imtk annotations
+        # imtk = self.pipeline["im_load_pipeline"](resultsImtk)
+        imtk = self.pipeline["im_load_pipeline"](resultsImtk)
+        imtk_gt = imtk["gt_semantic_seg"]
 
         mergedIms = self.merge(ims, imtk) #TODO: concat the ims and flows
 
@@ -193,6 +196,7 @@ class ViperSeqDataset(CustomDataset):
         finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
         
         finalIms["imtk"] = finalImtk["img"]
+        finalIms["imtk_gt_semantic_seg"] = imtk_gt
         return finalIms
 
     def prepare_train_img(self, infos, idx, im_tk_infos=None, flow_infos=None):
@@ -206,32 +210,33 @@ class ViperSeqDataset(CustomDataset):
                 introduced by pipeline.
         """
 
-        img_info = infos[idx]
-        ann_info = self.get_ann_info(infos, idx)
-        results = dict(img_info=img_info, ann_info=ann_info)
+        # img_info = infos[idx]
+        # ann_info = self.get_ann_info(infos, idx)
+        results = dict(img_info=infos[idx], ann_info=self.get_ann_info(infos, idx))
         # print("results: ", results)
         # print("im_tk_infos: ", im_tk_infos)
         # print("flow_infos: ", flow_infos)
         if im_tk_infos is not None: #Bc we don't want to overwrite the image loading pipeline, we'll separately load im, imtk, flow
             # resultsImtk = results.copy()
-            resultsImtk = dict(img_info = im_tk_infos[idx])
+            resultsImtk = dict(img_info = im_tk_infos[idx], ann_info=self.get_ann_info(im_tk_infos, idx))
         if flow_infos is not None:
             # resultsFlow = results.copy()
             # resultsFlow["flow_info"] = flow_infos
             resultsFlow = dict(flow_info = flow_infos[idx])
-        print(resultsFlow["flow_info"])
+        # print(resultsFlow["flow_info"])
         self.pre_pipeline(results)
         self.pre_pipeline(resultsImtk)
         self.pre_pipeline_flow(resultsFlow)
 
         ims = self.pipeline["im_load_pipeline"](results)
-        imtk = self.pipeline["load_no_ann_pipeline"](resultsImtk)
+        imtk = self.pipeline["im_load_pipeline"](resultsImtk)
+        imtk_gt = imtk["gt_semantic_seg"][None, None, :, :]
     
         flows = self.pipeline["load_flow_pipeline"](resultsFlow)
         # print("flows after load: ", flows["flow"], type(flows["flow"]))
         # print("ims after load: ", ims["img"], type(ims["img"]))
         ImsAndFlows = self.merge(ims, imtk, flows) #TODO: concat the ims and flows
-        print(ImsAndFlows.keys())
+        # print(ImsAndFlows.keys())
         ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
         im, imtk, flows = self.unmerge(ImsAndFlows) # separate out the ims and flows again
         finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
@@ -239,6 +244,7 @@ class ViperSeqDataset(CustomDataset):
         finalFlows = self.pipeline["flow_pipeline"](flows) #add the rest of the flow augs
         finalIms["flow"] = finalFlows["img"]
         finalIms["imtk"] = finalImtk["img"]
+        finalIms["imtk_gt_semantic_seg"] = imtk_gt
         # return self.pipeline(results)
         return finalIms
 

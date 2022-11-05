@@ -5,10 +5,18 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 # from benchmark_viper import VIPER
-from .util_flow import ReadKittiPngFile
+from tools.aggregate_flows.flow.util_flow import ReadKittiPngFile
+import torch
 
 
 def visFlow(flow, image=None, threshold=2.0, skip_amount=30):
+    """
+    args:
+        flow: H, W, 2
+        image: H, W, 3
+    returns:
+        image
+    """
     # Don't affect original image
     if image is None:
         H, W, _ = flow.shape
@@ -150,7 +158,7 @@ def backpropFlow(flow, im):
     H, W, _ = flow.shape
     flow[920:, :, :] = 0
     flow = np.transpose(flow, (2, 0, 1))
-    im = np.transpose(im, (2, 0, 1)) 
+    im = np.transpose(im, (2, 0, 1))
 
     indices = np.zeros_like(flow)
     # out_im = np.zeros_like(im)
@@ -210,3 +218,49 @@ def imageMap(label, label_map):
             label[:, mask] = new_id
     
     return label.transpose((1, 2, 0))#[:, :, [0]]
+
+def labelMapToIm(label, label_map):
+    """
+    label: H, W, 1
+    label_map: [[r, g, b], index]]
+    """
+    output = label.repeat(1, 1, 3)
+    for color, id in label_map:
+        output[label.squeeze(2)==id] = torch.tensor(color)
+
+    return output
+
+palette_to_id = [   
+    ([0,0,0], 0),
+    ([111,74,0], 1),
+    ([70,130,180], 2),
+    ([128,64,128], 3),
+    ([244,35,232], 4),
+    ([230,150,140], 5),
+    ([152,251,152], 6),
+    ([87,182,35], 7),
+    ([35,142,35], 8),
+    ([70,70,70], 9),
+    ([153,153,153], 10),
+    ([190,153,153], 11),
+    ([150,20,20], 12),
+    ([250,170,30], 13),
+    ([220,220,0], 14),
+    ([180,180,100], 15),
+    ([173,153,153], 16),
+    ([168,153,153], 17),
+    ([81,0,21], 18),
+    ([81,0,81], 19),
+    ([220,20,60], 20),
+    ([255,0,0], 21),
+    ([119,11,32], 22),
+    ([0,0,230], 23),
+    ([0,0,142], 24),
+    ([0,80,100], 25),
+    ([0,60,100], 26),
+    ([0,0,70], 27),
+    ([0,0,90], 28),
+    ([0,80,100], 29),
+    ([0,100,100], 30),
+    ([50,0,90], 31)
+]
