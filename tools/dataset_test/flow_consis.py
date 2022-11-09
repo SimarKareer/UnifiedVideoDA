@@ -7,6 +7,7 @@ from mmseg.core.evaluation.metrics import flow_prop_iou, intersect_and_union
 from tools.aggregate_flows.flow.my_utils import palette_to_id, backpropFlow, imageMap, imshow, labelMapToIm, visFlow
 import torch
 import numpy as np
+from tqdm import tqdm
 
 CLASSES = ("unlabeled", "ambiguous", "sky","road","sidewalk","railtrack","terrain","tree","vegetation","building","infrastructure","fence","billboard","trafficlight","trafficsign","mobilebarrier","firehydrant","chair","trash","trashcan","person","animal","bicycle","motorcycle","car","van","bus","truck","trailer","train","plane","boat")
 
@@ -73,22 +74,26 @@ def main():
         # type=dataset_type,
         split='splits/val.txt',
         frame_offset=1,
-        flow_dir="/srv/share4/datasets/VIPER_Flowv2/val/flow_occ",
+        flow_dir="/srv/share4/datasets/VIPER_Flowv3/val/flow_occ",
         data_root=data_root,
-        img_dir='train/img',
-        ann_dir='train/cls',
+        img_dir='val/img',
+        ann_dir='val/cls',
         pipeline=train_pipeline
     )
+
+    import nonechucks as nc
+    viper = nc.SafeDataset(viper)
 
     # data_loader = DataLoader(viper)
     data_loader = DataLoader(
         viper,
-        collate_fn=partial(collate, samples_per_gpu=1)
+        collate_fn=partial(collate, samples_per_gpu=1),
+        num_workers=3
     )
 
     cml_intersect = torch.zeros(31)
     cml_union = torch.zeros(31)
-    for i, data in enumerate(data_loader):
+    for i, data in enumerate(tqdm(data_loader)):
         # print(data)
         im, imtk, flow, gt_t, gt_tk = data["img"].data[0], data["imtk"].data[0], data["flow"].data[0], data["gt_semantic_seg"].data[0], data["imtk_gt_semantic_seg"].data[0]
         # print("im: ",im.shape, imtk.shape, flow.shape, gt_t.shape, gt_tk.shape)
@@ -104,6 +109,7 @@ def main():
         cml_union += union
 
         if i % 10 == 0:
+            print("-"*100)
             formatmIoU(cml_intersect/cml_union, CLASSES)
 
         # shape debug

@@ -30,7 +30,7 @@ class ViperSeqDataset(CustomDataset):
         
         self.flow_dir = flow_dir
         self.past_images = self.load_annotations2(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
-        self.flows = None if self.flow_dir == None else self.load_annotations2(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=1)
+        self.flows = None if self.flow_dir == None else self.load_annotations2(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flowv2/train/flow_occ" #TODO Temporary, must fix or will give horrible error
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flow/train/flow"
     

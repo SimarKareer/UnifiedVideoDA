@@ -201,9 +201,82 @@ def backpropFlow(flow, im):
     # print("output flow: ", output_flow)
     return np.transpose(output_im, (1, 2, 0))
 
+def backpropFlowNoDup(flow, im_orig):
+    """
+    returns im backpropped as if it was im1
+    flow: H, W, 2
+    im: H, W, 3
+    """
+    im = im_orig.copy()
+
+    assert(flow.shape[:2] == im.shape[:2])
+    H, W, _ = flow.shape
+    flow[920:, :, :] = 0
+    flow = np.transpose(flow, (2, 0, 1))
+    im = np.transpose(im, (2, 0, 1))
+
+    indices = np.zeros_like(flow)
+    indices[0] = np.arange(flow.shape[1])[:, None] + flow[1]
+    indices[1] = np.arange(flow.shape[2])[None, :] + flow[0]
+
+    flow[:, indices[0] > 920] = 0
+    flow[:, indices[0] < 0] = 0
+    flow[:, indices[1] >= 1920] = 0
+    flow[:, indices[1] < 0] = 0
+
+    indices[0] = np.arange(flow.shape[1])[:, None] + flow[1]
+    indices[1] = np.arange(flow.shape[2])[None, :] + flow[0]
+    
+    indices = indices.reshape(2, -1).astype(np.int64)
+
+    indices_t = indices.transpose((1, 0))
+    unique, counts = np.unique(indices_t, axis=0, return_counts=True)
+    mask_indices = unique[counts > 1].transpose((1, 0))
+    # print(np.sum(unique[counts > 1]))
+    # print(mask_indices)
+    im[:, mask_indices[0], mask_indices[1]] = 0#np.array([255, 192, 203]).reshape(3, 1)
+
+    output_im = im[:, indices[0], indices[1]].reshape(-1, H, W)
+
+    output_im[:, np.all(flow==0, axis=0)] = 0
+    return np.transpose(output_im, (1, 2, 0))
+
+def backpropFlowFilter2(flow, im2, thresh):
+    """
+    returns im backpropped as if it was im1
+    flow: H, W, 2
+    im: H, W, 3
+    """
+    norm = np.linalg.norm(flow, axis=2)
+    new_flow = flow.copy()
+    new_flow[norm < thresh] = 0
+    im2_1 = backpropFlow(new_flow, im2)
+
+    return im2_1
+
+def backpropFlowFilter(flow, im2, im1, thresh=300):
+    """
+    returns im backpropped as if it was im1
+    flow: H, W, 2
+    im2: H, W, 3
+    im1: H, W, 3
+    thresh: max norm diff b/w original and back propped point before filtering out
+    """
+    im2_1 = backpropFlow(flow, im2)
+    print("filter shapes: ", im1.shape, im2.shape)
+
+    diff = np.linalg.norm(im2_1 - im1, axis=2)
+    print(diff.mean(), diff.std())
+    mask = diff > thresh
+    print("mask shape: ", mask.shape, im2_1.shape)
+    im2_1[mask] = 0
+
+    return im2_1
+
+
 def imageMap(label, label_map):
     """
-    label: (H, W, C)
+    label: (H, W, C) numpy array
     label_map: [[r, g, b], index] or [oldIndex, index]
     """
     label = label.transpose((2, 0, 1))
@@ -221,7 +294,7 @@ def imageMap(label, label_map):
 
 def labelMapToIm(label, label_map):
     """
-    label: H, W, 1
+    label: H, W, 1 tensor
     label_map: [[r, g, b], index]]
     """
     output = label.repeat(1, 1, 3)
