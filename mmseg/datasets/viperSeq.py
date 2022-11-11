@@ -5,7 +5,7 @@ import mmcv
 from mmcv.utils import print_log
 from mmseg.utils import get_root_logger
 import torch
-from mmcv.parallel.data_container import DataContainer
+from mmcv.parallel import DataContainer
 import numpy as np
 
 @DATASETS.register_module()
@@ -92,14 +92,22 @@ class ViperSeqDataset(CustomDataset):
                 False).
         """
 
+        print("in viper Seq")
+
         if self.test_mode:
-            im_t = self.prepare_test_img(self.img_infos, idx)
+            # imt_imtk_flow = self.prepare_test_img(self.img_infos, idx)
+            assert(self.past_images is not None)
+            assert(self.flows is not None)
+            imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.past_images, flow_infos=self.flows)
+
             # im_tk = self.prepare_test_img(self.past_images, idx)
             # for k, v in im_tk.items():
             #     im_t[k+"_tk"] = v
+            print("test mode")
         else:
             # im_tk_infos = self.past_images.copy()
             # im_tk_infos["prefix"] = self.flow_dir
+            print("Train mode")
             if self.flows is None:
                 # print("flow off")
                 imt_imtk_flow = self.prepare_train_img_no_flow(self.img_infos, idx, im_tk_infos=self.past_images)
@@ -230,8 +238,7 @@ class ViperSeqDataset(CustomDataset):
 
         ims = self.pipeline["im_load_pipeline"](results)
         imtk = self.pipeline["im_load_pipeline"](resultsImtk)
-        imtk_gt = imtk["gt_semantic_seg"][None, None, :, :]
-    
+        imtk_gt = DataContainer(torch.from_numpy(imtk["gt_semantic_seg"][None, None, :, :]))
         flows = self.pipeline["load_flow_pipeline"](resultsFlow)
         # print("flows after load: ", flows["flow"], type(flows["flow"]))
         # print("ims after load: ", ims["img"], type(ims["img"]))
@@ -242,9 +249,51 @@ class ViperSeqDataset(CustomDataset):
         finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
         finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
         finalFlows = self.pipeline["flow_pipeline"](flows) #add the rest of the flow augs
+
         finalIms["flow"] = finalFlows["img"]
         finalIms["imtk"] = finalImtk["img"]
         finalIms["imtk_gt_semantic_seg"] = imtk_gt
+
+        # print("finalIms1", finalIms)
+
+        for k, v in finalIms.items():
+            # print(f"{k}: {type(v)}")
+            if isinstance(v, DataContainer):
+                # print(f"{k} is a datacontainer")
+                finalIms[k] = v.data
+            # else:
+                # print(f"{k} is NOT a datacontainer")
+
+        for k, v in finalIms.items():
+            if isinstance(v, torch.Tensor):
+                # print(f"{k} is a tensor")
+                finalIms[k] = [v]
+            # else:
+                # print(f"{k} is NOT a tensor")
+
+        # for k, v in ims.items():
+        #     print("viper seq: ", k)
+        #     finalIms[k] = v
+        # print("im's after load: ", ims)
+        # print("im's after load: ", type(ims))
+        # print("im's after load: ", type(ims["img_info"]))
+        img_metas = {}
+        for k, v in ims.items():
+            if k not in ["img", "gt_semantic_seg", "img_info", "ann_info", "seg_prefix", "img_prefix", "seg_fields"]:
+                img_metas[k] = v
+        # print(img_metas["img_shape"])
+        # assert(img_metas["img_shape"] == (1080, 1920, 8))
+
+        img_metas["img_shape"] = (1080, 1920, 3)
+        img_metas["pad_shape"] = (1080, 1920, 3)
+        # del img_metas["scale_idx"]
+        # del img_metas["keep_ratio"]
+        finalIms["img_metas"] = [DataContainer(img_metas, cpu_only=True)]
+        # finalIms["img_metas"] = [DataContainer([[{}]])]
+        print("finished loading")
+        
+        # print("finalIms2", finalIms)
+
         # return self.pipeline(results)
         return finalIms
 

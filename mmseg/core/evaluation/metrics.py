@@ -129,11 +129,11 @@ def intersect_and_union(pred_label,
         label[label == 254] = 255
 
     mask = (label != ignore_index)
-    print("shape: ", mask.shape, "masked: ", mask.sum())
-    print("before: ", pred_label.shape, label.shape)
+    # print("shape: ", mask.shape, "masked: ", mask.sum())
+    # print("before: ", pred_label.shape, label.shape)
     pred_label = pred_label[mask]
     label = label[mask]
-    print("after: ", pred_label.shape, label.shape)
+    # print("after: ", pred_label.shape, label.shape)
 
 
     intersect = pred_label[pred_label == label]
@@ -144,6 +144,8 @@ def intersect_and_union(pred_label,
     area_label = torch.histc(
         label.float(), bins=(num_classes), min=0, max=num_classes - 1)
     area_union = area_pred_label + area_label - area_intersect
+
+    # print(area_intersect / area_union)
     return area_intersect, area_union, area_pred_label, area_label
 
 

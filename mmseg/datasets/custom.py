@@ -93,7 +93,9 @@ class CustomDataset(Dataset):
                  gt_seg_map_loader_cfg=None,
                  file_client_args=dict(backend='disk')):
         print("PL: ", pipeline)
-        if type(pipeline) == dict:
+        print("type PL: ", type(pipeline))
+        print("type PL: ", isinstance(pipeline, mmcv.utils.config.ConfigDict))
+        if isinstance(pipeline, dict) or isinstance(pipeline, mmcv.utils.config.ConfigDict):
             self.pipeline = {}
             for k, v in pipeline.items():
                 self.pipeline[k] = Compose(v)
@@ -252,7 +254,9 @@ class CustomDataset(Dataset):
         img_info = self.img_infos[idx]
         results = dict(img_info=img_info)
         self.pre_pipeline(results)
-        return self.pipeline(results)
+        post_pipeline = self.pipeline(results)
+        print("pose pipeline: ", post_pipeline)
+        return post_pipeline
 
     def format_results(self, results, imgfile_prefix, indices=None, **kwargs):
         """Place holder to format result to dataset specific output."""
@@ -280,6 +284,46 @@ class CustomDataset(Dataset):
             self.pre_pipeline(results)
             self.gt_seg_map_loader(results)
             yield results['gt_semantic_seg']
+
+    def pre_eval_dataloader(self, preds, indices, data):
+        """Collect eval result from each iteration.
+
+        Args:
+            preds (list[torch.Tensor] | torch.Tensor): the segmentation logit
+                after argmax, shape (N, H, W).
+            indices (list[int] | int): the prediction related ground truth
+                indices.
+
+        Returns:
+            list[torch.Tensor]: (area_intersect, area_union, area_prediction,
+                area_ground_truth).
+        """
+        # In order to compat with batch inference
+        if not isinstance(indices, list):
+            indices = [indices]
+        if not isinstance(preds, list):
+            preds = [preds]
+
+        pre_eval_results = []
+
+        for pred, index in zip(preds, indices):
+            # seg_map = self.get_gt_seg_map_by_idx(index)
+            pre_eval_results.append(
+                intersect_and_union(
+                    pred,
+                    data["gt_semantic_seg"],
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    # as the labels has been converted when dataset initialized
+                    # in `get_palette_for_custom_classes ` this `label_map`
+                    # should be `dict()`, see
+                    # https://github.com/open-mmlab/mmsegmentation/issues/1415
+                    # for more ditails
+                    label_map=self.label_map,
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices))
+
+        return pre_eval_results
 
     def pre_eval(self, preds, indices):
         """Collect eval result from each iteration.
@@ -429,6 +473,8 @@ class CustomDataset(Dataset):
             if gt_seg_maps is None:
                 gt_seg_maps = self.get_gt_seg_maps()
             num_classes = len(self.CLASSES)
+            print("results: ", results)
+            print("seg_maps: ", gt_seg_maps)
             ret_metrics = eval_metrics(
                 results,
                 gt_seg_maps,

@@ -9,6 +9,8 @@ import torch
 from mmcv.engine import collect_results_cpu, collect_results_gpu
 from mmcv.image import tensor2imgs
 from mmcv.runner import get_dist_info
+import pdb
+import pickle
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -85,10 +87,29 @@ def single_gpu_test(model,
     # data_fetcher -> collate_fn(dataset[index]) -> data_sample
     # we use batch_sampler to get correct data idx
     loader_indices = data_loader.batch_sampler
+    # pdb.set_trace()
 
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
-            result = model(return_loss=False, **data)
+            print("test.py model forward: ", data, type(data))
+            refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            # pickle.dump(refined_data, open("/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/refined_data_seq", "wb"))
+            # pickle.dump(refined_data, open("/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/refined_data", "wb"))
+
+            # refined_data_load = pickle.load(open("/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/refined_data", "rb"))
+            # refined_data["img_metas"][0].data[0][0] = refined_data_load["img_metas"][0].data[0][0] #Doesn't work
+            # refined_data["img_metas"][0] = refined_data_load["img_metas"][0] #Works.  Something is wrong with the datacontainer this means.
+
+            # refined_data = {k: refined_data[k] for k in ["img"]}
+            # print("pickle dump?")
+            # print("refined data: ", refined_data)
+            # print("refined data: ", type(refined_data["img_metas"]))
+            # print("refined data: ", type(refined_data["img_metas"][0].data[0][0]))
+            # print("refined data: ", refined_data["img_metas"][0].data[0][0])
+            print("refined data: ", refined_data)
+            result = model(return_loss=False, **refined_data)
+            # result = model(return_loss=False, **{k: data[k] for k in ["img", "img_metas"]})
+            # result = model(return_loss=False, img_metas={}, img=data["img"])
 
         if show or out_dir:
             img_tensor = data['img'][0]
@@ -125,7 +146,10 @@ def single_gpu_test(model,
         if pre_eval:
             # TODO: adapt samples_per_gpu > 1.
             # only samples_per_gpu=1 valid now
-            result = dataset.pre_eval(result, indices=batch_indices)
+            # Note: while above result is full preds, here it's just metrics
+            print("got data: ", data.keys())
+            # result = dataset.pre_eval(result, indices=batch_indices)
+            result = dataset.pre_eval_dataloader(result, batch_indices, data)
             results.extend(result)
         else:
             results.extend(result)

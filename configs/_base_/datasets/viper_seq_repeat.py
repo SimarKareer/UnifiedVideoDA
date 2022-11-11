@@ -1,10 +1,13 @@
 # dataset settings
-dataset_type = 'ViperDataset'
+dataset_type = 'ViperSeqDataset'
 data_root = '/srv/share4/datasets/VIPER/'
 
 #imagenet values
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+
+# Flow configs
+frame_offset=1
 
 #crop size from the da-vsn paper code
 crop_size = (720, 1280)
@@ -36,24 +39,40 @@ train_pipeline = {
     ]
 }
 
-test_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(
-        type='MultiScaleFlipAug',
-        img_scale=(2048, 1024),
-        # img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-        flip=False,
-        transforms=[
-            dict(type='Resize', keep_ratio=True),
-            dict(type='RandomFlip'),
-            dict(type='Normalize', **img_norm_cfg),
-            dict(type='ImageToTensor', keys=['img']),
-            dict(type='Collect', keys=['img']),
-        ])
-]
+test_pipeline = {
+    "im_load_pipeline": [
+        dict(type='LoadImageFromFile'),
+        dict(type='LoadAnnotations'),
+    ],
+    "load_no_ann_pipeline": [
+        dict(type='LoadImageFromFile'),
+    ],
+    "load_flow_pipeline": [
+        dict(type='LoadFlowFromFile'),
+    ],
+    "shared_pipeline": [
+        # dict(type='Resize', keep_ratio=True, img_scale=(1080, 1920)),
+        # dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
+        dict(type='RandomFlip', prob=0.0),
+    ],
+    "im_pipeline": [
+        # dict(type='PhotoMetricDistortion'),
+        dict(type='Normalize', **img_norm_cfg),
+        # dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
+        # dict(type='DefaultFormatBundle'),
+        dict(type='ImageToTensor', keys=['img']),
+        dict(type='Collect', keys=['img', 'gt_semantic_seg'])#, meta_keys=[]),
+    ],
+    "flow_pipeline": [
+        dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
+        dict(type='DefaultFormatBundle'), #I don't know what this is
+        dict(type='Collect', keys=['img', 'gt_semantic_seg'])#, meta_keys=[]),
+    ]
+}
+
 data = dict(
     samples_per_gpu=2,
-    workers_per_gpu=2,
+    workers_per_gpu=0,
     train=dict(
         type='RepeatDataset',
         times=500,
@@ -77,4 +96,8 @@ data = dict(
         img_dir='val/img',
         ann_dir='val/cls',
         split='splits/val.txt',
-        pipeline=test_pipeline))
+        pipeline=test_pipeline,
+        frame_offset=frame_offset,
+        flow_dir="/srv/share4/datasets/VIPER_Flowv3/val/flow_occ",
+    )
+)
