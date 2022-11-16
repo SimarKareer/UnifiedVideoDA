@@ -125,3 +125,7 @@ wandb/
 artifacts/
 *.out
 *.err
+
+#folders for training/eval
+predictions
+pretrain
