@@ -203,7 +203,7 @@ def backpropFlow(flow, im):
 
 def backpropFlowNoDup(flow, im_orig):
     """
-    returns im backpropped as if it was im1
+    returns im t+k backpropped as if it was im t
     flow: H, W, 2
     im: H, W, 3
     """
@@ -211,6 +211,7 @@ def backpropFlowNoDup(flow, im_orig):
 
     assert(flow.shape[:2] == im.shape[:2])
     H, W, _ = flow.shape
+    # TODO: this should dynamically crop off the bottom % of the image, not just >= 920
     flow[920:, :, :] = 0
     flow = np.transpose(flow, (2, 0, 1))
     im = np.transpose(im, (2, 0, 1))

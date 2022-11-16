@@ -271,15 +271,17 @@ def main():
         model = revert_sync_batchnorm(model)
         model = build_dp(model, cfg.device, device_ids=cfg.gpu_ids)
         results = single_gpu_test(
-            model,
-            data_loader,
-            args.show,
-            args.show_dir,
-            False,
-            args.opacity,
+            model=model,
+            data_loader=data_loader,
+            show = args.show,
+            out_dir = args.show_dir,
+            efficient_test=False,
+            opacity=args.opacity,
             pre_eval=args.eval is not None and not eval_on_format_results,
             format_only=args.format_only or eval_on_format_results,
-            format_args=eval_kwargs)
+            format_args=eval_kwargs,
+            metrics=args.eval
+        )
     else:
         model = build_ddp(
             model,

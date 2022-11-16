@@ -7,6 +7,7 @@ from mmseg.utils import get_root_logger
 import torch
 from mmcv.parallel import DataContainer
 import numpy as np
+import pdb
 
 @DATASETS.register_module()
 class ViperSeqDataset(CustomDataset):
@@ -92,7 +93,6 @@ class ViperSeqDataset(CustomDataset):
                 False).
         """
 
-        print("in viper Seq")
 
         if self.test_mode:
             # imt_imtk_flow = self.prepare_test_img(self.img_infos, idx)
@@ -103,11 +103,10 @@ class ViperSeqDataset(CustomDataset):
             # im_tk = self.prepare_test_img(self.past_images, idx)
             # for k, v in im_tk.items():
             #     im_t[k+"_tk"] = v
-            print("test mode")
         else:
             # im_tk_infos = self.past_images.copy()
             # im_tk_infos["prefix"] = self.flow_dir
-            print("Train mode")
+            # print("Train mode")
             if self.flows is None:
                 # print("flow off")
                 imt_imtk_flow = self.prepare_train_img_no_flow(self.img_infos, idx, im_tk_infos=self.past_images)
@@ -216,6 +215,10 @@ class ViperSeqDataset(CustomDataset):
         Returns:
             dict: Training data and annotation after pipeline with new keys
                 introduced by pipeline.
+                keys: ['img_metas', 'img', 'gt_semantic_seg', 'flow', 'imtk', 'imtk_gt_semantic_seg']
+                img_metas: dict
+                img: [Tensor(B, C, H, W)] Y
+                gt_semantic_seg: [Tensor(B, C, H, W)]
         """
 
         # img_info = infos[idx]
@@ -238,6 +241,10 @@ class ViperSeqDataset(CustomDataset):
 
         ims = self.pipeline["im_load_pipeline"](results)
         imtk = self.pipeline["im_load_pipeline"](resultsImtk)
+        # print("gttk sem seg: ", torch.from_numpy(imtk["gt_semantic_seg"][None, None, :, :]).shape)
+        # print("gttk sem seg no wrapping: ", imtk["gt_semantic_seg"][None, None, :, :].shape)
+        # print("gttk sem seg no wrapping: ", imtk["gt_semantic_seg"].shape)
+        # print("gt sem seg no wrapping: ", ims["gt_semantic_seg"].shape)
         imtk_gt = DataContainer(torch.from_numpy(imtk["gt_semantic_seg"][None, None, :, :]))
         flows = self.pipeline["load_flow_pipeline"](resultsFlow)
         # print("flows after load: ", flows["flow"], type(flows["flow"]))
@@ -255,7 +262,8 @@ class ViperSeqDataset(CustomDataset):
         finalIms["imtk_gt_semantic_seg"] = imtk_gt
 
         # print("finalIms1", finalIms)
-
+        # pdb.set_trace()
+        # print("final Ims before: ", finalIms)
         for k, v in finalIms.items():
             # print(f"{k}: {type(v)}")
             if isinstance(v, DataContainer):
@@ -270,6 +278,13 @@ class ViperSeqDataset(CustomDataset):
                 finalIms[k] = [v]
             # else:
                 # print(f"{k} is NOT a tensor")
+        for k, v in finalIms.items():
+            if isinstance(v, np.ndarray):
+                # print(f"{k} is a tensor")
+                finalIms[k] = [torch.from_numpy(v)]
+            # else:
+                # print(f"{k} is NOT a tensor")
+        # print("final Ims after: ", finalIms)
 
         # for k, v in ims.items():
         #     print("viper seq: ", k)
@@ -289,8 +304,12 @@ class ViperSeqDataset(CustomDataset):
         # del img_metas["scale_idx"]
         # del img_metas["keep_ratio"]
         finalIms["img_metas"] = [DataContainer(img_metas, cpu_only=True)]
+
+        # print("2gt sem seg no wrapping: ", finalIms["gt_semantic_seg"][0].shape)
+        # print("2gttk sem seg no wrapping: ", finalIms["imtk_gt_semantic_seg"][0].shape)
+        finalIms["imtk_gt_semantic_seg"][0] = finalIms["imtk_gt_semantic_seg"][0].squeeze(0) #TODO, I shouldn't have to do this manually
+        finalIms["gt_semantic_seg"][0] = finalIms["gt_semantic_seg"][0].unsqueeze(0) #TODO, I shouldn't have to do this manually
         # finalIms["img_metas"] = [DataContainer([[{}]])]
-        print("finished loading")
         
         # print("finalIms2", finalIms)
 

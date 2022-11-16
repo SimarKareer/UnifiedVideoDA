@@ -8,13 +8,16 @@ import numpy as np
 from mmcv.utils import print_log
 from prettytable import PrettyTable
 from torch.utils.data import Dataset
+import torch
 
 from mmseg.core import eval_metrics, intersect_and_union, pre_eval_to_metrics
 from mmseg.utils import get_root_logger
 from .builder import DATASETS
 from .pipelines import Compose, LoadAnnotations
 
+from mmseg.core.evaluation.metrics import flow_prop_iou
 
+import pdb
 @DATASETS.register_module()
 class CustomDataset(Dataset):
     """Custom dataset for semantic segmentation. An example of file structure
@@ -92,9 +95,6 @@ class CustomDataset(Dataset):
                  palette=None,
                  gt_seg_map_loader_cfg=None,
                  file_client_args=dict(backend='disk')):
-        print("PL: ", pipeline)
-        print("type PL: ", type(pipeline))
-        print("type PL: ", isinstance(pipeline, mmcv.utils.config.ConfigDict))
         if isinstance(pipeline, dict) or isinstance(pipeline, mmcv.utils.config.ConfigDict):
             self.pipeline = {}
             for k, v in pipeline.items():
@@ -138,6 +138,10 @@ class CustomDataset(Dataset):
         self.img_infos = self.load_annotations(self.img_dir, self.img_suffix,
                                                self.ann_dir,
                                                self.seg_map_suffix, self.split)
+        
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]}
+
 
     def __len__(self):
         """Total number of samples of data."""
@@ -255,7 +259,6 @@ class CustomDataset(Dataset):
         results = dict(img_info=img_info)
         self.pre_pipeline(results)
         post_pipeline = self.pipeline(results)
-        print("pose pipeline: ", post_pipeline)
         return post_pipeline
 
     def format_results(self, results, imgfile_prefix, indices=None, **kwargs):
@@ -284,8 +287,35 @@ class CustomDataset(Dataset):
             self.pre_pipeline(results)
             self.gt_seg_map_loader(results)
             yield results['gt_semantic_seg']
+    
+    def formatmIoU(self, miou, intersects=None, unions=None, print_na=False):
 
-    def pre_eval_dataloader(self, preds, indices, data):
+        # print(f"\n{'-'*100}")
+        cml_sum = 0
+        count = 0
+
+        if intersects is not None and unions is not None:
+            for val, name, intersect, union in zip(miou, self.CLASSES, intersects, unions):
+                val=val.item()
+                if not np.isnan(val) or print_na:
+                    print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})")
+                if not np.isnan(val):
+                    cml_sum += val
+                    count += 1
+        else:
+            for val, name in zip(miou, self.CLASSES):
+                val=val.item()
+                if not np.isnan(val) or print_na:
+                    print(f"{name:15s}: {val*100:2.2f}    (")
+                if not np.isnan(val):
+                    cml_sum += val
+                    count += 1
+        
+        # print("HI: ", cml_sum)
+        print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
+
+
+    def pre_eval_dataloader_consis(self, preds, indices, data, predstk, metrics=["pred_pred"]):
         """Collect eval result from each iteration.
 
         Args:
@@ -298,20 +328,75 @@ class CustomDataset(Dataset):
             list[torch.Tensor]: (area_intersect, area_union, area_prediction,
                 area_ground_truth).
         """
+        assert(preds is not None)
         # In order to compat with batch inference
         if not isinstance(indices, list):
             indices = [indices]
         if not isinstance(preds, list):
             preds = [preds]
+        if predstk is not None and not isinstance(predstk, list):
+            predstk = [predstk]
 
         pre_eval_results = []
 
-        for pred, index in zip(preds, indices):
-            # seg_map = self.get_gt_seg_map_by_idx(index)
-            pre_eval_results.append(
-                intersect_and_union(
+        assert(len(preds) == 1) #currently only supports batch size 1 cuz of data["gt_semantic_seg"]
+        for i in range(len(preds)):
+            pred = preds[i][:, :, None]
+            index = indices[i]
+            if predstk is not None:
+                predtk = predstk[i][:, :, None]
+            seg_map = data["gt_semantic_seg"][0]
+            # pdb.set_trace()
+            if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
+                seg_map = seg_map.squeeze(0)
+
+            if "pred_pred" in metrics:
+                # print("got pred_pred")
+                flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
+                # pdb.set_trace()
+                iau_pred_pred = flow_prop_iou(
                     pred,
-                    data["gt_semantic_seg"],
+                    predtk,
+                    flow,
+                    num_classes=len(self.CLASSES),
+                    ignore_index=self.ignore_index,
+                    label_map=self.label_map,
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices
+                )
+                intersection, union, _, _ = iau_pred_pred
+                self.cml_intersect["pred_pred"] += intersection
+                self.cml_union["pred_pred"] += union
+            
+            if "gt_pred" in metrics:
+                # props pred at t -> ground truth at t-k
+                flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
+                # pdb.set_trace()
+                imtk_seg_map = data["imtk_gt_semantic_seg"][0]
+                if imtk_seg_map.shape[0] == 1 and len(imtk_seg_map.shape) == 4:
+                    imtk_seg_map = imtk_seg_map.squeeze(0)
+                
+                imtk_seg_map = imtk_seg_map.permute((1, 2, 0)) #turn to H, W, 1
+                iau_gt_pred = flow_prop_iou(
+                    pred,
+                    imtk_seg_map,
+                    flow,
+                    num_classes=len(self.CLASSES),
+                    ignore_index=self.ignore_index,
+                    label_map=self.label_map,
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices
+                )
+                intersection, union, _, _ = iau_gt_pred
+                self.cml_intersect["gt_pred"] += intersection
+                self.cml_union["gt_pred"] += union
+
+            if "mIoU" in metrics:
+                # print("got mIoU")
+                
+                iau_miou = intersect_and_union(
+                    pred.squeeze(-1),
+                    seg_map.squeeze(0),
                     len(self.CLASSES),
                     self.ignore_index,
                     # as the labels has been converted when dataset initialized
@@ -321,7 +406,20 @@ class CustomDataset(Dataset):
                     # for more ditails
                     label_map=self.label_map,
                     reduce_zero_label=self.reduce_zero_label,
-                    indices=indices))
+                    indices=indices
+                )
+                # pdb.set_trace()
+                intersection, union, _, _ = iau_miou
+                self.cml_intersect["mIoU"] += intersection
+                self.cml_union["mIoU"] += union
+                pre_eval_results.append(iau_miou)
+
+            if index % 10 == 0:
+                for key in metrics:
+                    intersection = self.cml_intersect[key]
+                    union = self.cml_union[key]
+                    print(f"{'-'*100}\n{key}: ")
+                    self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key])
 
         return pre_eval_results
 

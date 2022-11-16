@@ -63,16 +63,29 @@ def error_viz(pred_label, label, indices, split="/srv/share4/datasets/VIPER/spli
         # print(f"{out_image.shape=}")
         cv2.imwrite(f"work_dirs/ims/error_vis/cls{classId}/t={indices[0]}.png", np.transpose(out_image, (1, 2, 0)))
 
-def flow_prop_iou(gt_t, gt_tk, flow_t_tk, *kwargs):
-    #TODO: currently hardcoded for cityscapes
-    mlabel2_1 = backpropFlowNoDup(flow_t_tk.numpy(), gt_t.numpy())
-    viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
-    # print(f"{viz.shape=}")
-    # imshow(viz, scale=0.5)
-    intersect, union, _, _ = intersect_and_union(gt_t.numpy(), mlabel2_1, num_classes=31, ignore_index=0)
-    # print(t.shape, tk.shape, flow_t_tk.shape)
+def flow_prop_iou(gt_t, gt_tk, flow_tk_t, **kwargs):
+    """
+    gt_t: H, W, *.  image at time t
+    gt_tk: H, W, *  image at t-k
+    flow_tk_t: H, W, 2 Flow from t-k to t
+    """
 
-    return intersect, union
+    assert len(gt_t.shape) == 3 and gt_t.shape[2] < 10, f"gt_t appears to be the wrong shape.  Got {gt_t.shape}"
+    assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
+    assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
+
+    gt_t = gt_t.numpy() if isinstance(gt_t, torch.Tensor) else gt_t
+    gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
+    flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
+
+    mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
+    # viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
+
+    # imshow(viz, scale=0.5)
+    iau = intersect_and_union(gt_tk.squeeze(2), mlabel2_1.squeeze(2), **kwargs)
+    # print(t.shape, tk.shape, flow_tk_t.shape)
+
+    return iau
 
 def intersect_and_union(pred_label,
                         label,
@@ -86,9 +99,9 @@ def intersect_and_union(pred_label,
 
     Args:
         pred_label (ndarray | str): Prediction segmentation map
-            or predict result filename.
+            or predict result filename (H, W).
         label (ndarray | str): Ground truth segmentation map
-            or label filename.
+            or label filename (H, W).
         num_classes (int): Number of categories.
         ignore_index (int): Index that will be ignored in evaluation.
         label_map (dict): Mapping old labels to new labels. The parameter will
@@ -104,6 +117,9 @@ def intersect_and_union(pred_label,
          torch.Tensor: The prediction histogram on all classes.
          torch.Tensor: The ground truth histogram on all classes.
     """
+    # print("shapes: ", pred_label.shape)
+    assert len(pred_label.shape) == 2, f"pred_label has wrong dimension.  Got{pred_label.shape}"
+    assert len(label.shape) == 2, f"label has wrong dimension.  Got{label.shape}"
 
     if isinstance(pred_label, str):
         pred_label = torch.from_numpy(np.load(pred_label))
@@ -113,7 +129,7 @@ def intersect_and_union(pred_label,
     if isinstance(label, str):
         label = torch.from_numpy(
             mmcv.imread(label, flag='unchanged', backend='pillow'))
-    else:
+    elif isinstance(label, np.ndarray):
         label = torch.from_numpy(label)
 
     if error_viz_split is not None:

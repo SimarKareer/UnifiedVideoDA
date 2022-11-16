@@ -8,6 +8,7 @@ from tools.aggregate_flows.flow.my_utils import palette_to_id, backpropFlow, ima
 import torch
 import numpy as np
 from tqdm import tqdm
+import pdb
 
 CLASSES = ("unlabeled", "ambiguous", "sky","road","sidewalk","railtrack","terrain","tree","vegetation","building","infrastructure","fence","billboard","trafficlight","trafficsign","mobilebarrier","firehydrant","chair","trash","trashcan","person","animal","bicycle","motorcycle","car","van","bus","truck","trailer","train","plane","boat")
 
@@ -37,8 +38,8 @@ def main():
 
     #crop size from the da-vsn paper code
     crop_size = (720, 1280)
-
-    train_pipeline = {
+    
+    test_pipeline = {
         "im_load_pipeline": [
             dict(type='LoadImageFromFile'),
             dict(type='LoadAnnotations'),
@@ -50,25 +51,24 @@ def main():
             dict(type='LoadFlowFromFile'),
         ],
         "shared_pipeline": [
-            # dict(type='Resize', img_scale=(2048, 1024), ratio_range=(0.5, 2.0)),
+            # dict(type='Resize', keep_ratio=True, img_scale=(1080, 1920)),
             # dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
-            # dict(type='RandomFlip', prob=0.5),
+            dict(type='RandomFlip', prob=0.0),
         ],
         "im_pipeline": [
             # dict(type='PhotoMetricDistortion'),
-            # dict(type='Normalize', **img_norm_cfg),
+            dict(type='Normalize', **img_norm_cfg),
             # dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
-            dict(type='DefaultFormatBundle'),
-            dict(type='Collect', keys=['img', 'gt_semantic_seg'], meta_keys=[]),
+            # dict(type='DefaultFormatBundle'),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type='Collect', keys=['img', 'gt_semantic_seg'])#, meta_keys=[]),
         ],
         "flow_pipeline": [
             dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
             dict(type='DefaultFormatBundle'), #I don't know what this is
-            dict(type='Collect', keys=['img', 'gt_semantic_seg'], meta_keys=[]),
+            dict(type='Collect', keys=['img', 'gt_semantic_seg'])#, meta_keys=[]),
         ]
     }
-
-    img_dir = '/srv/share4/datasets/VIPER/'
 
     viper = ViperSeqDataset(
         # type=dataset_type,
@@ -78,7 +78,7 @@ def main():
         data_root=data_root,
         img_dir='val/img',
         ann_dir='val/cls',
-        pipeline=train_pipeline
+        pipeline=test_pipeline
     )
 
     import nonechucks as nc
@@ -94,16 +94,18 @@ def main():
     cml_intersect = torch.zeros(31)
     cml_union = torch.zeros(31)
     for i, data in enumerate(tqdm(data_loader)):
-        # print(data)
-        im, imtk, flow, gt_t, gt_tk = data["img"].data[0], data["imtk"].data[0], data["flow"].data[0], data["gt_semantic_seg"].data[0], data["imtk_gt_semantic_seg"].data[0]
-        # print("im: ",im.shape, imtk.shape, flow.shape, gt_t.shape, gt_tk.shape)
+        # print("data: ", data)
+        # im, imtk, flow, gt_t, gt_tk = data["img"].data[0], data["imtk"].data[0], data["flow"].data[0], data["gt_semantic_seg"].data[0], data["imtk_gt_semantic_seg"].data[0]
+        # pdb.set_trace()
+        im, imtk, flow, gt_t, gt_tk = data["img"][0], data["imtk"][0], data["flow"][0], data["gt_semantic_seg"][0], data["imtk_gt_semantic_seg"][0]
+        # print("im: ", im.shape, imtk.shape, flow.shape, gt_t.shape, gt_tk.shape)
         flow = flow.squeeze(0).permute((1, 2, 0))
         gt_t = gt_t.squeeze(0).permute((1, 2, 0))
         gt_tk = gt_tk.squeeze(0).permute((1, 2, 0))
         im = im.squeeze(0).permute((1, 2, 0))
         imtk = imtk.squeeze(0).permute((1, 2, 0))
         
-        intersect, union = flow_prop_iou(gt_t, gt_tk, flow)
+        intersect, union, _, _ = flow_prop_iou(gt_t, gt_tk, flow, num_classes=31, ignore_index=0)
         assert(intersect.shape == (31,) and union.shape==(31,))
         cml_intersect += intersect
         cml_union += union

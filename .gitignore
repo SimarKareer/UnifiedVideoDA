@@ -125,3 +125,4 @@ wandb/
 artifacts/
 *.out
 *.err
+*.npy
