@@ -129,3 +129,7 @@ artifacts/
 #folders for training/eval
 predictions
 pretrain
+
+#irrelevant experiments fo testing purposes only
+tools/ade20k_beit_exp
+tools/ade20k_exp
