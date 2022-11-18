@@ -9,23 +9,36 @@ import torch
 import numpy as np
 from tqdm import tqdm
 import pdb
-
 CLASSES = ("unlabeled", "ambiguous", "sky","road","sidewalk","railtrack","terrain","tree","vegetation","building","infrastructure","fence","billboard","trafficlight","trafficsign","mobilebarrier","firehydrant","chair","trash","trashcan","person","animal","bicycle","motorcycle","car","van","bus","truck","trailer","train","plane","boat")
 
-def formatmIoU(miou, names, print_na=False):
+def formatmIoU(miou, intersects=None, unions=None, mask_counts=None, print_na=False):
     cml_sum = 0
     count = 0
-    for val, name in zip(miou, names):
-        val=val.item()
-        if not np.isnan(val) or print_na:
-            print(f"{name:15s}: {val*100:2.2f}")
-        if not np.isnan(val):
-            cml_sum += val
-            count += 1
+    idx = 0
+    if intersects is not None and unions is not None:
+        for val, name, intersect, union in zip(miou, CLASSES, intersects, unions):
+            val=val.item()
+            if not np.isnan(val) or print_na:
+                if mask_counts is None:
+                    print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})   ")
+                else:
+                    mask_ratio = 0 if mask_counts[1][idx] == 0 else mask_counts[0][idx] / mask_counts[1][idx]
+                    print(f"{name:15s}: {val*100:05.2f}     ({str(intersect.item()):10s} {str(union.item()):10s}) {100*mask_ratio:.2f}%")
+            if not np.isnan(val):
+                cml_sum += val
+                count += 1
+            idx += 1
+    else:
+        for val, name in zip(miou, CLASSES):
+            val=val.item()
+            if not np.isnan(val) or print_na:
+                print(f"{name:15s}: {val*100:2.2f}    (")
+            if not np.isnan(val):
+                cml_sum += val
+                count += 1
     
     # print("HI: ", cml_sum)
     print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
-
 
 def main():
     # dataset settings
@@ -93,6 +106,9 @@ def main():
 
     cml_intersect = torch.zeros(31)
     cml_union = torch.zeros(31)
+    cml_mask = np.zeros(31)
+    cml_total = np.zeros(31)
+
     for i, data in enumerate(tqdm(data_loader)):
         # print("data: ", data)
         # im, imtk, flow, gt_t, gt_tk = data["img"].data[0], data["imtk"].data[0], data["flow"].data[0], data["gt_semantic_seg"].data[0], data["imtk_gt_semantic_seg"].data[0]
@@ -105,14 +121,18 @@ def main():
         im = im.squeeze(0).permute((1, 2, 0))
         imtk = imtk.squeeze(0).permute((1, 2, 0))
         
-        intersect, union, _, _ = flow_prop_iou(gt_t, gt_tk, flow, num_classes=31, ignore_index=0)
+        iau, mask_count = flow_prop_iou(gt_t, gt_tk, flow, return_mask_count=True, num_classes=31, ignore_index=0)
+        intersect, union, _, _ = iau
         assert(intersect.shape == (31,) and union.shape==(31,))
         cml_intersect += intersect
         cml_union += union
+        # pdb.set_trace()
+        cml_mask[mask_count[0].astype(np.int16)] += mask_count[1]
+        cml_total[mask_count[2].astype(np.int16)] += mask_count[3]
 
         if i % 10 == 0:
             print("-"*100)
-            formatmIoU(cml_intersect/cml_union, CLASSES)
+            formatmIoU(cml_intersect/cml_union, intersects=cml_intersect, unions=cml_union, mask_counts=(cml_mask, cml_total))
 
         # shape debug
         # print(f"{im.shape=}")

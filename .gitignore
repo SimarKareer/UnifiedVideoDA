@@ -134,3 +134,15 @@ pretrain
 #irrelevant experiments fo testing purposes only
 tools/ade20k_beit_exp
 tools/ade20k_exp
+
+
+
+
+# I think I've included all the relevant files from here so this sould be fine.
+tools/aggregate_flows
+tools/dataset_test/Untitled.ipynb
+tools/dataset_test/dataset_test2.ipynb
+tools/dataset_test/regularViper.ipynb
+refined_data
+refined_data_seq
+result.jpg

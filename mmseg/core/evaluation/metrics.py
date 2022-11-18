@@ -63,7 +63,7 @@ def error_viz(pred_label, label, indices, split="/srv/share4/datasets/VIPER/spli
         # print(f"{out_image.shape=}")
         cv2.imwrite(f"work_dirs/ims/error_vis/cls{classId}/t={indices[0]}.png", np.transpose(out_image, (1, 2, 0)))
 
-def flow_prop_iou(gt_t, gt_tk, flow_tk_t, **kwargs):
+def flow_prop_iou(gt_t, gt_tk, flow_tk_t, return_mask_count=False, **kwargs):
     """
     gt_t: H, W, *.  image at time t
     gt_tk: H, W, *  image at t-k
@@ -78,14 +78,19 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, **kwargs):
     gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
     flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
 
-    mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
+    if return_mask_count:
+        mlabel2_1, mask_count = backpropFlowNoDup(flow_tk_t, gt_t, return_mask_count=return_mask_count)
+    else:
+        mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
     # viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
 
     # imshow(viz, scale=0.5)
     iau = intersect_and_union(gt_tk.squeeze(2), mlabel2_1.squeeze(2), **kwargs)
     # print(t.shape, tk.shape, flow_tk_t.shape)
-
-    return iau
+    if return_mask_count:
+        return iau, mask_count
+    else:
+        return iau
 
 def intersect_and_union(pred_label,
                         label,

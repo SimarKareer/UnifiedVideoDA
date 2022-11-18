@@ -141,6 +141,8 @@ class CustomDataset(Dataset):
         
         self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
         self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]}
+        self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
+        self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
 
 
     def __len__(self):
@@ -288,20 +290,27 @@ class CustomDataset(Dataset):
             self.gt_seg_map_loader(results)
             yield results['gt_semantic_seg']
     
-    def formatmIoU(self, miou, intersects=None, unions=None, print_na=False):
+    def formatmIoU(self, miou, intersects=None, unions=None, mask_counts=None, print_na=False):
 
         # print(f"\n{'-'*100}")
         cml_sum = 0
         count = 0
-
+        idx = 0
         if intersects is not None and unions is not None:
             for val, name, intersect, union in zip(miou, self.CLASSES, intersects, unions):
                 val=val.item()
                 if not np.isnan(val) or print_na:
-                    print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})")
+                    if mask_counts is None:
+                        print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})   ")
+                    else:
+                        # masked_nums, total_nums = mask_counts[0][idx], mask_counts[1][idx]
+                        mask_ratio = 0 if mask_counts[1][idx] == 0 else mask_counts[0][idx] / mask_counts[1][idx]
+                        # pdb.set_trace()
+                        print(f"{name:15s}: {val*100:05.2f}     ({str(intersect.item()):10s} {str(union.item()):10s}) {100*mask_ratio:.2f}%")
                 if not np.isnan(val):
                     cml_sum += val
                     count += 1
+                idx += 1
         else:
             for val, name in zip(miou, self.CLASSES):
                 val=val.item()
@@ -350,6 +359,8 @@ class CustomDataset(Dataset):
             if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
                 seg_map = seg_map.squeeze(0)
 
+            return_mask_count = "mask_count" in metrics
+
             if "pred_pred" in metrics:
                 # print("got pred_pred")
                 flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
@@ -362,8 +373,16 @@ class CustomDataset(Dataset):
                     ignore_index=self.ignore_index,
                     label_map=self.label_map,
                     reduce_zero_label=self.reduce_zero_label,
-                    indices=indices
+                    indices=indices,
+                    return_mask_count=return_mask_count
                 )
+                if return_mask_count:
+                    iau_pred_pred, mask_count = iau_pred_pred
+                    # pdb.set_trace()
+                    self.mask_counts["pred_pred"][mask_count[0]] += mask_count[1]
+                    self.total_mask_counts["pred_pred"][mask_count[2]] += mask_count[3]
+
+
                 intersection, union, _, _ = iau_pred_pred
                 self.cml_intersect["pred_pred"] += intersection
                 self.cml_union["pred_pred"] += union
@@ -385,8 +404,14 @@ class CustomDataset(Dataset):
                     ignore_index=self.ignore_index,
                     label_map=self.label_map,
                     reduce_zero_label=self.reduce_zero_label,
-                    indices=indices
+                    indices=indices,
+                    return_mask_count=return_mask_count
                 )
+                if return_mask_count:
+                    iau_gt_pred, mask_count = iau_gt_pred
+                    self.mask_counts["gt_pred"][mask_count[0]] += mask_count[1]
+                    self.total_mask_counts["gt_pred"][mask_count[2]] += mask_count[3]
+
                 intersection, union, _, _ = iau_gt_pred
                 self.cml_intersect["gt_pred"] += intersection
                 self.cml_union["gt_pred"] += union
@@ -415,11 +440,14 @@ class CustomDataset(Dataset):
                 pre_eval_results.append(iau_miou)
 
             if index % 10 == 0:
-                for key in metrics:
+                for key in [k for k in metrics if k != "mask_count"]:
                     intersection = self.cml_intersect[key]
                     union = self.cml_union[key]
                     print(f"{'-'*100}\n{key}: ")
-                    self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key])
+                    if return_mask_count and key in ["pred_pred", "gt_pred"]:
+                        self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key], mask_counts=(self.mask_counts[key], self.total_mask_counts[key]))
+                    else:
+                        self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key])
 
         return pre_eval_results
 

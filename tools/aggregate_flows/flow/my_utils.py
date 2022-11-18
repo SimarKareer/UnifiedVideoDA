@@ -201,7 +201,7 @@ def backpropFlow(flow, im):
     # print("output flow: ", output_flow)
     return np.transpose(output_im, (1, 2, 0))
 
-def backpropFlowNoDup(flow, im_orig):
+def backpropFlowNoDup(flow, im_orig, return_mask_count=False):
     """
     returns im t+k backpropped as if it was im t
     flow: H, W, 2
@@ -235,12 +235,20 @@ def backpropFlowNoDup(flow, im_orig):
     mask_indices = unique[counts > 1].transpose((1, 0))
     # print(np.sum(unique[counts > 1]))
     # print(mask_indices)
+    if return_mask_count:
+        unique, counts = np.unique(im[:, mask_indices[0], mask_indices[1]], return_counts=True)
+        total_unique, total_counts = np.unique(im, return_counts=True)
+        mask_count = (unique, counts, total_unique, total_counts)
+    
     im[:, mask_indices[0], mask_indices[1]] = 0#np.array([255, 192, 203]).reshape(3, 1)
 
     output_im = im[:, indices[0], indices[1]].reshape(-1, H, W)
 
     output_im[:, np.all(flow==0, axis=0)] = 0
-    return np.transpose(output_im, (1, 2, 0))
+    if not return_mask_count:
+        return np.transpose(output_im, (1, 2, 0))
+    else:
+        return np.transpose(output_im, (1, 2, 0)), mask_count
 
 def backpropFlowFilter2(flow, im2, thresh):
     """
