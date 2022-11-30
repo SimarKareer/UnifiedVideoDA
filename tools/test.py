@@ -16,7 +16,7 @@ from mmcv.utils import DictAction
 from mmseg import digit_version
 from mmseg.apis import multi_gpu_test, single_gpu_test
 from mmseg.datasets import build_dataloader, build_dataset
-from mmseg.models import build_segmentor
+from mmseg.models import build_segmentor, build_train_model
 from mmseg.utils import build_ddp, build_dp, get_device, setup_multi_processes
 
 

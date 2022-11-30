@@ -306,7 +306,7 @@ class CustomDataset(Dataset):
                         # masked_nums, total_nums = mask_counts[0][idx], mask_counts[1][idx]
                         mask_ratio = 0 if mask_counts[1][idx] == 0 else mask_counts[0][idx] / mask_counts[1][idx]
                         # pdb.set_trace()
-                        print(f"{name:15s}: {val*100:05.2f}     ({str(intersect.item()):10s} {str(union.item()):10s}) {100*mask_ratio:.2f}%")
+                        print(f"{name:15s}, {val*100:05.2f}, {str(intersect.item()):10s}, {str(union.item()):10s}, {100*mask_ratio:.2f}%")
                 if not np.isnan(val):
                     cml_sum += val
                     count += 1
@@ -315,7 +315,7 @@ class CustomDataset(Dataset):
             for val, name in zip(miou, self.CLASSES):
                 val=val.item()
                 if not np.isnan(val) or print_na:
-                    print(f"{name:15s}: {val*100:2.2f}    (")
+                    print(f"{name:15s}, {val*100:2.2f}")
                 if not np.isnan(val):
                     cml_sum += val
                     count += 1

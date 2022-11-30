@@ -137,6 +137,7 @@ def single_gpu_test(model,
             # TODO: adapt samples_per_gpu > 1.
             # only samples_per_gpu=1 valid now
             # Note: while above result is full preds, here it's just metrics
+            breakpoint()
             if "gt_semantic_seg" in data: # Will run the original mmseg style eval if the dataloader doesn't provide ground truth
                 result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=resulttk, metrics=metrics)
             else:

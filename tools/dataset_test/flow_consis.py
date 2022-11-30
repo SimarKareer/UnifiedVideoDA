@@ -23,7 +23,7 @@ def formatmIoU(miou, intersects=None, unions=None, mask_counts=None, print_na=Fa
                     print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})   ")
                 else:
                     mask_ratio = 0 if mask_counts[1][idx] == 0 else mask_counts[0][idx] / mask_counts[1][idx]
-                    print(f"{name:15s}: {val*100:05.2f}     ({str(intersect.item()):10s} {str(union.item()):10s}) {100*mask_ratio:.2f}%")
+                    print(f"{name:15s}, {val*100:05.2f}, {str(intersect.item()):10s}, {str(union.item()):10s}, {100*mask_ratio:.2f}%")
             if not np.isnan(val):
                 cml_sum += val
                 count += 1
