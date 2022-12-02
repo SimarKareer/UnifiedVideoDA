@@ -305,7 +305,6 @@ class CustomDataset(Dataset):
                     else:
                         # masked_nums, total_nums = mask_counts[0][idx], mask_counts[1][idx]
                         mask_ratio = 0 if mask_counts[1][idx] == 0 else mask_counts[0][idx] / mask_counts[1][idx]
-                        # pdb.set_trace()
                         print(f"{name:15s}, {val*100:05.2f}, {str(intersect.item()):10s}, {str(union.item()):10s}, {100*mask_ratio:.2f}%")
                 if not np.isnan(val):
                     cml_sum += val
@@ -355,16 +354,13 @@ class CustomDataset(Dataset):
             if predstk is not None:
                 predtk = predstk[i][:, :, None]
             seg_map = data["gt_semantic_seg"][0]
-            # pdb.set_trace()
             if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
                 seg_map = seg_map.squeeze(0)
 
             return_mask_count = "mask_count" in metrics
 
             if "pred_pred" in metrics:
-                # print("got pred_pred")
                 flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
-                # pdb.set_trace()
                 iau_pred_pred = flow_prop_iou(
                     pred,
                     predtk,
@@ -378,7 +374,6 @@ class CustomDataset(Dataset):
                 )
                 if return_mask_count:
                     iau_pred_pred, mask_count = iau_pred_pred
-                    # pdb.set_trace()
                     self.mask_counts["pred_pred"][mask_count[0]] += mask_count[1]
                     self.total_mask_counts["pred_pred"][mask_count[2]] += mask_count[3]
 
@@ -390,7 +385,6 @@ class CustomDataset(Dataset):
             if "gt_pred" in metrics:
                 # props pred at t -> ground truth at t-k
                 flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
-                # pdb.set_trace()
                 imtk_seg_map = data["imtk_gt_semantic_seg"][0]
                 if imtk_seg_map.shape[0] == 1 and len(imtk_seg_map.shape) == 4:
                     imtk_seg_map = imtk_seg_map.squeeze(0)
@@ -433,7 +427,6 @@ class CustomDataset(Dataset):
                     reduce_zero_label=self.reduce_zero_label,
                     indices=indices
                 )
-                # pdb.set_trace()
                 intersection, union, _, _ = iau_miou
                 self.cml_intersect["mIoU"] += intersection
                 self.cml_union["mIoU"] += union

@@ -309,7 +309,6 @@ def labelMapToIm(label, label_map):
     output = label.repeat(1, 1, 3)
     for color, id in label_map:
         output[label.squeeze(2)==id] = torch.tensor(color)
-
     return output
 
 palette_to_id = [   

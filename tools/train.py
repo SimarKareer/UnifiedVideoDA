@@ -197,7 +197,6 @@ def main():
     meta['seed'] = seed
     meta['exp_name'] = osp.basename(args.config)
 
-    breakpoint()
     model = build_segmentor(
         cfg.model,
         train_cfg=cfg.get('train_cfg'),

@@ -112,7 +112,6 @@ def main():
     for i, data in enumerate(tqdm(data_loader)):
         # print("data: ", data)
         # im, imtk, flow, gt_t, gt_tk = data["img"].data[0], data["imtk"].data[0], data["flow"].data[0], data["gt_semantic_seg"].data[0], data["imtk_gt_semantic_seg"].data[0]
-        # pdb.set_trace()
         im, imtk, flow, gt_t, gt_tk = data["img"][0], data["imtk"][0], data["flow"][0], data["gt_semantic_seg"][0], data["imtk_gt_semantic_seg"][0]
         # print("im: ", im.shape, imtk.shape, flow.shape, gt_t.shape, gt_tk.shape)
         flow = flow.squeeze(0).permute((1, 2, 0))
@@ -126,7 +125,6 @@ def main():
         assert(intersect.shape == (31,) and union.shape==(31,))
         cml_intersect += intersect
         cml_union += union
-        # pdb.set_trace()
         cml_mask[mask_count[0].astype(np.int16)] += mask_count[1]
         cml_total[mask_count[2].astype(np.int16)] += mask_count[3]
 

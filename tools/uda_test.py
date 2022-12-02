@@ -121,7 +121,7 @@ def main():
     cfg = mmcv.Config.fromfile(args.config)
     if args.options is not None:
         cfg.merge_from_dict(args.options)
-    cfg = update_legacy_cfg(cfg)
+    # cfg = update_legacy_cfg(cfg) #I think this removes ability to use json config but that's not needed for us
     # set cudnn_benchmark
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
@@ -211,7 +211,7 @@ def main():
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
         outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
-                                  efficient_test, args.opacity)
+                                  efficient_test, args.opacity, metrics=args.eval, pre_eval=True, label_space=cfg.label_space)
     else:
         model = MMDistributedDataParallel(
             model.cuda(),

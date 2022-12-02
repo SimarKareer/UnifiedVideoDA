@@ -8,6 +8,7 @@ from torchvision.utils import save_image
 import cv2
 import linecache
 import os
+from tools.aggregate_flows.flow.my_utils import palette_to_id
 from tools.aggregate_flows.flow.my_utils import imshow, visFlow, loadVisFlow, loadFlow, mergeFlow, backpropFlow, imageMap, labelMapToIm, backpropFlowNoDup, palette_to_id
 
 def f_score(precision, recall, beta=1):
@@ -125,7 +126,8 @@ def intersect_and_union(pred_label,
     # print("shapes: ", pred_label.shape)
     assert len(pred_label.shape) == 2, f"pred_label has wrong dimension.  Got{pred_label.shape}"
     assert len(label.shape) == 2, f"label has wrong dimension.  Got{label.shape}"
-
+    
+    
     if isinstance(pred_label, str):
         pred_label = torch.from_numpy(np.load(pred_label))
     else:
@@ -148,6 +150,16 @@ def intersect_and_union(pred_label,
         label[label == 0] = 255
         label = label - 1
         label[label == 254] = 255
+
+    pred = torch.tensor(pred_label).view((1080, 1920, 1))
+    gt = torch.tensor(label).view((1080, 1920, 1)).long()
+    # colored_pred = labelMapToIm(pred, palette_to_id)
+    # colored_gt = labelMapToIm(gt, palette_to_id)
+    # cv2.imwrite("work_dirs/ims/metricsPred.png", colored_pred.numpy().astype(np.int16))
+    # cv2.imwrite("work_dirs/ims/metricsLabel.png", colored_gt.numpy().astype(np.int16))
+    # cv2.imwrite("work_dirs/ims/metricsPred2.png", pred.numpy().astype(np.int16))
+    # cv2.imwrite("work_dirs/ims/metricsLabel2.png", gt.numpy().astype(np.int16))
+
 
     mask = (label != ignore_index)
     # print("shape: ", mask.shape, "masked: ", mask.sum())

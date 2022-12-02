@@ -34,6 +34,25 @@ class ViperSeqDataset(CustomDataset):
         self.flows = None if self.flow_dir == None else self.load_annotations2(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flowv2/train/flow_occ" #TODO Temporary, must fix or will give horrible error
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flow/train/flow"
+        self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
+
+        viperClasses = ("unlabeled", "ambiguous", "sky","road","sidewalk","railtrack","terrain","tree","vegetation","building","infrastructure","fence","billboard","traffic light","traffic sign","mobilebarrier","firehydrant","chair","trash","trashcan","person","animal","bicycle","motorcycle","car","van","bus","truck","trailer","train","plane","boat")
+
+        CSClasses = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle')
+
+        cs_to_viper = {k: 201 for k in range(255)}
+        for i, k in enumerate(CSClasses):
+            if k in viperClasses:
+                cs_to_viper[i] = viperClasses.index(k)
+        
+        viper_to_cs = {k: 201 for k in range(255)}
+        for i, k in enumerate(viperClasses):
+            if k in CSClasses:
+                viper_to_cs[i] = CSClasses.index(k)
+        self.convert_map = {"cityscapes_viper": cs_to_viper, "viper_cityscapes": viper_to_cs}
+        self.label_space = "viper"
+        
+        # print("HRDA mapping: ", self.cs_to_viper)
     
     def load_annotations2(self, img_dir, img_suffix, ann_dir, seg_map_suffix, split, frame_offset=0):
         """Load annotation from directory.
@@ -262,7 +281,6 @@ class ViperSeqDataset(CustomDataset):
         finalIms["imtk_gt_semantic_seg"] = imtk_gt
 
         # print("finalIms1", finalIms)
-        # pdb.set_trace()
         # print("final Ims before: ", finalIms)
         for k, v in finalIms.items():
             # print(f"{k}: {type(v)}")

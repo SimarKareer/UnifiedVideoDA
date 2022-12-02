@@ -4,7 +4,7 @@ _base_ = [
     # DAFormer Network Architecture
     '../_base_/models/daformer_sepaspp_mitb5.py',
     # GTA->Cityscapes High-Resolution Data Loading
-    '../_base_/datasets/uda_gtaHR_to_cityscapesHR_1024x1024.py',
+    '../_base_/datasets/uda_viperHR_to_cityscapesHR_1024x1024.py',
     # DAFormer Self-Training
     '../_base_/uda/dacs_a999_fdthings.py',
     # AdamW Optimizer
@@ -88,5 +88,6 @@ name_encoder = 'mitb5'
 name_decoder = 'hrda1-512-0.1_daformer_sepaspp_sl'
 name_uda = 'dacs_a999_fdthings_rcs0.01-2.0_cpl2'
 name_opt = 'adamw_6e-05_pmTrue_poly10warm_1x2_40k'
+label_space = "cityscapes"
 
 # For the other configurations used in the paper, please refer to experiment.py
