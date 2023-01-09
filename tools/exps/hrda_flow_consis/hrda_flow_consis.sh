@@ -19,4 +19,4 @@ cd ~/flash/Projects/VideoDA/mmsegmentation
 set -x
 # python tools/test.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/configs/hrda/hrda.b5.1024x1024.viper.160k.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth --eval mIoU
 # python tools/test.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/configs/hrda/gtaHR2csHR_hrda.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth --eval mIoU --launcher none
-python tools/uda_test.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/configs/hrda/gtaHR2csHR_hrda.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth --eval mIoU pred_pred gt_pred --launcher none
+python tools/uda_test.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/configs/hrda/gtaHR2csHR_hrda.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth --eval mIoU pred_pred gt_pred --sub-metrics mask_count correct_consis --launcher none

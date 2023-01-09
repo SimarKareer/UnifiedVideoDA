@@ -15,7 +15,7 @@ from mmseg.utils import get_root_logger
 from .builder import DATASETS
 from .pipelines import Compose, LoadAnnotations
 
-from mmseg.core.evaluation.metrics import flow_prop_iou
+from mmseg.core.evaluation.metrics import flow_prop_iou, correctness_confusion
 
 import pdb
 @DATASETS.register_module()
@@ -143,6 +143,7 @@ class CustomDataset(Dataset):
         self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]}
         self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
+        self.cml_correct_consis = {k: np.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
 
 
     def __len__(self):
@@ -289,6 +290,45 @@ class CustomDataset(Dataset):
             self.pre_pipeline(results)
             self.gt_seg_map_loader(results)
             yield results['gt_semantic_seg']
+
+    def formatAllMetrics(self, metrics, sub_metrics):
+        for metric in metrics:
+            print(f"\nEVAL SETTING: {metric}")
+            if "mask_count" in sub_metrics and metric != "mIoU":
+                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}, {'Mask Ratio':15s}")
+            else:
+                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}")
+            # breakpoint()
+            ious = self.cml_intersect[metric] / self.cml_union[metric]
+            for i in range(len(self.CLASSES)):
+                out_str = ""
+                if not np.isnan(ious[i].item()):
+                    out_str += f"{self.CLASSES[i]:15s}, {ious[i].item() * 100:05.2f}"
+                else:
+                    out_str += f"{self.CLASSES[i]:15s}, {'nan':5s}"
+                out_str += "     "
+
+                out_str += f", {str(self.cml_intersect[metric][i].item()):15s}, {str(self.cml_union[metric][i].item()):15s}"
+                if "mask_count" in sub_metrics and metric != "mIoU":
+                    # breakpoint()
+                    mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
+
+                    out_str += f", {100*mask_ratio:.2f}"
+                print(out_str)
+
+        if "correct_consis" in sub_metrics:
+            print(f"\nEVAL SETTING: correct_consis")
+            print(f"{'Class':15s}, {'correct_consis':15s}, {'correct_inconsis':15s}, {'incorrect_consis':15s}, {'incorrect_inconsis':15s}, {'Percent Consistent':15s}")
+            for i in range(len(self.CLASSES)):
+                numer = self.cml_correct_consis['correct_consis'][i] + self.cml_correct_consis['incorrect_inconsis'][i]
+                denom = self.cml_correct_consis['correct_consis'][i] + self.cml_correct_consis['correct_inconsis'][i] + self.cml_correct_consis['incorrect_consis'][i] + self.cml_correct_consis['incorrect_inconsis'][i]
+                # breakpoint()
+                print(f"{self.CLASSES[i]:15s}, {str(self.cml_correct_consis['correct_consis'][i].item()):15s}, {str(self.cml_correct_consis['correct_inconsis'][i].item()):15s}, {str(self.cml_correct_consis['incorrect_consis'][i].item()):15s}, {str(self.cml_correct_consis['incorrect_inconsis'][i].item()):15s}, {numer/denom*100:.2f}")
+                # a = 10
+                # print(f"{self.CLASSES[i]:15s}, {self.cml_correct_consis['correct_consis'][i].item()}")
+
+
+            # print(f"{self.CLASSES[i]:15s}, {self.mIoU[i]*100:05.2f}, {str(self.intersects[i].item()):10s}, {str(self.unions[i].item()):10s}%")
     
     def formatmIoU(self, miou, intersects=None, unions=None, mask_counts=None, print_na=False):
 
@@ -301,7 +341,8 @@ class CustomDataset(Dataset):
                 val=val.item()
                 if not np.isnan(val) or print_na:
                     if mask_counts is None:
-                        print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})   ")
+                        # print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})   ")
+                        print(f"{name:15s}, {val*100:05.2f}, {str(intersect.item()):10s}, {str(union.item()):10s}%")
                     else:
                         # masked_nums, total_nums = mask_counts[0][idx], mask_counts[1][idx]
                         mask_ratio = 0 if mask_counts[1][idx] == 0 else mask_counts[0][idx] / mask_counts[1][idx]
@@ -323,7 +364,7 @@ class CustomDataset(Dataset):
         print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
 
 
-    def pre_eval_dataloader_consis(self, preds, indices, data, predstk, metrics=["pred_pred"]):
+    def pre_eval_dataloader_consis(self, preds, indices, data, predstk, metrics=["mIoU", "pred_pred", "pred_gt", "gt_pred"], sub_metrics=["mask_count", "correct_consis"]):
         """Collect eval result from each iteration.
 
         Args:
@@ -331,6 +372,10 @@ class CustomDataset(Dataset):
                 after argmax, shape (N, H, W).
             indices (list[int] | int): the prediction related ground truth
                 indices.
+            data (dict): dict containing the images and annotations.
+            predstk: prediction on frame t-k
+            metrics (list[str]): metrics in ["mIoU", "pred_pred", "pred_gt", "gt_pred"]
+            sub_metrics (list[str]): eval settings in ["mask_count", "correct_consis"]
 
         Returns:
             list[torch.Tensor]: (area_intersect, area_union, area_prediction,
@@ -351,16 +396,36 @@ class CustomDataset(Dataset):
         for i in range(len(preds)):
             pred = preds[i][:, :, None]
             index = indices[i]
+            return_mask_count = "mask_count" in sub_metrics
+
             if predstk is not None:
                 predtk = predstk[i][:, :, None]
+
             seg_map = data["gt_semantic_seg"][0]
             if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
                 seg_map = seg_map.squeeze(0)
+            
+            seg_map_tk = data["imtk_gt_semantic_seg"][0]
+            if seg_map_tk.shape[0] == 1 and len(seg_map_tk.shape) == 4:
+                seg_map_tk = seg_map_tk.squeeze(0)
 
-            return_mask_count = "mask_count" in metrics
+
+            flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
+
+            if "correct_cons" in sub_metrics or True:
+                cons_correct_dict = correctness_confusion(seg_map_tk.permute((1, 2, 0)), pred, predtk, flow, self.label_map)
+                for k, v in cons_correct_dict.items():
+                    dict_to_arr = np.zeros(len(self.CLASSES))
+                    for k2, v2 in v.items():
+                        if k2 > len(self.CLASSES):
+                            # breakpoint()
+                            # raise AssertionError("class numbers are mismatching")
+                            continue
+                        dict_to_arr[k2] = v2
+                    self.cml_correct_consis[k] += dict_to_arr
+                # breakpoint()
 
             if "pred_pred" in metrics:
-                flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
                 iau_pred_pred = flow_prop_iou(
                     pred,
                     predtk,
@@ -384,7 +449,6 @@ class CustomDataset(Dataset):
             
             if "gt_pred" in metrics:
                 # props pred at t -> ground truth at t-k
-                flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
                 imtk_seg_map = data["imtk_gt_semantic_seg"][0]
                 if imtk_seg_map.shape[0] == 1 and len(imtk_seg_map.shape) == 4:
                     imtk_seg_map = imtk_seg_map.squeeze(0)
@@ -433,14 +497,15 @@ class CustomDataset(Dataset):
                 pre_eval_results.append(iau_miou)
 
             if index % 10 == 0:
-                for key in [k for k in metrics if k != "mask_count"]:
-                    intersection = self.cml_intersect[key]
-                    union = self.cml_union[key]
-                    print(f"{'-'*100}\n{key}: ")
-                    if return_mask_count and key in ["pred_pred", "gt_pred"]:
-                        self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key], mask_counts=(self.mask_counts[key], self.total_mask_counts[key]))
-                    else:
-                        self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key])
+                self.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+                # for key in [k for k in metrics if k != "mask_count"]:
+                #     intersection = self.cml_intersect[key]
+                #     union = self.cml_union[key]
+                #     print(f"{'-'*100}\n{key}: ")
+                #     if return_mask_count and key in ["pred_pred", "gt_pred"]:
+                #         self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key], mask_counts=(self.mask_counts[key], self.total_mask_counts[key]))
+                #     else:
+                #         self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key])
 
         return pre_eval_results
 

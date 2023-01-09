@@ -61,6 +61,7 @@ def single_gpu_test(model,
                     format_only=False,
                     format_args={},
                     metrics=["mIoU", "pred_pred", "gt_pred"],
+                    sub_metrics=["mask_count", "correct_consis"],
                     label_space=None
     ):
     """Test with single GPU by progressive mode.
@@ -85,9 +86,14 @@ def single_gpu_test(model,
             Default: False.
         format_args (dict): The args for format_results. Default: {}.
         metrics (list): which mIoU based metrics to include ["mIoU", "pred_pred", "gt_pred"]
+        sub_metrics (list): ["mask_count", "correct_consis"]
     Returns:
         list: list of evaluation pre-results or list of save file names.
     """
+    if label_space == None:
+        print("WARNING: label_space is None, assuming cityscapes")
+        label_space = "cityscapes"
+
     if efficient_test:
         warnings.warn(
             'DeprecationWarning: ``efficient_test`` will be deprecated, the '
@@ -170,7 +176,7 @@ def single_gpu_test(model,
 
 
             if "gt_semantic_seg" in data: # Will run the original mmseg style eval if the dataloader doesn't provide ground truth
-                result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=resulttk, metrics=metrics)
+                result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=resulttk, metrics=metrics, sub_metrics=sub_metrics)
             else:
                 result = dataset.pre_eval(result, indices=batch_indices)
             

@@ -63,11 +63,15 @@ def parse_args():
         'useful when you want to format the result to a specific format and '
         'submit it to the test server')
     parser.add_argument(
-        '--eval',
+        '--eval', #called metrics later in code
         type=str,
         nargs='+',
-        help='evaluation metrics, which depends on the dataset, e.g., "mIoU"'
-        ' for generic datasets, and "cityscapes" for Cityscapes')
+        help='["mIoU", "pred_pred", "gt_pred"]')
+    parser.add_argument(
+        '--sub-metrics',
+        type=str,
+        nargs='+',
+        help='["mask_count", "correct_consis"]')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
@@ -210,8 +214,16 @@ def main():
 
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
-                                  efficient_test, args.opacity, metrics=args.eval, pre_eval=True, label_space=cfg.label_space)
+        outputs = single_gpu_test(model,
+            data_loader,
+            args.show,
+            args.show_dir,
+            efficient_test,
+            args.opacity,
+            metrics=args.eval,
+            sub_metrics=args.sub_metrics,
+            pre_eval=True,
+            label_space=cfg.label_space)
     else:
         model = MMDistributedDataParallel(
             model.cuda(),

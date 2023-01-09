@@ -39,11 +39,15 @@ def parse_args():
         'useful when you want to format the result to a specific format and '
         'submit it to the test server')
     parser.add_argument(
-        '--eval',
+        '--eval', #called metrics later in code
         type=str,
         nargs='+',
-        help='evaluation metrics, which depends on the dataset, e.g., "mIoU"'
-        ' for generic datasets, and "cityscapes" for Cityscapes')
+        help='["mIoU", "pred_pred", "gt_pred"]')
+    parser.add_argument(
+        '--sub-metrics',
+        type=str,
+        nargs='+',
+        help='["mask_count", "correct_consis"]')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
@@ -280,7 +284,8 @@ def main():
             pre_eval=args.eval is not None and not eval_on_format_results,
             format_only=args.format_only or eval_on_format_results,
             format_args=eval_kwargs,
-            metrics=args.eval
+            metrics=args.eval,
+            sub_metrics=args.sub_metrics
         )
     else:
         model = build_ddp(

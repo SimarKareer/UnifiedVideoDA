@@ -17,4 +17,6 @@ conda activate mmseg
 cd ~/flash/Projects/VideoDA/mmsegmentation
 
 set -x
-python tools/test.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/configs/segformer/segformer.b5.1024x1024.viper.160k.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/segformer.b5.1024x1024.viper.160k/iter_48000.pth --eval mIoU pred_pred gt_pred mask_count
+python tools/test.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/configs/segformer/segformer.b5.1024x1024.viper.160k.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/segformer.b5.1024x1024.viper.160k/iter_48000.pth --eval mIoU pred_pred gt_pred --sub-metrics mask_count correct_consis --launcher none
+
+# --eval mIoU pred_pred gt_pred mask_count

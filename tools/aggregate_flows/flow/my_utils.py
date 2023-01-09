@@ -238,7 +238,7 @@ def backpropFlowNoDup(flow, im_orig, return_mask_count=False):
     if return_mask_count:
         unique, counts = np.unique(im[:, mask_indices[0], mask_indices[1]], return_counts=True)
         total_unique, total_counts = np.unique(im, return_counts=True)
-        mask_count = (unique, counts, total_unique, total_counts)
+        mask_count = [unique, counts, total_unique, total_counts]
     
     im[:, mask_indices[0], mask_indices[1]] = 0#np.array([255, 192, 203]).reshape(3, 1)
 
@@ -281,6 +281,24 @@ def backpropFlowFilter(flow, im2, im1, thresh=300):
     im2_1[mask] = 0
 
     return im2_1
+
+def imageMap2(label, label_map):
+    """
+    label: (H, W, C) numpy array
+    label_map: [[r, g, b], index] or [oldIndex, index]
+    """
+    label = label.transpose((2, 0, 1))
+    C, H, W = label.shape
+    assert(C<=3)
+    if label_map is not None:
+        label_copy = label.copy()
+        label = np.zeros_like(label)
+        for old_id, new_id in label_map:
+            # label[label_copy == old_id] = new_id
+            mask = np.all(label_copy == np.array(old_id)[:, None, None], axis=0)
+            label[:, mask] = np.array(new_id)[:, None]
+    
+    return label.transpose((1, 2, 0))#[:, :, [0]]
 
 
 def imageMap(label, label_map):
