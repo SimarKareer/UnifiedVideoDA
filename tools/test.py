@@ -285,7 +285,8 @@ def main():
             format_only=args.format_only or eval_on_format_results,
             format_args=eval_kwargs,
             metrics=args.eval,
-            sub_metrics=args.sub_metrics
+            sub_metrics=args.sub_metrics,
+            label_space=cfg.label_space
         )
     else:
         model = build_ddp(

@@ -93,6 +93,7 @@ def single_gpu_test(model,
     if label_space == None:
         print("WARNING: label_space is None, assuming cityscapes")
         label_space = "cityscapes"
+    print("ASSUMING MODEL'S LABELS ARE", label_space)
 
     if efficient_test:
         warnings.warn(

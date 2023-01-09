@@ -26,3 +26,5 @@ log_config = dict(
                 log_checkpoint_metadata=True,
                 num_eval_images=100)
     ])
+
+label_space = "viper"
