@@ -125,3 +125,35 @@ wandb/
 artifacts/
 *.out
 *.err
+*.npy
+
+#folders for training/eval
+predictions
+pretrain
+
+#irrelevant experiments fo testing purposes only
+tools/ade20k_beit_exp
+tools/ade20k_exp
+
+
+
+
+# I think I've included all the relevant files from here so this sould be fine.
+tools/aggregate_flows
+tools/dataset_test/Untitled.ipynb
+tools/dataset_test/dataset_test2.ipynb
+tools/dataset_test/regularViper.ipynb
+refined_data
+refined_data_seq
+result.jpg
+
+tools/exps/flow_consis/flow_consis_gt_v1.sh
+tools/exps/flow_consis/flow_consis_gt_v3.sh
+tools/exps/flow_consis/flow_consis_v1.sh
+tools/exps/flow_consis/flow_consis_v2.sh
+tools/exps/flow_consis/flow_consis_v3.sh
+
+tools/exps/viper_exp/viper_1g-1s-1w-evalTest.sh
+tools/exps/viper_exp/viper_2g-1s-1w.sh
+tools/exps/viper_exp/viper_4g-3s-3w.sh
+tools/exps/viper_exp/viper_4g-4s-4w.sh

@@ -16,7 +16,7 @@ from mmcv.utils import Config, DictAction, get_git_hash
 from mmseg import __version__
 from mmseg.apis import init_random_seed, set_random_seed, train_segmentor
 from mmseg.datasets import build_dataset
-from mmseg.models import build_segmentor
+from mmseg.models import build_segmentor, build_train_model
 from mmseg.utils import (collect_env, get_device, get_root_logger,
                          setup_multi_processes)
 

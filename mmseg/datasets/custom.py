@@ -8,13 +8,16 @@ import numpy as np
 from mmcv.utils import print_log
 from prettytable import PrettyTable
 from torch.utils.data import Dataset
+import torch
 
 from mmseg.core import eval_metrics, intersect_and_union, pre_eval_to_metrics
 from mmseg.utils import get_root_logger
 from .builder import DATASETS
 from .pipelines import Compose, LoadAnnotations
 
+from mmseg.core.evaluation.metrics import flow_prop_iou, correctness_confusion
 
+import pdb
 @DATASETS.register_module()
 class CustomDataset(Dataset):
     """Custom dataset for semantic segmentation. An example of file structure
@@ -92,7 +95,12 @@ class CustomDataset(Dataset):
                  palette=None,
                  gt_seg_map_loader_cfg=None,
                  file_client_args=dict(backend='disk')):
-        self.pipeline = Compose(pipeline)
+        if isinstance(pipeline, dict) or isinstance(pipeline, mmcv.utils.config.ConfigDict):
+            self.pipeline = {}
+            for k, v in pipeline.items():
+                self.pipeline[k] = Compose(v)
+        else:
+            self.pipeline = Compose(pipeline)
         self.img_dir = img_dir
         self.img_suffix = img_suffix
         self.ann_dir = ann_dir
@@ -130,6 +138,13 @@ class CustomDataset(Dataset):
         self.img_infos = self.load_annotations(self.img_dir, self.img_suffix,
                                                self.ann_dir,
                                                self.seg_map_suffix, self.split)
+        
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]}
+        self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
+        self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
+        self.cml_correct_consis = {k: np.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
+
 
     def __len__(self):
         """Total number of samples of data."""
@@ -246,7 +261,8 @@ class CustomDataset(Dataset):
         img_info = self.img_infos[idx]
         results = dict(img_info=img_info)
         self.pre_pipeline(results)
-        return self.pipeline(results)
+        post_pipeline = self.pipeline(results)
+        return post_pipeline
 
     def format_results(self, results, imgfile_prefix, indices=None, **kwargs):
         """Place holder to format result to dataset specific output."""
@@ -274,6 +290,224 @@ class CustomDataset(Dataset):
             self.pre_pipeline(results)
             self.gt_seg_map_loader(results)
             yield results['gt_semantic_seg']
+
+    def formatAllMetrics(self, metrics, sub_metrics):
+        for metric in metrics:
+            print(f"\nEVAL SETTING: {metric}")
+            if "mask_count" in sub_metrics and metric != "mIoU":
+                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}, {'Mask Ratio':15s}")
+            else:
+                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}")
+            # breakpoint()
+            ious = self.cml_intersect[metric] / self.cml_union[metric]
+            for i in range(len(self.CLASSES)):
+                out_str = ""
+                if not np.isnan(ious[i].item()):
+                    out_str += f"{self.CLASSES[i]:15s}, {ious[i].item() * 100:05.2f}"
+                else:
+                    out_str += f"{self.CLASSES[i]:15s}, {'nan':5s}"
+                out_str += "     "
+
+                out_str += f", {str(self.cml_intersect[metric][i].item()):15s}, {str(self.cml_union[metric][i].item()):15s}"
+                if "mask_count" in sub_metrics and metric != "mIoU":
+                    # breakpoint()
+                    mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
+
+                    out_str += f", {100*mask_ratio:.2f}"
+                print(out_str)
+
+        if "correct_consis" in sub_metrics:
+            print(f"\nEVAL SETTING: correct_consis")
+            print(f"{'Class':15s}, {'correct_consis':15s}, {'correct_inconsis':15s}, {'incorrect_consis':15s}, {'incorrect_inconsis':15s}, {'Percent Consistent':15s}")
+            for i in range(len(self.CLASSES)):
+                numer = self.cml_correct_consis['correct_consis'][i] + self.cml_correct_consis['incorrect_inconsis'][i]
+                denom = self.cml_correct_consis['correct_consis'][i] + self.cml_correct_consis['correct_inconsis'][i] + self.cml_correct_consis['incorrect_consis'][i] + self.cml_correct_consis['incorrect_inconsis'][i]
+                # breakpoint()
+                print(f"{self.CLASSES[i]:15s}, {str(self.cml_correct_consis['correct_consis'][i].item()):15s}, {str(self.cml_correct_consis['correct_inconsis'][i].item()):15s}, {str(self.cml_correct_consis['incorrect_consis'][i].item()):15s}, {str(self.cml_correct_consis['incorrect_inconsis'][i].item()):15s}, {numer/denom*100:.2f}")
+                # a = 10
+                # print(f"{self.CLASSES[i]:15s}, {self.cml_correct_consis['correct_consis'][i].item()}")
+
+
+            # print(f"{self.CLASSES[i]:15s}, {self.mIoU[i]*100:05.2f}, {str(self.intersects[i].item()):10s}, {str(self.unions[i].item()):10s}%")
+    
+    def formatmIoU(self, miou, intersects=None, unions=None, mask_counts=None, print_na=False):
+
+        # print(f"\n{'-'*100}")
+        cml_sum = 0
+        count = 0
+        idx = 0
+        if intersects is not None and unions is not None:
+            for val, name, intersect, union in zip(miou, self.CLASSES, intersects, unions):
+                val=val.item()
+                if not np.isnan(val) or print_na:
+                    if mask_counts is None:
+                        # print(f"{name:15s}: {val*100:2.2f}    ({intersect}, {union})   ")
+                        print(f"{name:15s}, {val*100:05.2f}, {str(intersect.item()):10s}, {str(union.item()):10s}%")
+                    else:
+                        # masked_nums, total_nums = mask_counts[0][idx], mask_counts[1][idx]
+                        mask_ratio = 0 if mask_counts[1][idx] == 0 else mask_counts[0][idx] / mask_counts[1][idx]
+                        print(f"{name:15s}, {val*100:05.2f}, {str(intersect.item()):10s}, {str(union.item()):10s}, {100*mask_ratio:.2f}%")
+                if not np.isnan(val):
+                    cml_sum += val
+                    count += 1
+                idx += 1
+        else:
+            for val, name in zip(miou, self.CLASSES):
+                val=val.item()
+                if not np.isnan(val) or print_na:
+                    print(f"{name:15s}, {val*100:2.2f}")
+                if not np.isnan(val):
+                    cml_sum += val
+                    count += 1
+        
+        # print("HI: ", cml_sum)
+        print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
+
+
+    def pre_eval_dataloader_consis(self, preds, indices, data, predstk, metrics=["mIoU", "pred_pred", "pred_gt", "gt_pred"], sub_metrics=["mask_count", "correct_consis"]):
+        """Collect eval result from each iteration.
+
+        Args:
+            preds (list[torch.Tensor] | torch.Tensor): the segmentation logit
+                after argmax, shape (N, H, W).
+            indices (list[int] | int): the prediction related ground truth
+                indices.
+            data (dict): dict containing the images and annotations.
+            predstk: prediction on frame t-k
+            metrics (list[str]): metrics in ["mIoU", "pred_pred", "pred_gt", "gt_pred"]
+            sub_metrics (list[str]): eval settings in ["mask_count", "correct_consis"]
+
+        Returns:
+            list[torch.Tensor]: (area_intersect, area_union, area_prediction,
+                area_ground_truth).
+        """
+        assert(preds is not None)
+        # In order to compat with batch inference
+        if not isinstance(indices, list):
+            indices = [indices]
+        if not isinstance(preds, list):
+            preds = [preds]
+        if predstk is not None and not isinstance(predstk, list):
+            predstk = [predstk]
+
+        pre_eval_results = []
+
+        assert(len(preds) == 1) #currently only supports batch size 1 cuz of data["gt_semantic_seg"]
+        for i in range(len(preds)):
+            pred = preds[i][:, :, None]
+            index = indices[i]
+            return_mask_count = "mask_count" in sub_metrics
+
+            if predstk is not None:
+                predtk = predstk[i][:, :, None]
+
+            seg_map = data["gt_semantic_seg"][0]
+            if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
+                seg_map = seg_map.squeeze(0)
+            
+            seg_map_tk = data["imtk_gt_semantic_seg"][0]
+            if seg_map_tk.shape[0] == 1 and len(seg_map_tk.shape) == 4:
+                seg_map_tk = seg_map_tk.squeeze(0)
+
+
+            flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
+
+            if "correct_cons" in sub_metrics or True:
+                cons_correct_dict = correctness_confusion(seg_map_tk.permute((1, 2, 0)), pred, predtk, flow, self.label_map)
+                for k, v in cons_correct_dict.items():
+                    dict_to_arr = np.zeros(len(self.CLASSES))
+                    for k2, v2 in v.items():
+                        if k2 > len(self.CLASSES):
+                            # breakpoint()
+                            # raise AssertionError("class numbers are mismatching")
+                            continue
+                        dict_to_arr[k2] = v2
+                    self.cml_correct_consis[k] += dict_to_arr
+                # breakpoint()
+
+            if "pred_pred" in metrics:
+                iau_pred_pred = flow_prop_iou(
+                    pred,
+                    predtk,
+                    flow,
+                    num_classes=len(self.CLASSES),
+                    ignore_index=self.ignore_index,
+                    label_map=self.label_map,
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices,
+                    return_mask_count=return_mask_count
+                )
+                if return_mask_count:
+                    iau_pred_pred, mask_count = iau_pred_pred
+                    self.mask_counts["pred_pred"][mask_count[0]] += mask_count[1]
+                    self.total_mask_counts["pred_pred"][mask_count[2]] += mask_count[3]
+
+
+                intersection, union, _, _ = iau_pred_pred
+                self.cml_intersect["pred_pred"] += intersection
+                self.cml_union["pred_pred"] += union
+            
+            if "gt_pred" in metrics:
+                # props pred at t -> ground truth at t-k
+                imtk_seg_map = data["imtk_gt_semantic_seg"][0]
+                if imtk_seg_map.shape[0] == 1 and len(imtk_seg_map.shape) == 4:
+                    imtk_seg_map = imtk_seg_map.squeeze(0)
+                
+                imtk_seg_map = imtk_seg_map.permute((1, 2, 0)) #turn to H, W, 1
+                iau_gt_pred = flow_prop_iou(
+                    pred,
+                    imtk_seg_map,
+                    flow,
+                    num_classes=len(self.CLASSES),
+                    ignore_index=self.ignore_index,
+                    label_map=self.label_map,
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices,
+                    return_mask_count=return_mask_count
+                )
+                if return_mask_count:
+                    iau_gt_pred, mask_count = iau_gt_pred
+                    self.mask_counts["gt_pred"][mask_count[0]] += mask_count[1]
+                    self.total_mask_counts["gt_pred"][mask_count[2]] += mask_count[3]
+
+                intersection, union, _, _ = iau_gt_pred
+                self.cml_intersect["gt_pred"] += intersection
+                self.cml_union["gt_pred"] += union
+
+            if "mIoU" in metrics:
+                # print("got mIoU")
+                
+                iau_miou = intersect_and_union(
+                    pred.squeeze(-1),
+                    seg_map.squeeze(0),
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    # as the labels has been converted when dataset initialized
+                    # in `get_palette_for_custom_classes ` this `label_map`
+                    # should be `dict()`, see
+                    # https://github.com/open-mmlab/mmsegmentation/issues/1415
+                    # for more ditails
+                    label_map=self.label_map,
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices
+                )
+                intersection, union, _, _ = iau_miou
+                self.cml_intersect["mIoU"] += intersection
+                self.cml_union["mIoU"] += union
+                pre_eval_results.append(iau_miou)
+
+            if index % 10 == 0:
+                self.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+                # for key in [k for k in metrics if k != "mask_count"]:
+                #     intersection = self.cml_intersect[key]
+                #     union = self.cml_union[key]
+                #     print(f"{'-'*100}\n{key}: ")
+                #     if return_mask_count and key in ["pred_pred", "gt_pred"]:
+                #         self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key], mask_counts=(self.mask_counts[key], self.total_mask_counts[key]))
+                #     else:
+                #         self.formatmIoU(intersection / union, self.cml_intersect[key], self.cml_union[key])
+
+        return pre_eval_results
 
     def pre_eval(self, preds, indices):
         """Collect eval result from each iteration.
@@ -423,6 +657,8 @@ class CustomDataset(Dataset):
             if gt_seg_maps is None:
                 gt_seg_maps = self.get_gt_seg_maps()
             num_classes = len(self.CLASSES)
+            print("results: ", results)
+            print("seg_maps: ", gt_seg_maps)
             ret_metrics = eval_metrics(
                 results,
                 gt_seg_maps,

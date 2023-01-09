@@ -16,7 +16,7 @@ from mmcv.utils import DictAction
 from mmseg import digit_version
 from mmseg.apis import multi_gpu_test, single_gpu_test
 from mmseg.datasets import build_dataloader, build_dataset
-from mmseg.models import build_segmentor
+from mmseg.models import build_segmentor, build_train_model
 from mmseg.utils import build_ddp, build_dp, get_device, setup_multi_processes
 
 
@@ -39,11 +39,15 @@ def parse_args():
         'useful when you want to format the result to a specific format and '
         'submit it to the test server')
     parser.add_argument(
-        '--eval',
+        '--eval', #called metrics later in code
         type=str,
         nargs='+',
-        help='evaluation metrics, which depends on the dataset, e.g., "mIoU"'
-        ' for generic datasets, and "cityscapes" for Cityscapes')
+        help='["mIoU", "pred_pred", "gt_pred"]')
+    parser.add_argument(
+        '--sub-metrics',
+        type=str,
+        nargs='+',
+        help='["mask_count", "correct_consis"]')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
@@ -271,15 +275,19 @@ def main():
         model = revert_sync_batchnorm(model)
         model = build_dp(model, cfg.device, device_ids=cfg.gpu_ids)
         results = single_gpu_test(
-            model,
-            data_loader,
-            args.show,
-            args.show_dir,
-            False,
-            args.opacity,
+            model=model,
+            data_loader=data_loader,
+            show = args.show,
+            out_dir = args.show_dir,
+            efficient_test=False,
+            opacity=args.opacity,
             pre_eval=args.eval is not None and not eval_on_format_results,
             format_only=args.format_only or eval_on_format_results,
-            format_args=eval_kwargs)
+            format_args=eval_kwargs,
+            metrics=args.eval,
+            sub_metrics=args.sub_metrics,
+            label_space=cfg.label_space
+        )
     else:
         model = build_ddp(
             model,

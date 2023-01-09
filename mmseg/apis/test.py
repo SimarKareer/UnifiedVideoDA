@@ -9,6 +9,10 @@ import torch
 from mmcv.engine import collect_results_cpu, collect_results_gpu
 from mmcv.image import tensor2imgs
 from mmcv.runner import get_dist_info
+from tools.aggregate_flows.flow.my_utils import labelMapToIm
+import cv2
+import pdb
+import pickle
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -30,6 +34,22 @@ def np2tmp(array, temp_file_name=None, tmpdir=None):
     np.save(temp_file_name, array)
     return temp_file_name
 
+def remap_labels(results, adaptation_map):
+    """Remap labels according to the given mapping.
+
+    Args:
+        results [(ndarray)]: The labels to be remapped.
+        adaptation_map (dict): The mapping dict.
+
+    Returns:
+        ndarray: The remapped labels.
+    """
+    for res in results:
+        result_copy = res.copy()
+        for old_id, new_id in adaptation_map.items():
+            res[result_copy == old_id] = new_id
+    
+    return results
 
 def single_gpu_test(model,
                     data_loader,
@@ -39,7 +59,11 @@ def single_gpu_test(model,
                     opacity=0.5,
                     pre_eval=False,
                     format_only=False,
-                    format_args={}):
+                    format_args={},
+                    metrics=["mIoU", "pred_pred", "gt_pred"],
+                    sub_metrics=["mask_count", "correct_consis"],
+                    label_space=None
+    ):
     """Test with single GPU by progressive mode.
 
     Args:
@@ -61,9 +85,16 @@ def single_gpu_test(model,
             Mutually exclusive with pre_eval and efficient_test.
             Default: False.
         format_args (dict): The args for format_results. Default: {}.
+        metrics (list): which mIoU based metrics to include ["mIoU", "pred_pred", "gt_pred"]
+        sub_metrics (list): ["mask_count", "correct_consis"]
     Returns:
         list: list of evaluation pre-results or list of save file names.
     """
+    if label_space == None:
+        print("WARNING: label_space is None, assuming cityscapes")
+        label_space = "cityscapes"
+    print("ASSUMING MODEL'S LABELS ARE", label_space)
+
     if efficient_test:
         warnings.warn(
             'DeprecationWarning: ``efficient_test`` will be deprecated, the '
@@ -87,8 +118,18 @@ def single_gpu_test(model,
     loader_indices = data_loader.batch_sampler
 
     for batch_indices, data in zip(loader_indices, data_loader):
+        resulttk = None
         with torch.no_grad():
-            result = model(return_loss=False, **data)
+            refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            result = model(return_loss=False, **refined_data)
+            if "pred_pred" in metrics:
+                refined_data = {"img_metas": data["img_metas"], "img": data["imtk"]}
+                resulttk = model(return_loss=False, **refined_data)
+            
+            if label_space != dataset.label_space:
+                result = remap_labels(result, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
+                if resulttk is not None:
+                    resulttk = remap_labels(resulttk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
 
         if show or out_dir:
             img_tensor = data['img'][0]
@@ -125,7 +166,21 @@ def single_gpu_test(model,
         if pre_eval:
             # TODO: adapt samples_per_gpu > 1.
             # only samples_per_gpu=1 valid now
-            result = dataset.pre_eval(result, indices=batch_indices)
+            # Note: while above result is full preds, here it's just metrics
+            
+            # pred = torch.tensor(result[0]).view((1080, 1920, 1))
+            # gt = torch.tensor(data["gt_semantic_seg"][0]).view((1080, 1920, 1)).long()
+            # colored_pred = labelMapToIm(pred, dataset.palette_to_id)
+            # colored_gt = labelMapToIm(gt, dataset.palette_to_id)
+            # cv2.imwrite("work_dirs/ims/a.png", colored_pred.numpy().astype(np.int16))
+            # cv2.imwrite("work_dirs/ims/b.png", colored_gt.numpy().astype(np.int16))
+
+
+            if "gt_semantic_seg" in data: # Will run the original mmseg style eval if the dataloader doesn't provide ground truth
+                result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=resulttk, metrics=metrics, sub_metrics=sub_metrics)
+            else:
+                result = dataset.pre_eval(result, indices=batch_indices)
+            
             results.extend(result)
         else:
             results.extend(result)

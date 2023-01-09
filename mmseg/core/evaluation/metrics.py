@@ -8,7 +8,8 @@ from torchvision.utils import save_image
 import cv2
 import linecache
 import os
-
+from tools.aggregate_flows.flow.my_utils import palette_to_id
+from tools.aggregate_flows.flow.my_utils import imshow, visFlow, loadVisFlow, loadFlow, mergeFlow, backpropFlow, imageMap, labelMapToIm, backpropFlowNoDup, palette_to_id
 
 def f_score(precision, recall, beta=1):
     """calculate the f-score value.
@@ -63,6 +64,90 @@ def error_viz(pred_label, label, indices, split="/srv/share4/datasets/VIPER/spli
         # print(f"{out_image.shape=}")
         cv2.imwrite(f"work_dirs/ims/error_vis/cls{classId}/t={indices[0]}.png", np.transpose(out_image, (1, 2, 0)))
 
+def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=False, **kwargs):
+    """
+    gt_t: H, W, *.  image at time t
+    gt_tk: H, W, *  image at t-k
+    flow_tk_t: H, W, 2 Flow from t-k to t
+    """
+
+    assert len(gt_t.shape) == 3 and gt_t.shape[2] < 10, f"gt_t appears to be the wrong shape.  Got {gt_t.shape}"
+    assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
+    assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
+
+    gt_t = gt_t.numpy() if isinstance(gt_t, torch.Tensor) else gt_t
+    gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
+    flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
+
+    if return_mask_count:
+        mlabel2_1, mask_count = backpropFlowNoDup(flow_tk_t, gt_t, return_mask_count=return_mask_count)
+    else:
+        mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
+    # viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
+
+    # imshow(viz, scale=0.5)
+    iau = intersect_and_union(gt_tk.squeeze(2), mlabel2_1.squeeze(2), num_classes=num_classes, **kwargs)
+    # print(t.shape, tk.shape, flow_tk_t.shape)
+    mask1 = mask_count[0] < num_classes
+    mask_count[0] = mask_count[0][mask1]
+    mask_count[1] = mask_count[1][mask1]
+
+    mask2 = mask_count[2] < num_classes
+    mask_count[2] = mask_count[2][mask2]
+    mask_count[3] = mask_count[3][mask2]
+
+
+    if return_mask_count:
+        return iau, mask_count
+    else:
+        return iau
+
+def correctness_confusion(gt_tk, pred_t, pred_tk, flow_tk_t, label_map, **kwargs):
+    """
+    gt_tk: H, W, 1  ground truth at t-k
+    pred_t: H, W, 1  image at t
+    pred_tk: H, W, 1  image at t-k
+    flow_tk_t: H, W, 2 Flow from t-k to t
+    label_map: (dict) label map at t
+    """
+    assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
+    assert len(pred_t.shape) == 3 and pred_t.shape[2] < 10, f"pred_t appears to be the wrong shape.  Got {pred_t.shape}"
+    assert len(pred_tk.shape) == 3 and pred_tk.shape[2] < 10, f"pred_tk appears to be the wrong shape.  Got {pred_tk.shape}"
+    assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
+
+    gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
+    pred_t = pred_t.numpy() if isinstance(pred_t, torch.Tensor) else pred_t
+    pred_tk = pred_tk.numpy() if isinstance(pred_tk, torch.Tensor) else pred_tk
+    flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
+
+    if label_map is not None:
+        label_copy = gt_tk.clone()
+        for old_id, new_id in label_map.items():
+            gt_tk[label_copy == old_id] = new_id
+
+    # first find the pixels that are correct in the current frame
+    correct = gt_tk == pred_tk
+    incorrect = gt_tk != pred_tk
+    # of these pixels, find the ones which are consistent vs inconsistent between frames via flow
+    mlabel2_1 = backpropFlowNoDup(flow_tk_t, pred_t)
+    consistent_correct = np.logical_and(correct, (mlabel2_1 == pred_tk))
+    consistent_incorrect = np.logical_and(incorrect, (mlabel2_1 == pred_tk))
+    inconsistent_correct = np.logical_and(correct, (mlabel2_1 != pred_tk))
+    inconsistent_incorrect = np.logical_and(incorrect, (mlabel2_1 != pred_tk))
+
+    # return counts by class
+
+    # Same with incorrect pixels
+    consistent_correct_count = np.unique(pred_tk[consistent_correct], return_counts=True)
+    consistent_correct_count = {k: v for k, v in zip(consistent_correct_count[0], consistent_correct_count[1])}
+    consistent_incorrect_count = np.unique(pred_tk[consistent_incorrect], return_counts=True)
+    consistent_incorrect_count = {k: v for k, v in zip(consistent_incorrect_count[0], consistent_incorrect_count[1])}
+    inconsistent_correct_count = np.unique(pred_tk[inconsistent_correct], return_counts=True)
+    inconsistent_correct_count = {k: v for k, v in zip(inconsistent_correct_count[0], inconsistent_correct_count[1])}
+    inconsistent_incorrect_count = np.unique(pred_tk[inconsistent_incorrect], return_counts=True)
+    inconsistent_incorrect_count = {k: v for k, v in zip(inconsistent_incorrect_count[0], inconsistent_incorrect_count[1])}
+
+    return {"correct_consis": consistent_correct_count, "correct_inconsis": inconsistent_correct_count, "incorrect_consis": consistent_incorrect_count, "incorrect_inconsis": inconsistent_incorrect_count}
 
 def intersect_and_union(pred_label,
                         label,
@@ -76,9 +161,9 @@ def intersect_and_union(pred_label,
 
     Args:
         pred_label (ndarray | str): Prediction segmentation map
-            or predict result filename.
+            or predict result filename (H, W).
         label (ndarray | str): Ground truth segmentation map
-            or label filename.
+            or label filename (H, W).
         num_classes (int): Number of categories.
         ignore_index (int): Index that will be ignored in evaluation.
         label_map (dict): Mapping old labels to new labels. The parameter will
@@ -94,7 +179,11 @@ def intersect_and_union(pred_label,
          torch.Tensor: The prediction histogram on all classes.
          torch.Tensor: The ground truth histogram on all classes.
     """
-
+    # print("shapes: ", pred_label.shape)
+    assert len(pred_label.shape) == 2, f"pred_label has wrong dimension.  Got{pred_label.shape}"
+    assert len(label.shape) == 2, f"label has wrong dimension.  Got{label.shape}"
+    
+    
     if isinstance(pred_label, str):
         pred_label = torch.from_numpy(np.load(pred_label))
     else:
@@ -103,7 +192,7 @@ def intersect_and_union(pred_label,
     if isinstance(label, str):
         label = torch.from_numpy(
             mmcv.imread(label, flag='unchanged', backend='pillow'))
-    else:
+    elif isinstance(label, np.ndarray):
         label = torch.from_numpy(label)
 
     if error_viz_split is not None:
@@ -118,9 +207,26 @@ def intersect_and_union(pred_label,
         label = label - 1
         label[label == 254] = 255
 
+    pred = torch.tensor(pred_label).view((1080, 1920, 1))
+    gt = torch.tensor(label).view((1080, 1920, 1)).long()
+    # colored_pred = labelMapToIm(pred, palette_to_id)
+    # colored_gt = labelMapToIm(gt, palette_to_id)
+    # cv2.imwrite("work_dirs/ims/metricsPred.png", colored_pred.numpy().astype(np.int16))
+    # cv2.imwrite("work_dirs/ims/metricsLabel.png", colored_gt.numpy().astype(np.int16))
+    # cv2.imwrite("work_dirs/ims/metricsPred2.png", pred.numpy().astype(np.int16))
+    # cv2.imwrite("work_dirs/ims/metricsLabel2.png", gt.numpy().astype(np.int16))
+
+
     mask = (label != ignore_index)
+    mask = torch.logical_and(mask, label != 201)
+    # for ignore in ignore_index:
+
+    # print("shape: ", mask.shape, "masked: ", mask.sum())
+    # print("before: ", pred_label.shape, label.shape)
     pred_label = pred_label[mask]
     label = label[mask]
+    # print("after: ", pred_label.shape, label.shape)
+
 
     intersect = pred_label[pred_label == label]
     area_intersect = torch.histc(
@@ -130,6 +236,8 @@ def intersect_and_union(pred_label,
     area_label = torch.histc(
         label.float(), bins=(num_classes), min=0, max=num_classes - 1)
     area_union = area_pred_label + area_label - area_intersect
+
+    # print(area_intersect / area_union)
     return area_intersect, area_union, area_pred_label, area_label
 
 
