@@ -412,7 +412,7 @@ class CustomDataset(Dataset):
 
             flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
 
-            if "correct_cons" in sub_metrics or True:
+            if "correct_cons" in sub_metrics:
                 cons_correct_dict = correctness_confusion(seg_map_tk.permute((1, 2, 0)), pred, predtk, flow, self.label_map)
                 for k, v in cons_correct_dict.items():
                     dict_to_arr = np.zeros(len(self.CLASSES))
