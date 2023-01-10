@@ -81,6 +81,14 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=Fals
 
     if return_mask_count:
         mlabel2_1, mask_count = backpropFlowNoDup(flow_tk_t, gt_t, return_mask_count=return_mask_count)
+        
+        mask1 = mask_count[0] < num_classes
+        mask_count[0] = mask_count[0][mask1]
+        mask_count[1] = mask_count[1][mask1]
+
+        mask2 = mask_count[2] < num_classes
+        mask_count[2] = mask_count[2][mask2]
+        mask_count[3] = mask_count[3][mask2]
     else:
         mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
     # viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
@@ -88,13 +96,7 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=Fals
     # imshow(viz, scale=0.5)
     iau = intersect_and_union(gt_tk.squeeze(2), mlabel2_1.squeeze(2), num_classes=num_classes, **kwargs)
     # print(t.shape, tk.shape, flow_tk_t.shape)
-    mask1 = mask_count[0] < num_classes
-    mask_count[0] = mask_count[0][mask1]
-    mask_count[1] = mask_count[1][mask1]
 
-    mask2 = mask_count[2] < num_classes
-    mask_count[2] = mask_count[2][mask2]
-    mask_count[3] = mask_count[3][mask2]
 
 
     if return_mask_count:
@@ -156,7 +158,9 @@ def intersect_and_union(pred_label,
                         error_viz_split=None,
                         label_map=dict(),
                         reduce_zero_label=False,
-                        indices=None):
+                        indices=None,
+                        return_mask=False,
+                        custom_mask=None):
     """Calculate intersection and Union.
 
     Args:
@@ -170,6 +174,8 @@ def intersect_and_union(pred_label,
             work only when label is str. Default: dict().
         reduce_zero_label (bool): Whether ignore zero label. The parameter will
             work only when label is str. Default: False.
+        return_mask (bool): Whether return mask. Default: False.
+        custom_mask (ndarray): Mask for ignoring certain pixels in iou calc. Default: None.
 
      Returns:
          torch.Tensor: The intersection of prediction and ground truth
@@ -216,9 +222,13 @@ def intersect_and_union(pred_label,
     # cv2.imwrite("work_dirs/ims/metricsPred2.png", pred.numpy().astype(np.int16))
     # cv2.imwrite("work_dirs/ims/metricsLabel2.png", gt.numpy().astype(np.int16))
 
-
-    mask = (label != ignore_index)
-    mask = torch.logical_and(mask, label != 201)
+    if custom_mask is not None:
+        mask = custom_mask
+    else:
+        mask = (label != ignore_index)
+        mask = torch.logical_and(mask, label != 201)
+        mask = torch.logical_and(mask, pred_label != ignore_index)
+        mask = torch.logical_and(mask, pred_label != 201)
     # for ignore in ignore_index:
 
     # print("shape: ", mask.shape, "masked: ", mask.sum())
@@ -238,7 +248,10 @@ def intersect_and_union(pred_label,
     area_union = area_pred_label + area_label - area_intersect
 
     # print(area_intersect / area_union)
-    return area_intersect, area_union, area_pred_label, area_label
+    if return_mask:
+        return area_intersect, area_union, area_pred_label, area_label, mask
+    else:
+        return area_intersect, area_union, area_pred_label, area_label
 
 
 def total_intersect_and_union(results,
