@@ -47,6 +47,7 @@ def parse_args():
         '--sub-metrics',
         type=str,
         nargs='+',
+        default=[],
         help='["mask_count", "correct_consis"]')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
