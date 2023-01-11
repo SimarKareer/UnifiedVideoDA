@@ -364,7 +364,7 @@ class CustomDataset(Dataset):
         print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
 
 
-    def pre_eval_dataloader_consis(self, preds, indices, data, predstk, metrics=["mIoU", "pred_pred", "pred_gt", "gt_pred"], sub_metrics=["mask_count", "correct_consis"]):
+    def pre_eval_dataloader_consis(self, preds, indices, data, predstk, cached=None, metrics=["mIoU", "pred_pred", "pred_gt", "gt_pred"], sub_metrics=["mask_count", "correct_consis"]):
         """Collect eval result from each iteration.
 
         Args:
@@ -376,44 +376,67 @@ class CustomDataset(Dataset):
             predstk: prediction on frame t-k
             metrics (list[str]): metrics in ["mIoU", "pred_pred", "pred_gt", "gt_pred"]
             sub_metrics (list[str]): eval settings in ["mask_count", "correct_consis"]
+            cached dictionary of all necessary cached values to quickly compute metrics {"predt", "predtk", "gt_t", "gt_tk", "pred_t_tk"}
 
         Returns:
             list[torch.Tensor]: (area_intersect, area_union, area_prediction,
                 area_ground_truth).
         """
-        assert(preds is not None)
+        assert(preds is not None or cached is not None)
         # In order to compat with batch inference
-        if not isinstance(indices, list):
-            indices = [indices]
-        if not isinstance(preds, list):
-            preds = [preds]
-        if predstk is not None and not isinstance(predstk, list):
-            predstk = [predstk]
+        if cached is None:
+            if not isinstance(indices, list):
+                indices = [indices]
+            if not isinstance(preds, list):
+                preds = [preds]
+            if predstk is not None and not isinstance(predstk, list):
+                predstk = [predstk]
+            assert(len(preds) == 1) #currently only supports batch size 1 cuz of data["gt_semantic_seg"]
 
         pre_eval_results = []
+ 
+        for i in range(1 if cached else len(preds)):
+            if cached is None:
+                pred = preds[i][:, :, None]
+                index = indices[i]
+                return_mask_count = "mask_count" in sub_metrics
 
-        assert(len(preds) == 1) #currently only supports batch size 1 cuz of data["gt_semantic_seg"]
-        for i in range(len(preds)):
-            pred = preds[i][:, :, None]
-            index = indices[i]
-            return_mask_count = "mask_count" in sub_metrics
+                if predstk is not None:
+                    predtk = predstk[i][:, :, None]
 
-            if predstk is not None:
-                predtk = predstk[i][:, :, None]
-
-            seg_map = data["gt_semantic_seg"][0]
-            if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
-                seg_map = seg_map.squeeze(0)
-            
-            seg_map_tk = data["imtk_gt_semantic_seg"][0]
-            if seg_map_tk.shape[0] == 1 and len(seg_map_tk.shape) == 4:
-                seg_map_tk = seg_map_tk.squeeze(0)
+                seg_map = data["gt_semantic_seg"][0]
+                if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
+                    seg_map = seg_map.squeeze(0)
+                
+                seg_map_tk = data["imtk_gt_semantic_seg"][0]
+                if seg_map_tk.shape[0] == 1 and len(seg_map_tk.shape) == 4:
+                    seg_map_tk = seg_map_tk.squeeze(0)
 
 
-            flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
+                flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
+
+                breakpoint()
+            else:
+                # flow = None
+                # pred = None
+                return_mask_count=False # would need to save the mask counts while caching
+                index = cached["index"]
+                pred = cached["pred"].numpy()
+                predtk = cached["pred_tk"].numpy()
+                pred_t_tk = cached["pred_t_tk"].numpy()
+                seg_map = cached["gt_t"]
+                seg_map_tk = cached["gt_tk"]
+
 
             if "correct_cons" in sub_metrics or True:
-                cons_correct_dict = correctness_confusion(seg_map_tk.permute((1, 2, 0)), pred, predtk, flow, self.label_map)
+                cons_correct_dict = correctness_confusion(
+                    seg_map_tk.permute((1, 2, 0)),
+                    None if cached else pred,
+                    predtk,
+                    None if cached else flow,
+                    self.label_map,
+                    preds_t_tk=pred_t_tk
+                )
                 for k, v in cons_correct_dict.items():
                     dict_to_arr = np.zeros(len(self.CLASSES))
                     for k2, v2 in v.items():
@@ -427,15 +450,16 @@ class CustomDataset(Dataset):
 
             if "pred_pred" in metrics:
                 iau_pred_pred = flow_prop_iou(
-                    pred,
+                    None if cached else pred,
                     predtk,
-                    flow,
+                    None if cached else flow,
                     num_classes=len(self.CLASSES),
                     ignore_index=self.ignore_index,
                     label_map=self.label_map,
                     reduce_zero_label=self.reduce_zero_label,
                     indices=indices,
-                    return_mask_count=return_mask_count
+                    return_mask_count=return_mask_count,
+                    preds_t_tk=pred_t_tk
                 )
                 if return_mask_count:
                     iau_pred_pred, mask_count = iau_pred_pred
@@ -449,21 +473,17 @@ class CustomDataset(Dataset):
             
             if "gt_pred" in metrics:
                 # props pred at t -> ground truth at t-k
-                imtk_seg_map = data["imtk_gt_semantic_seg"][0]
-                if imtk_seg_map.shape[0] == 1 and len(imtk_seg_map.shape) == 4:
-                    imtk_seg_map = imtk_seg_map.squeeze(0)
-                
-                imtk_seg_map = imtk_seg_map.permute((1, 2, 0)) #turn to H, W, 1
                 iau_gt_pred = flow_prop_iou(
-                    pred,
-                    imtk_seg_map,
-                    flow,
+                    None if cached else pred,
+                    seg_map_tk.permute((1, 2, 0)),
+                    None if cached else flow,
                     num_classes=len(self.CLASSES),
                     ignore_index=self.ignore_index,
                     label_map=self.label_map,
                     reduce_zero_label=self.reduce_zero_label,
                     indices=indices,
-                    return_mask_count=return_mask_count
+                    return_mask_count=return_mask_count,
+                    preds_t_tk=pred_t_tk
                 )
                 if return_mask_count:
                     iau_gt_pred, mask_count = iau_gt_pred

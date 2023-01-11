@@ -6,6 +6,8 @@ import warnings
 import mmcv
 import numpy as np
 import torch
+import os
+
 from mmcv.engine import collect_results_cpu, collect_results_gpu
 from mmcv.image import tensor2imgs
 from mmcv.runner import get_dist_info
@@ -13,6 +15,9 @@ from tools.aggregate_flows.flow.my_utils import labelMapToIm
 import cv2
 import pdb
 import pickle
+from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -51,6 +56,30 @@ def remap_labels(results, adaptation_map):
     
     return results
 
+class NpyDataset(Dataset):
+    def __init__(self, root):
+        self.root = root
+        
+    def __getitem__(self, index):
+        path1 = os.path.join(self.root, f"result/result{index}.npy")
+        path2 = os.path.join(self.root, f"result_tk/result_tk{index}.npy")
+        path3 = os.path.join(self.root, f"result_t_tk/result_t_tk{index}.npy")
+        path4 = os.path.join(self.root, f"gt_t/gt_t{index}.npy")
+        path5 = os.path.join(self.root, f"gt_tk/gt_tk{index}.npy")
+        # print(path1, path2, path3)
+
+        result = torch.from_numpy(np.load(path1))
+        result_tk = torch.from_numpy(np.load(path2))
+        result_t_tk = torch.from_numpy(np.load(path3))
+        gt_t = torch.from_numpy(np.load(path4))
+        gt_tk = torch.from_numpy(np.load(path5))
+        return result, result_tk, result_t_tk, gt_t, gt_tk
+    
+    def __len__(self):
+        path1 = os.path.join(self.root, f"result")
+
+        return len([entry for entry in os.listdir(path1) if os.path.isfile(os.path.join(path1, entry))])
+
 def single_gpu_test(model,
                     data_loader,
                     show=False,
@@ -62,7 +91,8 @@ def single_gpu_test(model,
                     format_args={},
                     metrics=["mIoU", "pred_pred", "gt_pred"],
                     sub_metrics=["mask_count", "correct_consis"],
-                    label_space=None
+                    label_space=None,
+                    cache=False
     ):
     """Test with single GPU by progressive mode.
 
@@ -116,13 +146,38 @@ def single_gpu_test(model,
     # data_fetcher -> collate_fn(dataset[index]) -> data_sample
     # we use batch_sampler to get correct data idx
     loader_indices = data_loader.batch_sampler
+    cache = False #just for develpoment. RM LATER
+    use_cache = True #just for develpoment. RM LATER
+    if cache:
+        result_path_b = os.path.join(out_dir, f"result")
+        result_tk_path_b = os.path.join(out_dir, f"result_tk")
+        result_t_tk_path_b = os.path.join(out_dir, f"result_t_tk")
+        gt_t_path_b = os.path.join(out_dir, f"gt_t")
+        gt_tk_path_b = os.path.join(out_dir, f"gt_tk")
+        mmcv.mkdir_or_exist(result_path_b)
+        mmcv.mkdir_or_exist(result_tk_path_b)
+        mmcv.mkdir_or_exist(result_t_tk_path_b)
+        mmcv.mkdir_or_exist(gt_t_path_b)
+        mmcv.mkdir_or_exist(gt_tk_path_b)
+    
+
+    if use_cache:
+        npy_dataset = NpyDataset('/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache4/')
+        dataloader = torch.utils.data.DataLoader(npy_dataset)
+
+        for i, (r1, r2, r3, gt_t, gt_tk) in enumerate(tqdm(dataloader)):
+            cached = {"pred": r1.squeeze(0), "pred_tk": r2.squeeze(0), "pred_t_tk": r3.squeeze(0), "gt_t": gt_t.squeeze(0), "gt_tk": gt_tk.squeeze(0), "index": i}
+            dataset.pre_eval_dataloader_consis(None, None, None, None, cached=cached, metrics=metrics, sub_metrics=sub_metrics)
+
+
+        return
 
     for batch_indices, data in zip(loader_indices, data_loader):
         resulttk = None
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
             result = model(return_loss=False, **refined_data)
-            if "pred_pred" in metrics:
+            if cache or "pred_pred" in metrics:
                 refined_data = {"img_metas": data["img_metas"], "img": data["imtk"]}
                 resulttk = model(return_loss=False, **refined_data)
             
@@ -130,6 +185,46 @@ def single_gpu_test(model,
                 result = remap_labels(result, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
                 if resulttk is not None:
                     resulttk = remap_labels(resulttk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
+        
+        if cache:
+            # Take result and resulttk, and save them to different subdirectories of the out_dir folder
+            result_path = os.path.join(result_path_b, f"result{batch_indices[0]}")
+            result_tk_path = os.path.join(result_tk_path_b, f"result_tk{batch_indices[0]}")
+            result_t_tk_path = os.path.join(result_t_tk_path_b, f"result_t_tk{batch_indices[0]}")
+            gt_t_path = os.path.join(gt_t_path_b, f"gt_t{batch_indices[0]}")
+            gt_tk_path = os.path.join(gt_tk_path_b, f"gt_tk{batch_indices[0]}")
+
+
+            # breakpoint()
+            if len(result) > 1:
+                raise NotImplementedError("Only batch size 1 supported")
+            
+            
+            result = result[0][:, :, None]
+            resulttk = resulttk[0][:, :, None]
+            flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).numpy()
+
+            result_t_tk = backpropFlowNoDup(flow, result)
+
+            seg_map = data["gt_semantic_seg"][0]
+            if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
+                seg_map = seg_map.squeeze(0)
+            
+            seg_map_tk = data["imtk_gt_semantic_seg"][0]
+            if seg_map_tk.shape[0] == 1 and len(seg_map_tk.shape) == 4:
+                seg_map_tk = seg_map_tk.squeeze(0)
+
+            np.save(result_path, result)
+            np.save(result_tk_path, resulttk)
+            np.save(result_t_tk_path, result_t_tk)
+            np.save(gt_t_path, seg_map)
+            np.save(gt_tk_path, seg_map_tk)
+
+            # batch_size = 1
+            # for _ in range(batch_size):
+            prog_bar.update()
+            continue
+        
 
         if show or out_dir:
             img_tensor = data['img'][0]
