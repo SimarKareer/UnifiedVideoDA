@@ -47,7 +47,16 @@ def parse_args():
         '--sub-metrics',
         type=str,
         nargs='+',
+        default=[],
         help='["mask_count", "correct_consis"]')
+    parser.add_argument(
+        '--cache',
+        type=str,
+        help='where to cache predictions')
+    parser.add_argument(
+        '--use-cache',
+        type=str,
+        help='location of cached predictions to use')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
@@ -286,7 +295,9 @@ def main():
             format_args=eval_kwargs,
             metrics=args.eval,
             sub_metrics=args.sub_metrics,
-            label_space=cfg.label_space
+            label_space=cfg.label_space,
+            cache=args.cache,
+            use_cache=args.use_cache
         )
     else:
         model = build_ddp(

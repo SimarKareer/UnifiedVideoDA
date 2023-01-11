@@ -139,8 +139,8 @@ class CustomDataset(Dataset):
                                                self.ann_dir,
                                                self.seg_map_suffix, self.split)
         
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "pred_pred", "gt_pred"]}
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred"]}
         self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.cml_correct_consis = {k: np.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
@@ -309,7 +309,7 @@ class CustomDataset(Dataset):
                 out_str += "     "
 
                 out_str += f", {str(self.cml_intersect[metric][i].item()):15s}, {str(self.cml_union[metric][i].item()):15s}"
-                if "mask_count" in sub_metrics and metric != "mIoU":
+                if "mask_count" in sub_metrics and "mIoU" not in metric:
                     # breakpoint()
                     mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
 
@@ -483,16 +483,39 @@ class CustomDataset(Dataset):
                     reduce_zero_label=self.reduce_zero_label,
                     indices=indices,
                     return_mask_count=return_mask_count,
-                    preds_t_tk=pred_t_tk
+                    preds_t_tk=pred_t_tk,
+                    return_mask=True
                 )
                 if return_mask_count:
                     iau_gt_pred, mask_count = iau_gt_pred
                     self.mask_counts["gt_pred"][mask_count[0]] += mask_count[1]
                     self.total_mask_counts["gt_pred"][mask_count[2]] += mask_count[3]
 
-                intersection, union, _, _ = iau_gt_pred
+                intersection, union, _, _, gt_pred_iou_mask = iau_gt_pred
                 self.cml_intersect["gt_pred"] += intersection
                 self.cml_union["gt_pred"] += union
+
+                # self.gt_pred_iou_mask = gt_pred_iou_mask
+            
+            if "mIoU_gt_pred" in metrics:
+                iau_miou = intersect_and_union(
+                    pred.squeeze(-1),
+                    seg_map.squeeze(0),
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    # as the labels has been converted when dataset initialized
+                    # in `get_palette_for_custom_classes ` this `label_map`
+                    # should be `dict()`, see
+                    # https://github.com/open-mmlab/mmsegmentation/issues/1415
+                    # for more ditails
+                    label_map=self.label_map,
+                    reduce_zero_label=self.reduce_zero_label,
+                    indices=indices,
+                    custom_mask = gt_pred_iou_mask
+                )
+                intersection, union, _, _ = iau_miou
+                self.cml_intersect["mIoU_gt_pred"] += intersection
+                self.cml_union["mIoU_gt_pred"] += union
 
             if "mIoU" in metrics:
                 # print("got mIoU")

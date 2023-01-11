@@ -240,11 +240,11 @@ def backpropFlowNoDup(flow, im_orig, return_mask_count=False):
         total_unique, total_counts = np.unique(im, return_counts=True)
         mask_count = [unique, counts, total_unique, total_counts]
     
-    im[:, mask_indices[0], mask_indices[1]] = 0#np.array([255, 192, 203]).reshape(3, 1)
+    im[:, mask_indices[0], mask_indices[1]] = 255 #np.array([255, 192, 203]).reshape(3, 1)
 
     output_im = im[:, indices[0], indices[1]].reshape(-1, H, W)
 
-    output_im[:, np.all(flow==0, axis=0)] = 0
+    output_im[:, np.all(flow==0, axis=0)] = 255
     if not return_mask_count:
         return np.transpose(output_im, (1, 2, 0))
     else:

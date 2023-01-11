@@ -92,7 +92,8 @@ def single_gpu_test(model,
                     metrics=["mIoU", "pred_pred", "gt_pred"],
                     sub_metrics=["mask_count", "correct_consis"],
                     label_space=None,
-                    cache=False
+                    cache=False,
+                    use_cache=False
     ):
     """Test with single GPU by progressive mode.
 
@@ -117,6 +118,8 @@ def single_gpu_test(model,
         format_args (dict): The args for format_results. Default: {}.
         metrics (list): which mIoU based metrics to include ["mIoU", "pred_pred", "gt_pred"]
         sub_metrics (list): ["mask_count", "correct_consis"]
+        cache (str): directory to save cached predictions
+        use_cache (str): use cached predictions to calculate metrics
     Returns:
         list: list of evaluation pre-results or list of save file names.
     """
@@ -146,14 +149,15 @@ def single_gpu_test(model,
     # data_fetcher -> collate_fn(dataset[index]) -> data_sample
     # we use batch_sampler to get correct data idx
     loader_indices = data_loader.batch_sampler
-    cache = False #just for develpoment. RM LATER
-    use_cache = True #just for develpoment. RM LATER
+    # cache=False
+    # cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
+    # use_cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
     if cache:
-        result_path_b = os.path.join(out_dir, f"result")
-        result_tk_path_b = os.path.join(out_dir, f"result_tk")
-        result_t_tk_path_b = os.path.join(out_dir, f"result_t_tk")
-        gt_t_path_b = os.path.join(out_dir, f"gt_t")
-        gt_tk_path_b = os.path.join(out_dir, f"gt_tk")
+        result_path_b = os.path.join(cache, f"result")
+        result_tk_path_b = os.path.join(cache, f"result_tk")
+        result_t_tk_path_b = os.path.join(cache, f"result_t_tk")
+        gt_t_path_b = os.path.join(cache, f"gt_t")
+        gt_tk_path_b = os.path.join(cache, f"gt_tk")
         mmcv.mkdir_or_exist(result_path_b)
         mmcv.mkdir_or_exist(result_tk_path_b)
         mmcv.mkdir_or_exist(result_t_tk_path_b)
@@ -162,7 +166,7 @@ def single_gpu_test(model,
     
 
     if use_cache:
-        npy_dataset = NpyDataset('/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache4/')
+        npy_dataset = NpyDataset(use_cache)
         dataloader = torch.utils.data.DataLoader(npy_dataset)
 
         for i, (r1, r2, r3, gt_t, gt_tk) in enumerate(tqdm(dataloader)):
