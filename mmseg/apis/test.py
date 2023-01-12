@@ -153,6 +153,7 @@ def single_gpu_test(model,
     # cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
     # use_cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
     if cache:
+        # for item in ["result", "result_tk", "result_t_tk", "gt_t", "gt_tk"]:
         result_path_b = os.path.join(cache, f"result")
         result_tk_path_b = os.path.join(cache, f"result_tk")
         result_t_tk_path_b = os.path.join(cache, f"result_t_tk")
@@ -178,6 +179,7 @@ def single_gpu_test(model,
 
     for batch_indices, data in zip(loader_indices, data_loader):
         resulttk = None
+        # logits = True if cache else False
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
             result = model(return_loss=False, **refined_data)

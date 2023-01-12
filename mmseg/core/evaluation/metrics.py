@@ -64,6 +64,13 @@ def error_viz(pred_label, label, indices, split="/srv/share4/datasets/VIPER/spli
         # print(f"{out_image.shape=}")
         cv2.imwrite(f"work_dirs/ims/error_vis/cls{classId}/t={indices[0]}.png", np.transpose(out_image, (1, 2, 0)))
 
+def check_pred_shapes(listOfPreds):
+    """
+    listOfPreds (list) [np.array(), ...]
+    """
+    for i in listOfPreds:
+        assert len(i.shape) == 3 and i.shape[2] < 10, f"pred appears to be the wrong shape.  Got {i.shape}"
+
 def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=False, preds_t_tk=None, **kwargs):
     """
     gt_t: H, W, *.  image at time t

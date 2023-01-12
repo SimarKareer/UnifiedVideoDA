@@ -139,8 +139,8 @@ class CustomDataset(Dataset):
                                                self.ann_dir,
                                                self.seg_map_suffix, self.split)
         
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred"]}
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6"]}
         self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.cml_correct_consis = {k: np.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
@@ -497,6 +497,44 @@ class CustomDataset(Dataset):
 
                 # self.gt_pred_iou_mask = gt_pred_iou_mask
             
+            if "M5" in metrics:
+                consis = (predtk == pred_t_tk).squeeze(-1) #where past frame pred matches future frame
+                # breakpoint()
+
+                iau = intersect_and_union(
+                    predtk.squeeze(-1), #past frame
+                    seg_map_tk.squeeze(0), #past GT
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    label_map=self.label_map,
+                    indices=indices,
+                    return_mask=False,
+                    custom_mask=consis #where past and future agree
+                )
+
+                intersection, union, _, _ = iau
+                self.cml_intersect["M5"] += intersection
+                self.cml_union["M5"] += union
+            
+            if "M6" in metrics:
+                consis = (predtk != pred_t_tk).squeeze(-1) #where past frame doesn't match future frame
+                # breakpoint()
+
+                iau = intersect_and_union(
+                    pred_t_tk.squeeze(-1), #future frame
+                    seg_map_tk.squeeze(0), #past GT
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    label_map=self.label_map,
+                    indices=indices,
+                    return_mask=False,
+                    custom_mask=consis # future and past don't agree
+                )
+
+                intersection, union, _, _ = iau
+                self.cml_intersect["M6"] += intersection
+                self.cml_union["M6"] += union
+            
             if "mIoU_gt_pred" in metrics:
                 iau_miou = intersect_and_union(
                     pred.squeeze(-1),
@@ -516,7 +554,7 @@ class CustomDataset(Dataset):
                 intersection, union, _, _ = iau_miou
                 self.cml_intersect["mIoU_gt_pred"] += intersection
                 self.cml_union["mIoU_gt_pred"] += union
-
+            
             if "mIoU" in metrics:
                 # print("got mIoU")
                 
