@@ -3,6 +3,18 @@
 from torch.utils.data.dataset import ConcatDataset as _ConcatDataset
 
 from .builder import DATASETS
+# Copyright (c) OpenMMLab. All rights reserved.
+import bisect
+import collections
+import copy
+from itertools import chain
+
+import mmcv
+import numpy as np
+from mmcv.utils import build_from_cfg, print_log
+
+from .builder import DATASETS, PIPELINES
+from .cityscapes import CityscapesDataset
 
 
 @DATASETS.register_module()

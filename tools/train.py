@@ -110,7 +110,7 @@ def main(args):
     # dump config
     cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))
     # snapshot source code
-    gen_code_archive(cfg.work_dir)
+    # gen_code_archive(cfg.work_dir)
     # init the logger before other steps
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     log_file = osp.join(cfg.work_dir, f'{timestamp}.log')

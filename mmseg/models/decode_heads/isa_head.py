@@ -157,7 +157,6 @@ class ISALayer(nn.Module):
 
         return x
 
-
 @HEADS.register_module()
 class ISAHead(BaseDecodeHead):
     """Interlaced Sparse Self-Attention for Semantic Segmentation.

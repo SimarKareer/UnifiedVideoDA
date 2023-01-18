@@ -2,6 +2,8 @@
 # Modifications:
 # - Add ddp_wrapper from mmgen
 
+# Copyright (c) OpenMMLab. All rights reserved.
+import os
 import random
 import warnings
 
@@ -15,6 +17,47 @@ from mmseg.core import DistEvalHook, EvalHook
 from mmseg.core.ddp_wrapper import DistributedDataParallelWrapper
 from mmseg.datasets import build_dataloader, build_dataset
 from mmseg.utils import get_root_logger
+import torch.distributed as dist
+from mmcv.runner import (HOOKS, DistSamplerSeedHook, EpochBasedRunner,
+                         build_runner, get_dist_info)
+from mmcv.utils import build_from_cfg
+
+from mmseg import digit_version
+from mmseg.core import DistEvalHook, EvalHook, build_optimizer
+from mmseg.datasets import build_dataloader, build_dataset
+from mmseg.utils import (build_ddp, build_dp, find_latest_checkpoint,
+                         get_root_logger)
+
+
+def init_random_seed(seed=None, device='cuda'):
+    """Initialize random seed.
+
+    If the seed is not set, the seed will be automatically randomized,
+    and then broadcast to all processes to prevent some potential bugs.
+    Args:
+        seed (int, Optional): The seed. Default to None.
+        device (str): The device where the seed will be put on.
+            Default to 'cuda'.
+    Returns:
+        int: Seed to be used.
+    """
+    if seed is not None:
+        return seed
+
+    # Make sure all ranks share the same random seed to prevent
+    # some potential bugs. Please refer to
+    # https://github.com/open-mmlab/mmdetection/issues/6339
+    rank, world_size = get_dist_info()
+    seed = np.random.randint(2**31)
+    if world_size == 1:
+        return seed
+
+    if rank == 0:
+        random_num = torch.tensor(seed, dtype=torch.int32, device=device)
+    else:
+        random_num = torch.tensor(0, dtype=torch.int32, device=device)
+    dist.broadcast(random_num, src=0)
+    return random_num.item()
 
 
 def set_random_seed(seed, deterministic=False):
@@ -106,6 +149,12 @@ def train_segmentor(model,
     runner.register_training_hooks(cfg.lr_config, cfg.optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config,
                                    cfg.get('momentum_config', None))
+    if distributed:
+        # when distributed training by epoch, using`DistSamplerSeedHook` to set
+        # the different seed to distributed sampler for each epoch, it will
+        # shuffle dataset at each epoch and avoid overfitting.
+        if isinstance(runner, EpochBasedRunner):
+            runner.register_hook(DistSamplerSeedHook())
 
     # an ugly walkaround to make the .log and .log.json filenames the same
     runner.timestamp = timestamp

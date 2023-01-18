@@ -67,18 +67,16 @@ def build_dataset(cfg, default_args=None):
     """Build datasets."""
     from .dataset_wrappers import ConcatDataset, RepeatDataset
     from mmseg.datasets import UDADataset
+    # breakpoint()
     if cfg['type'] == 'UDADataset':
-        dataset = UDADataset(
-            source=build_dataset(cfg['source'], default_args),
-            target=build_dataset(cfg['target'], default_args),
-            cfg=cfg)
+        # print(cfg["type"])
+        dataset = UDADataset(source=build_dataset(cfg['source'], default_args), target=build_dataset(cfg['target'], default_args), cfg=cfg)
+        # print(cfg["type"])
     elif isinstance(cfg, (list, tuple)):
         dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
     elif cfg['type'] == 'RepeatDataset':
-        dataset = RepeatDataset(
-            build_dataset(cfg['dataset'], default_args), cfg['times'])
-    elif isinstance(cfg.get('img_dir'), (list, tuple)) or isinstance(
-            cfg.get('split', None), (list, tuple)):
+        dataset = RepeatDataset(build_dataset(cfg['dataset'], default_args), cfg['times'])
+    elif isinstance(cfg.get('img_dir'), (list, tuple)) or isinstance(cfg.get('split', None), (list, tuple)):
         dataset = _concat_dataset(cfg, default_args)
     else:
         dataset = build_from_cfg(cfg, DATASETS, default_args)

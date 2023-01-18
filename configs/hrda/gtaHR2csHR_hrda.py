@@ -5,12 +5,13 @@
 # ---------------------------------------------------------------
 
 # Default HRDA Configuration for GTA->Cityscapes
+# SIMAR: currently I've messeg around here and it's set up for VIPER.  I should separate this into a separate file.
 _base_ = [
     '../_base_/default_runtime.py',
     # DAFormer Network Architecture
     '../_base_/models/daformer_sepaspp_mitb5.py',
     # GTA->Cityscapes High-Resolution Data Loading
-    '../_base_/datasets/uda_gtaHR_to_cityscapesHR_1024x1024.py',
+    '../_base_/datasets/uda_viperHR_to_cityscapesHR_1024x1024.py',
     # DAFormer Self-Training
     '../_base_/uda/dacs_a999_fdthings.py',
     # AdamW Optimizer
@@ -65,7 +66,8 @@ data = dict(
         target=dict(crop_pseudo_margins=[30, 240, 30, 30]),
     ),
     # Use one separate thread/worker for data loading.
-    workers_per_gpu=1)
+    workers_per_gpu=3,
+    samples_per_gpu=3)
 # Optimizer Hyperparameters
 optimizer_config = None
 optimizer = dict(
@@ -80,6 +82,9 @@ gpu_model = 'NVIDIATITANRTX'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=40000, max_keep_ckpts=1)
+
+checkpoint = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth"
+
 evaluation = dict(interval=4000, metric='mIoU')
 # Meta Information for Result Analysis
 name = 'gtaHR2csHR_hrda_s1'
@@ -90,5 +95,6 @@ name_encoder = 'mitb5'
 name_decoder = 'hrda1-512-0.1_daformer_sepaspp_sl'
 name_uda = 'dacs_a999_fdthings_rcs0.01-2.0_cpl2'
 name_opt = 'adamw_6e-05_pmTrue_poly10warm_1x2_40k'
+label_space = "cityscapes"
 
 # For the other configurations used in the paper, please refer to experiment.py

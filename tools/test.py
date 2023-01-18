@@ -1,13 +1,14 @@
-# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
-# Modifications:
-# - Modification of config and checkpoint to support legacy models
-# - Add inference mode and HRDA output flag
-
+# Copyright (c) OpenMMLab. All rights reserved.
 import argparse
 import os
+import os.path as osp
+import shutil
+import time
+import warnings
 
 import mmcv
 import torch
+from mmcv.cnn.utils import revert_sync_batchnorm
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
                          wrap_fp16_model)
@@ -16,7 +17,8 @@ from mmcv.utils import DictAction
 from mmseg.apis import multi_gpu_test, single_gpu_test
 from mmseg.datasets import build_dataloader, build_dataset
 from mmseg.models import build_segmentor
-
+from mmseg import digit_version
+from mmseg.utils import build_ddp, build_dp, get_device, setup_multi_processes
 
 def update_legacy_cfg(cfg):
     # The saved json config does not differentiate between list and tuple
@@ -34,6 +36,7 @@ def update_legacy_cfg(cfg):
         cfg.model.decode_head.type = 'HRDAHead'
     cfg.model.backbone.pop('ema_drop_path_rate', None)
     return cfg
+
 
 
 def parse_args():
@@ -61,6 +64,11 @@ def parse_args():
         choices=['', 'LR', 'HR', 'ATT'],
         default='',
         help='Extract LR and HR predictions from HRDA architecture.')
+        '--work-dir',
+        help=('if specified, the evaluation metric results will be dumped'
+              'into the directory as json'))
+    parser.add_argument(
+        '--aug-test', action='store_true', help='Use Flip and Multi scale aug')
     parser.add_argument('--out', help='output result file in pickle format')
     parser.add_argument(
         '--format-only',
@@ -69,11 +77,24 @@ def parse_args():
         'useful when you want to format the result to a specific format and '
         'submit it to the test server')
     parser.add_argument(
-        '--eval',
+        '--eval', #called metrics later in code
         type=str,
         nargs='+',
-        help='evaluation metrics, which depends on the dataset, e.g., "mIoU"'
-        ' for generic datasets, and "cityscapes" for Cityscapes')
+        help='["mIoU", "pred_pred", "gt_pred"]')
+    parser.add_argument(
+        '--sub-metrics',
+        type=str,
+        nargs='+',
+        default=[],
+        help='["mask_count", "correct_consis"]')
+    parser.add_argument(
+        '--cache',
+        type=str,
+        help='where to cache predictions')
+    parser.add_argument(
+        '--use-cache',
+        type=str,
+        help='location of cached predictions to use')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
@@ -82,11 +103,36 @@ def parse_args():
         action='store_true',
         help='whether to use gpu to collect results.')
     parser.add_argument(
+        '--gpu-id',
+        type=int,
+        default=0,
+        help='id of gpu to use '
+        '(only applicable to non-distributed testing)')
+    parser.add_argument(
         '--tmpdir',
         help='tmp directory used for collecting results from multiple '
         'workers, available when gpu_collect is not specified')
     parser.add_argument(
-        '--options', nargs='+', action=DictAction, help='custom options')
+        '--options',
+        nargs='+',
+        action=DictAction,
+        help="--options is deprecated in favor of --cfg_options' and it will "
+        'not be supported in version v0.22.0. Override some settings in the '
+        'used config, the key-value pair in xxx=yyy format will be merged '
+        'into config file. If the value to be overwritten is a list, it '
+        'should be like key="[a,b]" or key=a,b It also allows nested '
+        'list/tuple values, e.g. key="[(a,b),(c,d)]" Note that the quotation '
+        'marks are necessary and that no white space is allowed.')
+    parser.add_argument(
+        '--cfg-options',
+        nargs='+',
+        action=DictAction,
+        help='override some settings in the used config, the key-value pair '
+        'in xxx=yyy format will be merged into config file. If the value to '
+        'be overwritten is a list, it should be like key="[a,b]" or key=a,b '
+        'It also allows nested list/tuple values, e.g. key="[(a,b),(c,d)]" '
+        'Note that the quotation marks are necessary and that no white space '
+        'is allowed.')
     parser.add_argument(
         '--eval-options',
         nargs='+',
@@ -106,17 +152,27 @@ def parse_args():
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
+
+    if args.options and args.cfg_options:
+        raise ValueError(
+            '--options and --cfg-options cannot be both '
+            'specified, --options is deprecated in favor of --cfg-options. '
+            '--options will not be supported in version v0.22.0.')
+    if args.options:
+        warnings.warn('--options is deprecated in favor of --cfg-options. '
+                      '--options will not be supported in version v0.22.0.')
+        args.cfg_options = args.options
+
     return args
 
 
 def main():
     args = parse_args()
-
-    assert args.out or args.eval or args.format_only or args.show \
+    assert args.out or args.eval or args.format_only or args.show or args.cache \
         or args.show_dir, \
         ('Please specify at least one operation (save/eval/format/show the '
          'results / save the results) with the argument "--out", "--eval"'
-         ', "--format-only", "--show" or "--show-dir"')
+         ', "--format-only", "--show", "--cache", or "--show-dir"')
 
     if args.eval and args.format_only:
         raise ValueError('--eval and --format_only cannot be both specified')
@@ -125,9 +181,13 @@ def main():
         raise ValueError('The output file must be a pkl file.')
 
     cfg = mmcv.Config.fromfile(args.config)
-    if args.options is not None:
-        cfg.merge_from_dict(args.options)
-    cfg = update_legacy_cfg(cfg)
+    if args.cfg_options is not None:
+        cfg.merge_from_dict(args.cfg_options)
+    # NOTE: legacy cfg?
+
+    # set multi-process settings
+    setup_multi_processes(cfg)
+
     # set cudnn_benchmark
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
@@ -210,34 +270,95 @@ def main():
         print('"PALETTE" not found in meta, use dataset.PALETTE instead')
         model.PALETTE = dataset.PALETTE
 
-    efficient_test = False
-    if args.eval_options is not None:
-        efficient_test = args.eval_options.get('efficient_test', False)
+    # clean gpu memory when starting a new evaluation.
+    torch.cuda.empty_cache()
+    eval_kwargs = {} if args.eval_options is None else args.eval_options
 
-    if not distributed:
-        model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
-                                  efficient_test, args.opacity)
+    # Deprecated
+    efficient_test = eval_kwargs.get('efficient_test', False)
+    if efficient_test:
+        warnings.warn(
+            '``efficient_test=True`` does not have effect in tools/test.py, '
+            'the evaluation and format results are CPU memory efficient by '
+            'default')
+
+    eval_on_format_results = (
+        args.eval is not None and 'cityscapes' in args.eval)
+    if eval_on_format_results:
+        assert len(args.eval) == 1, 'eval on format results is not ' \
+                                    'applicable for metrics other than ' \
+                                    'cityscapes'
+    if args.format_only or eval_on_format_results:
+        if 'imgfile_prefix' in eval_kwargs:
+            tmpdir = eval_kwargs['imgfile_prefix']
+        else:
+            tmpdir = '.format_cityscapes'
+            eval_kwargs.setdefault('imgfile_prefix', tmpdir)
+        mmcv.mkdir_or_exist(tmpdir)
     else:
-        model = MMDistributedDataParallel(
-            model.cuda(),
-            device_ids=[torch.cuda.current_device()],
+        tmpdir = None
+
+    cfg.device = get_device()
+    if not distributed:
+        warnings.warn(
+            'SyncBN is only supported with DDP. To be compatible with DP, '
+            'we convert SyncBN to BN. Please use dist_train.sh which can '
+            'avoid this error.')
+        if not torch.cuda.is_available():
+            assert digit_version(mmcv.__version__) >= digit_version('1.4.4'), \
+                'Please use MMCV >= 1.4.4 for CPU training!'
+        model = revert_sync_batchnorm(model)
+        model = build_dp(model, cfg.device, device_ids=cfg.gpu_ids)
+        results = single_gpu_test(
+            model=model,
+            data_loader=data_loader,
+            show = args.show,
+            out_dir = args.show_dir,
+            efficient_test=False,
+            opacity=args.opacity,
+            pre_eval=args.eval is not None and not eval_on_format_results,
+            format_only=args.format_only or eval_on_format_results,
+            format_args=eval_kwargs,
+            metrics=args.eval,
+            sub_metrics=args.sub_metrics,
+            label_space=cfg.label_space,
+            cache=args.cache,
+            use_cache=args.use_cache
+        )
+    else:
+        model = build_ddp(
+            model,
+            cfg.device,
+            device_ids=[int(os.environ['LOCAL_RANK'])],
             broadcast_buffers=False)
-        outputs = multi_gpu_test(model, data_loader, args.tmpdir,
-                                 args.gpu_collect, efficient_test)
+        results = multi_gpu_test(
+            model,
+            data_loader,
+            args.tmpdir,
+            args.gpu_collect,
+            False,
+            pre_eval=args.eval is not None and not eval_on_format_results,
+            format_only=args.format_only or eval_on_format_results,
+            format_args=eval_kwargs)
 
     rank, _ = get_dist_info()
     if rank == 0:
         if args.out:
+            warnings.warn(
+                'The behavior of ``args.out`` has been changed since MMSeg '
+                'v0.16, the pickled outputs could be seg map as type of '
+                'np.array, pre-eval results or file paths for '
+                '``dataset.format_results()``.')
             print(f'\nwriting results to {args.out}')
-            mmcv.dump(outputs, args.out)
-        kwargs = {} if args.eval_options is None else args.eval_options
-        if args.format_only:
-            dataset.format_results(outputs, **kwargs)
+            mmcv.dump(results, args.out)
         if args.eval:
-            res = dataset.evaluate(outputs, args.eval, **kwargs)
-            print([k for k, v in res.items() if 'IoU' in k])
-            print([round(v * 100, 1) for k, v in res.items() if 'IoU' in k])
+            eval_kwargs.update(metric=args.eval)
+            metric = dataset.evaluate(results, **eval_kwargs)
+            metric_dict = dict(config=args.config, metric=metric)
+            mmcv.dump(metric_dict, json_file, indent=4)
+            if tmpdir is not None and eval_on_format_results:
+                # remove tmp dir when cityscapes evaluation
+                shutil.rmtree(tmpdir)
 
 
 if __name__ == '__main__':
