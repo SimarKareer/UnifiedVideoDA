@@ -64,24 +64,51 @@ def error_viz(pred_label, label, indices, split="/srv/share4/datasets/VIPER/spli
         # print(f"{out_image.shape=}")
         cv2.imwrite(f"work_dirs/ims/error_vis/cls{classId}/t={indices[0]}.png", np.transpose(out_image, (1, 2, 0)))
 
-def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=False, **kwargs):
+def check_pred_shapes(listOfPreds):
+    """
+    listOfPreds (list) [np.array(), ...]
+    """
+    for i in listOfPreds:
+        assert len(i.shape) == 3 and i.shape[2] < 10, f"pred appears to be the wrong shape.  Got {i.shape}"
+
+def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=False, preds_t_tk=None, **kwargs):
     """
     gt_t: H, W, *.  image at time t
     gt_tk: H, W, *  image at t-k
     flow_tk_t: H, W, 2 Flow from t-k to t
+
+    If you pass in a cached value for preds_t_tk you can ignore gt_t and flow_tk_t
     """
 
-    assert len(gt_t.shape) == 3 and gt_t.shape[2] < 10, f"gt_t appears to be the wrong shape.  Got {gt_t.shape}"
-    assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
-    assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
+    if preds_t_tk is None:
+        assert len(gt_t.shape) == 3 and gt_t.shape[2] < 10, f"gt_t appears to be the wrong shape.  Got {gt_t.shape}"
+        assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
+        assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
 
-    gt_t = gt_t.numpy() if isinstance(gt_t, torch.Tensor) else gt_t
-    gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
-    flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
+        gt_t = gt_t.numpy() if isinstance(gt_t, torch.Tensor) else gt_t
+        gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
+        flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
+
+        if return_mask_count:
+            mlabel2_1, mask_count = backpropFlowNoDup(flow_tk_t, gt_t, return_mask_count=return_mask_count)
+        else:
+            mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
+        
+        breakpoint()
+    else:
+        assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
+        assert gt_t is None, "Got a value for gt_t but preds_t_tk is not None.  This is not supported."
+        assert flow_tk_t is None, "Got a value for flow_tk_t but preds_t_tk is not None.  This is not supported."
+
+        gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
+        mlabel2_1 = preds_t_tk
+    # viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
+
+    # imshow(viz, scale=0.5)
+    iau = intersect_and_union(gt_tk.squeeze(2), mlabel2_1.squeeze(2), num_classes=num_classes, **kwargs)
+    # print(t.shape, tk.shape, flow_tk_t.shape)
 
     if return_mask_count:
-        mlabel2_1, mask_count = backpropFlowNoDup(flow_tk_t, gt_t, return_mask_count=return_mask_count)
-        
         mask1 = mask_count[0] < num_classes
         mask_count[0] = mask_count[0][mask1]
         mask_count[1] = mask_count[1][mask1]
@@ -89,14 +116,6 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=Fals
         mask2 = mask_count[2] < num_classes
         mask_count[2] = mask_count[2][mask2]
         mask_count[3] = mask_count[3][mask2]
-    else:
-        mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
-    # viz = labelMapToIm(torch.tensor(mlabel2_1).long(), palette_to_id).numpy().astype(np.int16)
-
-    # imshow(viz, scale=0.5)
-    iau = intersect_and_union(gt_tk.squeeze(2), mlabel2_1.squeeze(2), num_classes=num_classes, **kwargs)
-    # print(t.shape, tk.shape, flow_tk_t.shape)
-
 
 
     if return_mask_count:
@@ -104,23 +123,30 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=Fals
     else:
         return iau
 
-def correctness_confusion(gt_tk, pred_t, pred_tk, flow_tk_t, label_map, **kwargs):
+def correctness_confusion(gt_tk, pred_t, pred_tk, flow_tk_t, label_map, preds_t_tk=None, **kwargs):
     """
     gt_tk: H, W, 1  ground truth at t-k
     pred_t: H, W, 1  image at t
     pred_tk: H, W, 1  image at t-k
     flow_tk_t: H, W, 2 Flow from t-k to t
     label_map: (dict) label map at t
+
+    if you give a value for preds_t_tk you can ignore pred_t and flow_tk_t
     """
     assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
-    assert len(pred_t.shape) == 3 and pred_t.shape[2] < 10, f"pred_t appears to be the wrong shape.  Got {pred_t.shape}"
     assert len(pred_tk.shape) == 3 and pred_tk.shape[2] < 10, f"pred_tk appears to be the wrong shape.  Got {pred_tk.shape}"
-    assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
+    if preds_t_tk is None:
+        assert len(pred_t.shape) == 3 and pred_t.shape[2] < 10, f"pred_t appears to be the wrong shape.  Got {pred_t.shape}"
+        assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
+    else:
+        assert pred_t is None, "Got a value for pred_t but preds_t_tk is not None.  This is not supported."
+        assert flow_tk_t is None, "Got a value for flow_tk_t but preds_t_tk is not None.  This is not supported."
 
     gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
-    pred_t = pred_t.numpy() if isinstance(pred_t, torch.Tensor) else pred_t
     pred_tk = pred_tk.numpy() if isinstance(pred_tk, torch.Tensor) else pred_tk
-    flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
+    if preds_t_tk is None:
+        pred_t = pred_t.numpy() if isinstance(pred_t, torch.Tensor) else pred_t
+        flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
 
     if label_map is not None:
         label_copy = gt_tk.clone()
@@ -131,7 +157,11 @@ def correctness_confusion(gt_tk, pred_t, pred_tk, flow_tk_t, label_map, **kwargs
     correct = gt_tk == pred_tk
     incorrect = gt_tk != pred_tk
     # of these pixels, find the ones which are consistent vs inconsistent between frames via flow
-    mlabel2_1 = backpropFlowNoDup(flow_tk_t, pred_t)
+    if preds_t_tk is None:
+        mlabel2_1 = backpropFlowNoDup(flow_tk_t, pred_t)
+    else:
+        mlabel2_1 = preds_t_tk
+
     consistent_correct = np.logical_and(correct, (mlabel2_1 == pred_tk))
     consistent_incorrect = np.logical_and(incorrect, (mlabel2_1 == pred_tk))
     inconsistent_correct = np.logical_and(correct, (mlabel2_1 != pred_tk))
@@ -213,8 +243,8 @@ def intersect_and_union(pred_label,
         label = label - 1
         label[label == 254] = 255
 
-    pred = torch.tensor(pred_label).view((1080, 1920, 1))
-    gt = torch.tensor(label).view((1080, 1920, 1)).long()
+    # pred = torch.tensor(pred_label).view((1080, 1920, 1))
+    # gt = torch.tensor(label).view((1080, 1920, 1)).long()
     # colored_pred = labelMapToIm(pred, palette_to_id)
     # colored_gt = labelMapToIm(gt, palette_to_id)
     # cv2.imwrite("work_dirs/ims/metricsPred.png", colored_pred.numpy().astype(np.int16))
@@ -222,17 +252,29 @@ def intersect_and_union(pred_label,
     # cv2.imwrite("work_dirs/ims/metricsPred2.png", pred.numpy().astype(np.int16))
     # cv2.imwrite("work_dirs/ims/metricsLabel2.png", gt.numpy().astype(np.int16))
 
+    def ignore_indices(mask):
+        if not isinstance(mask, torch.Tensor):
+            mask = torch.from_numpy(mask)
+        mask = torch.logical_and(mask, pred_label != ignore_index)
+        mask = torch.logical_and(mask, label != ignore_index)
+        mask = torch.logical_and(mask, label != 201)
+        mask = torch.logical_and(mask, pred_label != 201)
+        return mask
+
     if custom_mask is not None:
         mask = custom_mask
     else:
         mask = (label != ignore_index)
-        mask = torch.logical_and(mask, label != 201)
-        mask = torch.logical_and(mask, pred_label != ignore_index)
-        mask = torch.logical_and(mask, pred_label != 201)
+        mask = ignore_indices(mask)
+
+        # mask = torch.logical_and(mask, label != 201)
+        # mask = torch.logical_and(mask, pred_label != ignore_index)
+        # mask = torch.logical_and(mask, pred_label != 201)
     # for ignore in ignore_index:
 
     # print("shape: ", mask.shape, "masked: ", mask.sum())
     # print("before: ", pred_label.shape, label.shape)
+    # breakpoint()
     pred_label = pred_label[mask]
     label = label[mask]
     # print("after: ", pred_label.shape, label.shape)

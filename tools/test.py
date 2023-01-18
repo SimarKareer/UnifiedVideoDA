@@ -49,6 +49,14 @@ def parse_args():
         nargs='+',
         default=[],
         help='["mask_count", "correct_consis"]')
+    parser.add_argument(
+        '--cache',
+        type=str,
+        help='where to cache predictions')
+    parser.add_argument(
+        '--use-cache',
+        type=str,
+        help='location of cached predictions to use')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
@@ -122,11 +130,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    assert args.out or args.eval or args.format_only or args.show \
+    assert args.out or args.eval or args.format_only or args.show or args.cache \
         or args.show_dir, \
         ('Please specify at least one operation (save/eval/format/show the '
          'results / save the results) with the argument "--out", "--eval"'
-         ', "--format-only", "--show" or "--show-dir"')
+         ', "--format-only", "--show", "--cache", or "--show-dir"')
 
     if args.eval and args.format_only:
         raise ValueError('--eval and --format_only cannot be both specified')
@@ -287,7 +295,9 @@ def main():
             format_args=eval_kwargs,
             metrics=args.eval,
             sub_metrics=args.sub_metrics,
-            label_space=cfg.label_space
+            label_space=cfg.label_space,
+            cache=args.cache,
+            use_cache=args.use_cache
         )
     else:
         model = build_ddp(

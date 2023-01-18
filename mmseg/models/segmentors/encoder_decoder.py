@@ -261,8 +261,13 @@ class EncoderDecoder(BaseSegmentor):
 
         return output
 
-    def simple_test(self, img, img_meta, rescale=True):
+    def simple_test(self, img, img_meta, rescale=True, logits=False):
         """Simple test with single image."""
+        if logits:
+            seg_logit = self.inference(img, img_meta, rescale)
+            seg_logit = seg_logit.cpu().numpy()
+            return seg_logit
+
         seg_logit = self.inference(img, img_meta, rescale)
         if self.out_channels == 1:
             seg_pred = (seg_logit >
