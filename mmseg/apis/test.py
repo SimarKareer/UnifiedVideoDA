@@ -152,18 +152,6 @@ def single_gpu_test(model,
     # cache=False
     # cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
     # use_cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
-    if cache:
-        # for item in ["result", "result_tk", "result_t_tk", "gt_t", "gt_tk"]:
-        result_path_b = os.path.join(cache, f"result")
-        result_tk_path_b = os.path.join(cache, f"result_tk")
-        result_t_tk_path_b = os.path.join(cache, f"result_t_tk")
-        gt_t_path_b = os.path.join(cache, f"gt_t")
-        gt_tk_path_b = os.path.join(cache, f"gt_tk")
-        mmcv.mkdir_or_exist(result_path_b)
-        mmcv.mkdir_or_exist(result_tk_path_b)
-        mmcv.mkdir_or_exist(result_t_tk_path_b)
-        mmcv.mkdir_or_exist(gt_t_path_b)
-        mmcv.mkdir_or_exist(gt_tk_path_b)
     
 
     if use_cache:
@@ -178,53 +166,52 @@ def single_gpu_test(model,
         return
 
     for batch_indices, data in zip(loader_indices, data_loader):
-        resulttk = None
-        # logits = True if cache else False
+        result_tk = None
+        logits = True if cache else False
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
-            result = model(return_loss=False, **refined_data)
-            if cache or "pred_pred" in metrics:
+            result = model(return_loss=False, logits=logits, **refined_data)
+            if cache or "pred_pred" in metrics or "M6Sanity" in metrics:
                 refined_data = {"img_metas": data["img_metas"], "img": data["imtk"]}
-                resulttk = model(return_loss=False, **refined_data)
+                result_tk = model(return_loss=False, logits=logits, **refined_data)
             
             if label_space != dataset.label_space:
                 result = remap_labels(result, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
-                if resulttk is not None:
-                    resulttk = remap_labels(resulttk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
+                if result_tk is not None:
+                    result_tk = remap_labels(result_tk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
         
         if cache:
-            # Take result and resulttk, and save them to different subdirectories of the out_dir folder
-            result_path = os.path.join(result_path_b, f"result{batch_indices[0]}")
-            result_tk_path = os.path.join(result_tk_path_b, f"result_tk{batch_indices[0]}")
-            result_t_tk_path = os.path.join(result_t_tk_path_b, f"result_t_tk{batch_indices[0]}")
-            gt_t_path = os.path.join(gt_t_path_b, f"gt_t{batch_indices[0]}")
-            gt_tk_path = os.path.join(gt_tk_path_b, f"gt_tk{batch_indices[0]}")
-
-
-            # breakpoint()
             if len(result) > 1:
                 raise NotImplementedError("Only batch size 1 supported")
             
+            path_dict = {}
+            for item in ["result", "result_tk", "result_t_tk", "gt_t", "gt_tk"]:
+                path_dict[item] = os.path.join(cache, item)
+                mmcv.mkdir_or_exist(os.path.join(cache, item))
             
-            result = result[0][:, :, None]
-            resulttk = resulttk[0][:, :, None]
+            
+            # result = result[0][:, :, None] # for non logits
+            # result_tk = result_tk[0][:, :, None]
+            result = result.squeeze(0).transpose((1, 2, 0))
+            result_tk = result_tk.squeeze(0).transpose((1, 2, 0))
             flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).numpy()
+            # breakpoint()
 
             result_t_tk = backpropFlowNoDup(flow, result)
 
-            seg_map = data["gt_semantic_seg"][0]
-            if seg_map.shape[0] == 1 and len(seg_map.shape) == 4:
-                seg_map = seg_map.squeeze(0)
+            gt_t = data["gt_semantic_seg"][0]
+            if gt_t.shape[0] == 1 and len(gt_t.shape) == 4:
+                gt_t = gt_t.squeeze(0)
             
-            seg_map_tk = data["imtk_gt_semantic_seg"][0]
-            if seg_map_tk.shape[0] == 1 and len(seg_map_tk.shape) == 4:
-                seg_map_tk = seg_map_tk.squeeze(0)
-
-            np.save(result_path, result)
-            np.save(result_tk_path, resulttk)
-            np.save(result_t_tk_path, result_t_tk)
-            np.save(gt_t_path, seg_map)
-            np.save(gt_tk_path, seg_map_tk)
+            gt_tk = data["imtk_gt_semantic_seg"][0]
+            if gt_tk.shape[0] == 1 and len(gt_tk.shape) == 4:
+                gt_tk = gt_tk.squeeze(0)
+            
+            np.save(os.path.join(path_dict["result"], f"result{batch_indices[0]}"), result)
+            np.save(os.path.join(path_dict["result_tk"], f"result_tk{batch_indices[0]}"), result_tk)
+            np.save(os.path.join(path_dict["result_t_tk"], f"result_t_tk{batch_indices[0]}"), result_t_tk)
+            np.save(os.path.join(path_dict["gt_t"], f"gt_t{batch_indices[0]}"), gt_t)
+            np.save(os.path.join(path_dict["gt_tk"], f"gt_tk{batch_indices[0]}"), gt_tk)
 
             # batch_size = 1
             # for _ in range(batch_size):
@@ -278,7 +265,7 @@ def single_gpu_test(model,
 
 
             if "gt_semantic_seg" in data: # Will run the original mmseg style eval if the dataloader doesn't provide ground truth
-                result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=resulttk, metrics=metrics, sub_metrics=sub_metrics)
+                result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=result_tk, metrics=metrics, sub_metrics=sub_metrics)
             else:
                 result = dataset.pre_eval(result, indices=batch_indices)
             

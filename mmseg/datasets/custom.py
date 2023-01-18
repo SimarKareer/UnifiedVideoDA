@@ -9,6 +9,8 @@ from mmcv.utils import print_log
 from prettytable import PrettyTable
 from torch.utils.data import Dataset
 import torch
+from torchvision.utils import save_image
+
 
 from mmseg.core import eval_metrics, intersect_and_union, pre_eval_to_metrics
 from mmseg.utils import get_root_logger
@@ -16,6 +18,7 @@ from .builder import DATASETS
 from .pipelines import Compose, LoadAnnotations
 
 from mmseg.core.evaluation.metrics import flow_prop_iou, correctness_confusion
+from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 
 import pdb
 @DATASETS.register_module()
@@ -139,8 +142,8 @@ class CustomDataset(Dataset):
                                                self.ann_dir,
                                                self.seg_map_suffix, self.split)
         
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6"]}
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]}
         self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.cml_correct_consis = {k: np.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
@@ -415,20 +418,40 @@ class CustomDataset(Dataset):
 
                 flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
 
-                breakpoint()
+                # breakpoint()
             else:
                 # flow = None
                 # pred = None
                 return_mask_count=False # would need to save the mask counts while caching
                 index = cached["index"]
-                pred = cached["pred"].numpy()
-                predtk = cached["pred_tk"].numpy()
-                pred_t_tk = cached["pred_t_tk"].numpy()
+
+                # breakpoint()
+
+                if cached["pred"].shape[-1] == 1:
+                    pred = cached["pred"].numpy()
+                    predtk = cached["pred_tk"].numpy()
+                    pred_t_tk = cached["pred_t_tk"].numpy()
+                else:
+                    pred_logits = cached["pred"].numpy()
+                    predtk_logits = cached["pred_tk"].numpy()
+                    pred_t_tk_logits = cached["pred_t_tk"].numpy()
+
+                    # breakpoint()
+                    pred = pred_logits.argmax(-1)[:, :, None]
+                    predtk = predtk_logits.argmax(-1)[:, :, None]
+                    pred_t_tk = pred_t_tk_logits.argmax(-1)[:, :, None]
+
+                    pred_t_tk_logits_mask = np.any(pred_t_tk_logits == 255, axis=-1)
+                    pred_t_tk[pred_t_tk_logits_mask] = 255
+                    
                 seg_map = cached["gt_t"]
                 seg_map_tk = cached["gt_tk"]
 
+                base_mask = (predtk != 255) & (predtk != 201) & (pred_t_tk != 255) & (pred_t_tk != 201)
+                base_mask = base_mask.squeeze(-1)
 
-            if "correct_cons" in sub_metrics or True:
+
+            if "correct_cons" in sub_metrics:
                 cons_correct_dict = correctness_confusion(
                     seg_map_tk.permute((1, 2, 0)),
                     None if cached else pred,
@@ -519,6 +542,7 @@ class CustomDataset(Dataset):
             if "M6" in metrics:
                 consis = (predtk != pred_t_tk).squeeze(-1) #where past frame doesn't match future frame
                 # breakpoint()
+                consis = consis & base_mask
 
                 iau = intersect_and_union(
                     pred_t_tk.squeeze(-1), #future frame
@@ -534,6 +558,101 @@ class CustomDataset(Dataset):
                 intersection, union, _, _ = iau
                 self.cml_intersect["M6"] += intersection
                 self.cml_union["M6"] += union
+            
+            # M6 Sanity check.  Same as M6 but with ground truth of t
+            if "M6Sanity" in metrics:
+                # breakpoint()
+                pred_t_tk = backpropFlowNoDup(flow.numpy(), pred)
+
+                inconsis = (predtk != pred_t_tk).squeeze(-1)
+
+                base_mask = (predtk != 255) & (predtk != 201) & (pred_t_tk != 255) & (pred_t_tk != 201)
+                base_mask = base_mask.squeeze(-1)
+
+                inconsis = inconsis & base_mask
+
+                gt_t_tk = backpropFlowNoDup(flow.numpy(), seg_map.numpy().transpose((1, 2, 0)))
+
+
+                iau = intersect_and_union(
+                    gt_t_tk.squeeze(-1), #past frame
+                    seg_map_tk.squeeze(0), #past GT
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    label_map=self.label_map,
+                    indices=indices,
+                    return_mask=False,
+                    custom_mask=inconsis # future and past don't agree
+                )
+
+                intersection, union, _, _ = iau
+                self.cml_intersect["M6Sanity"] += intersection
+                self.cml_union["M6Sanity"] += union
+
+
+
+
+            
+            if "M6B" in metrics:
+                consis = (predtk != pred_t_tk).squeeze(-1) #where past frame doesn't match future frame
+                # breakpoint()
+                consis = consis & base_mask
+
+                iau = intersect_and_union(
+                    predtk.squeeze(-1), #past frame
+                    seg_map_tk.squeeze(0), #past GT
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    label_map=self.label_map,
+                    indices=indices,
+                    return_mask=False,
+                    custom_mask=consis # future and past don't agree
+                )
+
+                intersection, union, _, _ = iau
+                self.cml_intersect["M6B"] += intersection
+                self.cml_union["M6B"] += union
+            
+            if "M7" in metrics:
+                low_conf = predtk_logits.max(axis=-1) < 0.5
+
+                iau = intersect_and_union(
+                    pred_t_tk.squeeze(-1), #future frame
+                    seg_map_tk.squeeze(0), #past GT
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    label_map=self.label_map,
+                    indices=indices,
+                    return_mask=False,
+                    custom_mask=low_conf # future and past don't agree
+                )
+
+                intersection, union, _, _ = iau
+                self.cml_intersect["M7"] += intersection
+                self.cml_union["M7"] += union
+
+                # breakpoint()
+            
+            if "M8" in metrics:
+                pred_t_tk_logits_mask = np.logical_not(np.any(pred_t_tk_logits == 255, axis=-1)) # uses a slightly weak property, that since this is a post SM logit, the only way a value could be 255 is if i put it there.
+                ensemble = ((predtk_logits + pred_t_tk_logits) / 2).argmax(axis=-1)[:, :, None]
+                # breakpoint()
+                # Bug: This isn't accounting for the masked out pixels of pred_t_tk_logits
+
+                iau = intersect_and_union(
+                    ensemble.squeeze(-1),
+                    seg_map_tk.squeeze(0), #past GT
+                    len(self.CLASSES),
+                    self.ignore_index,
+                    label_map=self.label_map,
+                    indices=indices,
+                    return_mask=False,
+                    custom_mask=pred_t_tk_logits_mask
+                )
+
+                intersection, union, _, _ = iau
+                self.cml_intersect["M8"] += intersection
+                self.cml_union["M8"] += union
             
             if "mIoU_gt_pred" in metrics:
                 iau_miou = intersect_and_union(
@@ -577,7 +696,7 @@ class CustomDataset(Dataset):
                 self.cml_union["mIoU"] += union
                 pre_eval_results.append(iau_miou)
 
-            if index % 10 == 0:
+            if index % 50 == 0:
                 self.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
                 # for key in [k for k in metrics if k != "mask_count"]:
                 #     intersection = self.cml_intersect[key]

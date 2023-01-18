@@ -18,4 +18,4 @@ cd ~/flash/Projects/VideoDA/mmsegmentation
 
 set -x
 
-python tools/test.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/configs/segformer/segformer.b5.1024x1024.viper.160k.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/segformer.b5.1024x1024.viper.160k/iter_48000.pth --show-dir work_dirs/sourceModelCache --launcher none
+python tools/test.py ./configs/segformer/segformer.b5.1024x1024.viper.160k.py ./work_dirs/segformer.b5.1024x1024.viper.160k/iter_48000.pth --cache work_dirs/sourceModelCacheLogits --launcher none

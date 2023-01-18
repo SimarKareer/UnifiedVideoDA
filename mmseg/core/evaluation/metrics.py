@@ -243,8 +243,8 @@ def intersect_and_union(pred_label,
         label = label - 1
         label[label == 254] = 255
 
-    pred = torch.tensor(pred_label).view((1080, 1920, 1))
-    gt = torch.tensor(label).view((1080, 1920, 1)).long()
+    # pred = torch.tensor(pred_label).view((1080, 1920, 1))
+    # gt = torch.tensor(label).view((1080, 1920, 1)).long()
     # colored_pred = labelMapToIm(pred, palette_to_id)
     # colored_gt = labelMapToIm(gt, palette_to_id)
     # cv2.imwrite("work_dirs/ims/metricsPred.png", colored_pred.numpy().astype(np.int16))
@@ -252,17 +252,29 @@ def intersect_and_union(pred_label,
     # cv2.imwrite("work_dirs/ims/metricsPred2.png", pred.numpy().astype(np.int16))
     # cv2.imwrite("work_dirs/ims/metricsLabel2.png", gt.numpy().astype(np.int16))
 
+    def ignore_indices(mask):
+        if not isinstance(mask, torch.Tensor):
+            mask = torch.from_numpy(mask)
+        mask = torch.logical_and(mask, pred_label != ignore_index)
+        mask = torch.logical_and(mask, label != ignore_index)
+        mask = torch.logical_and(mask, label != 201)
+        mask = torch.logical_and(mask, pred_label != 201)
+        return mask
+
     if custom_mask is not None:
         mask = custom_mask
     else:
         mask = (label != ignore_index)
-        mask = torch.logical_and(mask, label != 201)
-        mask = torch.logical_and(mask, pred_label != ignore_index)
-        mask = torch.logical_and(mask, pred_label != 201)
+        mask = ignore_indices(mask)
+
+        # mask = torch.logical_and(mask, label != 201)
+        # mask = torch.logical_and(mask, pred_label != ignore_index)
+        # mask = torch.logical_and(mask, pred_label != 201)
     # for ignore in ignore_index:
 
     # print("shape: ", mask.shape, "masked: ", mask.sum())
     # print("before: ", pred_label.shape, label.shape)
+    # breakpoint()
     pred_label = pred_label[mask]
     label = label[mask]
     # print("after: ", pred_label.shape, label.shape)
