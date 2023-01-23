@@ -93,8 +93,6 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=Fals
             mlabel2_1, mask_count = backpropFlowNoDup(flow_tk_t, gt_t, return_mask_count=return_mask_count)
         else:
             mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
-        
-        breakpoint()
     else:
         assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
         assert gt_t is None, "Got a value for gt_t but preds_t_tk is not None.  This is not supported."
@@ -438,11 +436,7 @@ def mean_fscore(results,
         nan_to_num (int, optional): If specified, NaN values will be replaced
             by the numbers defined by the user. Default: None.
         label_map (dict): Mapping old labels to new labels. Default: dict().
-<<<<<<< HEAD
         reduce_zero_label (bool): Wether ignore zero label. Default: False.
-=======
-        reduce_zero_label (bool): Whether ignore zero label. Default: False.
->>>>>>> main
         beta (int): Determines the weight of recall in the combined score.
             Default: False.
 

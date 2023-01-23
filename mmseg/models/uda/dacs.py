@@ -292,7 +292,11 @@ class DACS(UDADecorator):
                       target_img,
                       target_img_metas,
                       rare_class=None,
-                      valid_pseudo_mask=None):
+                      valid_pseudo_mask=None,
+                      flow=None,
+                      imtk=None,
+                      imtk_gt_semantic_seg=None
+                      ):
         """Forward function for training.
 
         Args:
@@ -326,7 +330,6 @@ class DACS(UDADecorator):
 
         self.update_debug_state()
         seg_debug = {}
-
         means, stds = get_mean_std(img_metas, dev)
         strong_parameters = {
             'mix': None,

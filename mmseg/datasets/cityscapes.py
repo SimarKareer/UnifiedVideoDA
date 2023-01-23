@@ -33,17 +33,20 @@ class CityscapesDataset(CustomDataset):
                [0, 80, 100], [0, 0, 230], [119, 11, 32]]
 
     def __init__(self,
-                 crop_pseudo_margins=None,
+                 split,
                  img_suffix='_leftImg8bit.png',
                  seg_map_suffix='_gtFine_labelTrainIds.png',
+                 crop_pseudo_margins=None,
                  **kwargs):
+
         if crop_pseudo_margins is not None:
             assert kwargs['pipeline'][-1]['type'] == 'Collect'
             kwargs['pipeline'][-1]['keys'].append('valid_pseudo_mask')
         super(CityscapesDataset, self).__init__(
-            img_suffix=img_suffix, seg_map_suffix=seg_map_suffix, **kwargs)
+            img_suffix=img_suffix, seg_map_suffix=seg_map_suffix, split=split, **kwargs)
 
-        self.pseudo_margins = crop_pseudo_margins
+        if crop_pseudo_margins:
+            self.pseudo_margins = crop_pseudo_margins
         self.valid_mask_size = [1024, 2048]
 
     def pre_pipeline(self, results):

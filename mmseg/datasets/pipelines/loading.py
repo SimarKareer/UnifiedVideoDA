@@ -4,8 +4,9 @@ import os.path as osp
 
 import mmcv
 import numpy as np
-
+from tools.aggregate_flows.flow.my_utils import loadFlow
 from ..builder import PIPELINES
+import torch
 
 @PIPELINES.register_module()
 class LoadImageFromFile(object):
@@ -57,6 +58,7 @@ class LoadImageFromFile(object):
             filename = osp.join(results['img_prefix'],
                                 results['img_info']['filename'])
         else:
+            # breakpoint()
             filename = results['img_info']['filename']
         img_bytes = self.file_client.get(filename)
         img = mmcv.imfrombytes(
@@ -163,7 +165,16 @@ class LoadFlowFromFile(object):
         pass
 
     def __call__(self, results):
-        flow = loadFlow(osp.join(results['flow_prefix'], results['flow_info']["filename"]))
-        results["flow"] = flow
+        flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
+        # flow = loadFlow(flow_path)
+        # results["flow"] = flow
+        # print("Flow path given: ", flow_path, flow.shape)
+        
+        if "VIPER" in flow_path:
+            flow = torch.zeros(1080, 1920, 2)
+        elif "cityscapes-seq" in flow_path:
+            flow = torch.zeros(1024, 2048, 2)
+        # flow = torch.zeros(2, 1024, 1024)
+        # results["flow"] = flow
 
         return dict(flow=flow)

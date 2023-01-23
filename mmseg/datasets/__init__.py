@@ -26,6 +26,8 @@ from .stare import STAREDataset
 from .voc import PascalVOCDataset
 from .viper import ViperDataset
 from .viperSeq import ViperSeqDataset
+from .cityscapesSeq import CityscapesSeqDataset
+from .seqUtils import SeqUtils
 
 __all__ = [
     'CustomDataset', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
@@ -35,5 +37,5 @@ __all__ = [
     'STAREDataset', 'DarkZurichDataset', 'NightDrivingDataset',
     'COCOStuffDataset', 'LoveDADataset', 'MultiImageMixDataset',
     'iSAIDDataset', 'ISPRSDataset', 'PotsdamDataset', "ViperDataset",
-    "ViperSeqDataset"
+    "ViperSeqDataset", "SeqUtils"
 ]

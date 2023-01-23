@@ -15,6 +15,7 @@ from mmcv.parallel import DataContainer as DC
 
 from . import CityscapesDataset
 from .builder import DATASETS
+from .viperSeq import ViperSeqDataset
 
 
 def get_rcs_class_probs(data_root, temperature):
@@ -102,6 +103,8 @@ class UDADataset(object):
             for i, dic in enumerate(self.source.img_infos):
                 file = dic['ann']['seg_map']
                 if isinstance(self.source, CityscapesDataset):
+                    file = file.split('/')[-1]
+                if isinstance(self.source, ViperSeqDataset):
                     file = file.split('/')[-1]
                 self.file_to_idx[file] = i
 

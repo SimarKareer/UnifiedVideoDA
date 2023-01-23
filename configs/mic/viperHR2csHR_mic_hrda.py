@@ -96,7 +96,7 @@ n_gpus = 1
 gpu_model = 'NVIDIATITANRTX'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=40000, max_keep_ckpts=1)
+checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=1)
 evaluation = dict(interval=4000, metric='mIoU')
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'

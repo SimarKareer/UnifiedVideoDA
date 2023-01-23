@@ -32,7 +32,12 @@ class SeqUtils():
             with open(split) as f:
                 for line in f:
                     img_name = line.strip()
-                    img_name = f"{img_name.split('_')[0]}_{int(img_name.split('_')[1]) - frame_offset:05d}"
+                    number_length = len(img_name.split('_')[-1])
+                    # img_name = f"{img_name.split('_')[0]}_{int(img_name.split('_')[1]) - frame_offset:05d}"
+                    name_split = img_name.split('_')
+                    num = int(name_split[-1]) - frame_offset
+                    prefix = "_".join(name_split[:-1])
+                    img_name = f"{prefix}_{'{num:0{number_length}}'.format(num=num, number_length=number_length)}"
                     img_info = dict(filename=img_name + img_suffix)
                     if ann_dir is not None:
                         seg_map = img_name + seg_map_suffix
@@ -235,9 +240,11 @@ class SeqUtils():
         im, imtk, flows = self.unmerge(ImsAndFlows) # separate out the ims and flows again
         finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
         finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
+        # breakpoint()
         finalFlows = self.pipeline["flow_pipeline"](flows) #add the rest of the flow augs
 
         finalIms["flow"] = finalFlows["img"]
+        # breakpoint()
         finalIms["imtk"] = finalImtk["img"]
         finalIms["imtk_gt_semantic_seg"] = imtk_gt
 
@@ -287,16 +294,22 @@ class SeqUtils():
         # print("2gt sem seg no wrapping: ", finalIms["gt_semantic_seg"][0].shape)
         # print("2gttk sem seg no wrapping: ", finalIms["imtk_gt_semantic_seg"][0].shape)
         if load_tk_gt:
-            finalIms["imtk_gt_semantic_seg"][0] = finalIms["imtk_gt_semantic_seg"][0].squeeze(0) #TODO, I shouldn't have to do this manually
+            finalIms["imtk_gt_semantic_seg"][0] = finalIms["imtk_gt_semantic_seg"][0].squeeze(0).long() #TODO, I shouldn't have to do this manually
         else:
-            finalIms["imtk_gt_semantic_seg"] = [None]
+            finalIms["imtk_gt_semantic_seg"] = [torch.tensor([])]
 
-        finalIms["gt_semantic_seg"][0] = finalIms["gt_semantic_seg"][0].unsqueeze(0) #TODO, I shouldn't have to do this manually
+        finalIms["gt_semantic_seg"][0] = finalIms["gt_semantic_seg"][0].unsqueeze(0).long() #TODO, I shouldn't have to do this manually
 
         # Get rid of list dim for all tensors
-        for k, v in finalIms.items():
-            if isinstance(v, list) and isinstance(v[0], torch.Tensor):
-                finalIms[k] = v[0]
+        # print(finalIms)
+        if self.unpack_list:
+            for k, v in finalIms.items():
+                # print(k, len(k))
+                if isinstance(v, list) and isinstance(v[0], torch.Tensor):
+                    finalIms[k] = v[0]
+                if k == "img_metas":
+                    # print("img_metas", len(v))
+                    finalIms[k] = v[0]
         # finalIms["img_metas"] = [DataContainer([[{}]])]
         
         # print("finalIms2", finalIms)

@@ -34,16 +34,22 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
             **kwargs)
         SeqUtils.__init__(self)
         
+        # breakpoint()
+        self.unpack_list = "train" in split
         # assert(crop_pseudo_margins is not None)
         if crop_pseudo_margins:
             assert kwargs['pipeline']["im_pipeline"][-1]['type'] == 'Collect'
             kwargs['pipeline']["im_pipeline"][-1]['keys'].append('valid_pseudo_mask')
             # if crop_pseudo_margins is not None:
             self.pseudo_margins = crop_pseudo_margins
+        else:
+            self.pseudo_margins = None
 
         self.flow_dir = flow_dir
+        # breakpoint()
         self.past_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
-        self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
+        self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
+        # breakpoint()
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flowv2/train/flow_occ" #TODO Temporary, must fix or will give horrible error
         # self.flow_dir = "/srv/share4/datasets/VIPER_Flow/train/flow"
         self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
@@ -62,6 +68,8 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
 
         for _, label in CSLabels.trainId2label.items():
             self.label_map[label.id] = label.trainId
+        
+        self.label_map = None
         
         # After label map: license plate, road, sidewalk, ...    unlabelled
         #                  -1             0,     1,              255

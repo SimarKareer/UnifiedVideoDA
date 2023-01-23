@@ -89,8 +89,8 @@ def single_gpu_test(model,
                     pre_eval=False,
                     format_only=False,
                     format_args={},
-                    metrics=["mIoU", "pred_pred", "gt_pred"],
-                    sub_metrics=["mask_count", "correct_consis"],
+                    metrics=["mIoU"],
+                    sub_metrics=[],
                     label_space=None,
                     cache=False,
                     use_cache=False
@@ -170,15 +170,16 @@ def single_gpu_test(model,
         logits = True if cache else False
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            # breakpoint()
             result = model(return_loss=False, logits=logits, **refined_data)
             if cache or "pred_pred" in metrics or "M6Sanity" in metrics:
                 refined_data = {"img_metas": data["img_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=logits, **refined_data)
             
-            if label_space != dataset.label_space:
-                result = remap_labels(result, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
-                if result_tk is not None:
-                    result_tk = remap_labels(result_tk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
+            # if label_space != dataset.label_space:
+            #     result = remap_labels(result, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
+            #     if result_tk is not None:
+            #         result_tk = remap_labels(result_tk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
         
         if cache:
             if len(result) > 1:
@@ -251,7 +252,8 @@ def single_gpu_test(model,
         if format_only:
             result = dataset.format_results(
                 result, indices=batch_indices, **format_args)
-        if pre_eval:
+
+        if metrics:
             # TODO: adapt samples_per_gpu > 1.
             # only samples_per_gpu=1 valid now
             # Note: while above result is full preds, here it's just metrics
@@ -262,7 +264,6 @@ def single_gpu_test(model,
             # colored_gt = labelMapToIm(gt, dataset.palette_to_id)
             # cv2.imwrite("work_dirs/ims/a.png", colored_pred.numpy().astype(np.int16))
             # cv2.imwrite("work_dirs/ims/b.png", colored_gt.numpy().astype(np.int16))
-
 
             if "gt_semantic_seg" in data: # Will run the original mmseg style eval if the dataloader doesn't provide ground truth
                 result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=result_tk, metrics=metrics, sub_metrics=sub_metrics)

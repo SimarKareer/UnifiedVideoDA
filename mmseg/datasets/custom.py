@@ -59,6 +59,7 @@ class CustomDataset(Dataset):
         pipeline (list[dict]): Processing pipeline
         img_dir (str): Path to image directory
         img_suffix (str): Suffix of images. Default: '.jpg'
+        label_space: what dataset to use for labels
         ann_dir (str, optional): Path to annotation directory. Default: None
         seg_map_suffix (str): Suffix of segmentation maps. Default: '.png'
         split (str, optional): Split txt file. If split is specified, only
@@ -101,6 +102,7 @@ class CustomDataset(Dataset):
                  classes=None,
                  palette=None,
                  gt_seg_map_loader_cfg=None,
+                #  load_annotations=True
                 #  file_client_args=dict(backend='disk')
                  ):
         if isinstance(pipeline, dict) or isinstance(pipeline, mmcv.utils.config.ConfigDict):
@@ -145,9 +147,10 @@ class CustomDataset(Dataset):
                 self.split = osp.join(self.data_root, self.split)
 
         # load annotations
+        # if load_annotations:
         self.img_infos = self.load_annotations(self.img_dir, self.img_suffix,
-                                               self.ann_dir,
-                                               self.seg_map_suffix, self.split)
+                                            self.ann_dir,
+                                            self.seg_map_suffix, self.split)
         
         self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
         self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]}
