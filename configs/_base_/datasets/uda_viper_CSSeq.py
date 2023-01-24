@@ -27,7 +27,7 @@ gta_train_pipeline = {
         dict(type='LoadImageFromFile'),
     ],
     "load_flow_pipeline": [
-        dict(type='LoadFlowFromFile'),
+        dict(type='LoadFlowFromFileStub'),
     ],
     "shared_pipeline": [
         dict(type='Resize', img_scale=(2560, 1440)),
@@ -156,7 +156,7 @@ data = dict(
             split='splits/train.txt',
             pipeline=gta_train_pipeline,
             frame_offset=1,
-            flow_dir="/srv/share4/datasets/VIPER_Flowv3/val/flow_occ"
+            flow_dir="/srv/share4/datasets/VIPER_Flowv3/train/flow"
         ),
         target=dict(
             type='CityscapesSeqDataset',

@@ -107,6 +107,8 @@ class UDADataset(object):
                 if isinstance(self.source, ViperSeqDataset):
                     file = file.split('/')[-1]
                 self.file_to_idx[file] = i
+        
+        print("Finished INIT UDA_DATASET")
 
     def synchronized_crop(self, s1, s2):
         if self.sync_crop_size is None:
@@ -141,7 +143,6 @@ class UDADataset(object):
                 s1 = self.source[i1]
         i2 = np.random.choice(range(len(self.target)))
         s2 = self.target[i2]
-
         # Before synchronized_crop(), s1 and s2 are cropped independently from
         # the entire image when calling s1=self.source[i1] and
         # s2=self.target[i2]. This corresponds to the original implementation
@@ -155,7 +156,7 @@ class UDADataset(object):
         s1, s2 = self.synchronized_crop(s1, s2)
         out = {
             **s1, 'target_img_metas': s2['img_metas'],
-            'target_img': s2['img']
+            'target_img': s2['img'], "target_flow": s2["flow"]
         }
         if 'valid_pseudo_mask' in s2:
             out['valid_pseudo_mask'] = s2['valid_pseudo_mask']

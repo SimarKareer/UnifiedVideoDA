@@ -294,6 +294,7 @@ class DACS(UDADecorator):
                       rare_class=None,
                       valid_pseudo_mask=None,
                       flow=None,
+                      target_flow=None,
                       imtk=None,
                       imtk_gt_semantic_seg=None
                       ):

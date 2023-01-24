@@ -1,8 +1,11 @@
 import math
+import cv2
 import tools.aggregate_flows.flow.png as png
 import struct
 import array
 import numpy as np
+# from torchvision.io import read_image
+import matplotlib.pyplot as plt
 
 from tools.aggregate_flows.flow.util import *
 
@@ -80,6 +83,18 @@ def ReadKittiPngFile(path):
     png_reader.close()
 
     return (width, height, u, v, mask)
+
+def loadFlowVec(path):
+    im = cv2.imread(path, -1)
+    mask = im[:, :, 0]
+
+    mask = np.logical_not(mask.astype(np.bool))
+    im = im[:, :, [2, 1]].astype(np.float64)
+    im = (im- 2**15)/64.0
+    im[mask] = 0
+
+    return im
+
 
 
 def WriteMiddleburyFloFile(path, width, height, u, v, mask=None):

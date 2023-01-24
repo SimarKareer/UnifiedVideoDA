@@ -54,3 +54,7 @@ class ViperSeqDataset(SeqUtils, ViperDataset):
         self.label_space = "viper"
         
         # print("HRDA mapping: ", self.cs_to_viper)
+
+    # def __getitem__(self, idx):
+    #     print("ViperSeqDataset __getitem__")
+    #     super().__getitem__(idx)

@@ -58,7 +58,7 @@ def imshow(img, scale=1):
     out_dim = out_dim[out_dim > 3] * scale
     out_dim = out_dim.astype(np.int)
     print(out_dim)
-    img = cv2.resize(img, out_dim[[1, 0]])
+    img = cv2.resize(img, tuple(out_dim[[1, 0]]))
     # img = img[::2, ::2]
     # img = np.resize(img, out_dim)
     
@@ -76,13 +76,13 @@ def loadFlow(im_path):
     im = cv2.imread(im_path)
     flow = ReadKittiPngFile(im_path)
     w, h, u, v, mask = ReadKittiPngFile(im_path)
-    
+
     u = np.array(u).reshape((h, w))
     v = np.array(v).reshape((h, w))
     mask = np.array(mask).reshape((h, w))
     # print(np.logical_and((u==v), u!=0).sum())
     # print(np.logical_and((u!=v), u!=0).sum())
-    
+
     flow = np.concatenate((u[None, :, :], v[None, :, :]), axis=0)
     flow[:, np.logical_not(mask.astype(np.bool))] = 0
 

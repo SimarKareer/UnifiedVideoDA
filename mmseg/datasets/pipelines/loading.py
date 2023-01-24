@@ -5,6 +5,7 @@ import os.path as osp
 import mmcv
 import numpy as np
 from tools.aggregate_flows.flow.my_utils import loadFlow
+from tools.aggregate_flows.flow.util_flow import loadFlowVec
 from ..builder import PIPELINES
 import torch
 
@@ -166,9 +167,25 @@ class LoadFlowFromFile(object):
 
     def __call__(self, results):
         flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
+        flow = loadFlowVec(flow_path)
+        results["flow"] = flow
+        # print("Flow path given: ", flow_path, flow.shape)
+
+        return dict(flow=flow)
+
+
+@PIPELINES.register_module()
+class LoadFlowFromFileStub(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, results):
+        flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
         # flow = loadFlow(flow_path)
         # results["flow"] = flow
         # print("Flow path given: ", flow_path, flow.shape)
+        # print("flow path: ", flow_path)
+        # breakpoint()
         
         if "VIPER" in flow_path:
             flow = torch.zeros(1080, 1920, 2)
@@ -178,3 +195,4 @@ class LoadFlowFromFile(object):
         # results["flow"] = flow
 
         return dict(flow=flow)
+

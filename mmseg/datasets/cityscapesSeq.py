@@ -73,4 +73,6 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
         
         # After label map: license plate, road, sidewalk, ...    unlabelled
         #                  -1             0,     1,              255
-        
+    # def __getitem__(self, idx):
+    #     print("CityscapesSeq __getitem__")
+    #     super().__getitem__(idx)

@@ -3,7 +3,7 @@
 
 # yapf:disable
 log_config = dict(
-    interval=50,
+    interval=5,
     img_interval=1000,
     hooks=[
         dict(type='TextLoggerHook', by_epoch=False),
