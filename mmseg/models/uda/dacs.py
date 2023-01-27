@@ -38,7 +38,10 @@ from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
                                                 get_mean_std, strong_transform)
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg
 from mmseg.utils.utils import downscale_label_ratio
-
+from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
+import torchvision
+from torchvision.utils import save_image
+import cv2
 
 def _params_equal(ema_model, model):
     for ema_param, param in zip(ema_model.named_parameters(),
@@ -73,6 +76,7 @@ class DACS(UDADecorator):
         self.psweight_ignore_top = cfg['pseudo_weight_ignore_top']
         self.psweight_ignore_bottom = cfg['pseudo_weight_ignore_bottom']
         self.fdist_lambda = cfg['imnet_feature_dist_lambda']
+        self.l_warp_lambda = cfg['l_warp_lambda']
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
         self.enable_fdist = self.fdist_lambda > 0
@@ -284,6 +288,13 @@ class DACS(UDADecorator):
         if valid_pseudo_mask is not None:
             pseudo_weight *= valid_pseudo_mask.squeeze(1)
         return pseudo_weight
+    
+    def save_image_grid(self, images, path):
+        grid = torchvision.utils.make_grid(images, nrow=4)
+        # grid = grid.permute(1, 2, 0)
+        grid = grid.cpu().numpy()
+        grid = (grid * 255).astype(np.uint8)
+        cv2.imwrite(path, grid)
 
     def forward_train(self,
                       img,
@@ -296,7 +307,8 @@ class DACS(UDADecorator):
                       flow=None,
                       target_flow=None,
                       imtk=None,
-                      imtk_gt_semantic_seg=None
+                      imtk_gt_semantic_seg=None,
+                      target_img_extra=None
                       ):
         """Forward function for training.
 
@@ -316,6 +328,24 @@ class DACS(UDADecorator):
         log_vars = {}
         batch_size = img.shape[0]
         dev = img.device
+
+        DEBUG = False
+
+        if DEBUG:
+            rows, cols = 5, 5
+            fig, axs = plt.subplots(
+                rows,
+                cols,
+                figsize=(3 * cols, 3 * rows),
+                gridspec_kw={
+                    'hspace': 0.1,
+                    'wspace': 0,
+                    'top': 0.95,
+                    'bottom': 0,
+                    'right': 1,
+                    'left': 0
+                },
+            )
 
         # Init/update ema model
         if self.local_iter == 0:
@@ -395,6 +425,59 @@ class DACS(UDADecorator):
             pseudo_weight = self.filter_valid_pseudo_region(
                 pseudo_weight, valid_pseudo_mask)
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
+
+            # TODO: forward train on imt-k, same PL -> t-k
+            # should look at im t-k, and imt -> t-k
+            # save_image(target_img_extra["imtk"][0], "work_dirs/debugViperCS/imtk.png")
+            # futureim = target_img[0]
+            # save_image(futureim, "work_dirs/debugViperCS/futureim.png")
+            # futureim = futureim.cpu().numpy().transpose(1, 2, 0)
+            # flow = target_img_extra["flow"][0].cpu().numpy().transpose(1, 2, 0)
+            # im_t_tk, mask = backpropFlowNoDup(flow, futureim, return_mask=True)
+            # im_t_tk = torch.from_numpy(im_t_tk).permute(2, 0, 1)
+            # save_image(im_t_tk, "work_dirs/debugViperCS/im_t_tk.png")
+            
+            log_vars["L_warp"] = 0
+            # breakpoint()
+            if self.local_iter > 1500:
+
+                pseudo_label_tk_t = pseudo_label.clone()
+                pseudo_weight_tk_t = []
+                for i in range(batch_size):
+                    flowi = target_img_extra["flow"][i].cpu().numpy().transpose(1, 2, 0)
+                    pli = pseudo_label[[i]].cpu().numpy().transpose(1, 2, 0)
+                    
+                    pltki, pseudo_weight_i = backpropFlowNoDup(flowi, pli, return_mask=True)
+                    pltki = torch.from_numpy(pltki).permute((2, 0, 1))
+
+                    pseudo_weight_tk_t.append(torch.from_numpy(pseudo_weight_i).to(dev))
+                    pseudo_label_tk_t[i] = pltki[0]
+                pseudo_weight_tk_t = torch.stack(pseudo_weight_tk_t)
+                
+                if DEBUG:
+                    subplotimg(axs[0][0], target_img_extra["imtk"][0], 'Imtk batch 0')
+                    subplotimg(axs[0][1], pseudo_label_tk_t[0], 'PL Warped', cmap="cityscapes")
+                    subplotimg(axs[0][2], pseudo_label[0], 'PL Plain', cmap="cityscapes")
+                    subplotimg(axs[0][3], pseudo_weight_tk_t[[0]].repeat(3, 1, 1) * 255, 'Mask')
+
+                    plt.savefig("work_dirs/debugViperCS/debug.png")
+                    plt.close()
+                
+                # breakpoint()
+
+                B, C, H, W = target_img_extra["imtk"].shape
+                warped_pl_losses = self.get_model().forward_train(
+                    target_img_extra["imtk"],
+                    target_img_extra["img_metas"],
+                    pseudo_label_tk_t.view(B, 1, H, W),
+                    seg_weight=pseudo_weight_tk_t
+                )
+                warped_pl_loss, warped_pl_log_vars = self._parse_losses(warped_pl_losses)
+                warped_pl_loss = warped_pl_loss * self.l_warp_lambda
+                log_vars["L_warp"] = warped_pl_log_vars["loss"]
+
+                warped_pl_loss.backward()
+            
 
             # Apply mixing
             mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size

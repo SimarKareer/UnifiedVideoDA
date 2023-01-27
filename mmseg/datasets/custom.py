@@ -151,7 +151,10 @@ class CustomDataset(Dataset):
         self.img_infos = self.load_annotations(self.img_dir, self.img_suffix,
                                             self.ann_dir,
                                             self.seg_map_suffix, self.split)
-        
+
+        self.init_cml_metrics()
+
+    def init_cml_metrics(self):
         self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
         self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]}
         self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}

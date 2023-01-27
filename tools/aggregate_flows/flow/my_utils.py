@@ -201,7 +201,7 @@ def backpropFlow(flow, im):
     # print("output flow: ", output_flow)
     return np.transpose(output_im, (1, 2, 0))
 
-def backpropFlowNoDup(flow, im_orig, return_mask_count=False):
+def backpropFlowNoDup(flow, im_orig, return_mask_count=False, return_mask=False):
     """
     returns im t+k backpropped as if it was im t
     flow: H, W, 2
@@ -211,6 +211,7 @@ def backpropFlowNoDup(flow, im_orig, return_mask_count=False):
 
     assert(flow.shape[:2] == im.shape[:2])
     H, W, _ = flow.shape
+    mask = np.ones(flow.shape[:2])
     # TODO: this should dynamically crop off the bottom % of the image, not just >= 920
     flow[920:, :, :] = 0
     flow = np.transpose(flow, (2, 0, 1))
@@ -222,7 +223,7 @@ def backpropFlowNoDup(flow, im_orig, return_mask_count=False):
 
     flow[:, indices[0] > 920] = 0
     flow[:, indices[0] < 0] = 0
-    flow[:, indices[1] >= 1920] = 0
+    flow[:, indices[1] >= H] = 0
     flow[:, indices[1] < 0] = 0
 
     indices[0] = np.arange(flow.shape[1])[:, None] + flow[1]
@@ -243,12 +244,25 @@ def backpropFlowNoDup(flow, im_orig, return_mask_count=False):
     im[:, mask_indices[0], mask_indices[1]] = 255 #np.array([255, 192, 203]).reshape(3, 1)
 
     output_im = im[:, indices[0], indices[1]].reshape(-1, H, W)
-
     output_im[:, np.all(flow==0, axis=0)] = 255
-    if not return_mask_count:
-        return np.transpose(output_im, (1, 2, 0))
-    else:
-        return np.transpose(output_im, (1, 2, 0)), mask_count
+
+    # mask[mask_indices[0], mask_indices[1]] = 0
+    # mask[np.all(flow==0, axis=0)] = 0
+
+
+    to_return = [np.transpose(output_im, (1, 2, 0))]
+
+
+    if return_mask_count:
+        to_return.append(mask_count)
+    
+    if return_mask:
+        if (output_im == 255).shape[0] != 1:
+            assert False, "return mask not implemented for images with multiple channels"
+        mask = (output_im != 255).squeeze(0)
+        to_return.append(mask)
+    
+    return to_return[0] if len(to_return) == 1 else tuple(to_return)
 
 def backpropFlowFilter2(flow, im2, thresh):
     """

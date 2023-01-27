@@ -3,11 +3,22 @@
 
 # yapf:disable
 log_config = dict(
-    interval=5,
+    interval=50,
     img_interval=1000,
     hooks=[
         dict(type='TextLoggerHook', by_epoch=False),
         # dict(type='TensorboardLoggerHook')
+        dict(
+            type='MMSegWandbHook',
+            init_kwargs={
+                'entity': "video-da",
+                'project': "Lwarp"
+            },
+            interval=50,
+            log_checkpoint=True,
+            log_checkpoint_metadata=True,
+            num_eval_images=0,
+        )
     ])
 # yapf:enable
 dist_params = dict(backend='nccl')

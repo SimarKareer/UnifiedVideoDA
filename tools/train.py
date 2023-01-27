@@ -14,7 +14,7 @@ import time
 
 import mmcv
 import torch
-from mmcv.runner import init_dist
+from mmcv.runner import init_dist, _load_checkpoint, load_state_dict
 from mmcv.utils import Config, DictAction, get_git_hash
 
 from mmseg import __version__
@@ -68,6 +68,66 @@ def parse_args(args):
 
     return args
 
+def load_checkpoint(model,
+                    filename,
+                    map_location=None,
+                    strict=False,
+                    logger=None,
+                    revise_keys=[(r'^module\.', '')]):
+    """Load checkpoint from a file or URI.
+
+    Args:
+        model (Module): Module to load checkpoint.
+        filename (str): Accept local filepath, URL, ``torchvision://xxx``,
+            ``open-mmlab://xxx``. Please refer to ``docs/model_zoo.md`` for
+            details.
+        map_location (str): Same as :func:`torch.load`.
+        strict (bool): Whether to allow different params for the model and
+            checkpoint.
+        logger (:mod:`logging.Logger` or None): The logger for error message.
+        revise_keys (list): A list of customized keywords to modify the
+            state_dict in checkpoint. Each item is a (pattern, replacement)
+            pair of the regular expression operations. Default: strip
+            the prefix 'module.' by [(r'^module\\.', '')].
+
+
+    Returns:
+        dict or OrderedDict: The loaded checkpoint.
+    """
+    checkpoint = _load_checkpoint(filename, map_location, logger)
+    # OrderedDict is a subclass of dict
+    if not isinstance(checkpoint, dict):
+        raise RuntimeError(
+            f'No state_dict found in checkpoint file {filename}')
+    # get state_dict from checkpoint
+    if 'state_dict' in checkpoint:
+        state_dict = checkpoint['state_dict']
+    else:
+        state_dict = checkpoint
+    # strip prefix of state_dict
+
+    revise_dict = {
+        "ema_backbone": "ema_model.backbone",
+        "imnet_backbone": 'imnet_model.backbone',
+        "decode_head": "model.decode_head",
+        "imnet_decode_head": "imnet_model.decode_head",
+        "backbone": "model.backbone",
+        "ema_decode_head": "ema_model.decode_head",
+    }
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        for old_name, new_name in revise_dict.items():
+            if old_name in k:
+                k = k.replace(old_name, new_name)
+                break
+        new_state_dict[k] = v
+        # state_dict = {re.sub(p, r, k): v for k, v in state_dict.items()}
+
+    # load state_dict
+    load_state_dict(model, state_dict, strict, logger)
+
+
+    return checkpoint
 
 def main(args):
     args = parse_args(args)
@@ -90,7 +150,7 @@ def main(args):
     cfg.model.train_cfg.work_dir = cfg.work_dir
     cfg.model.train_cfg.log_config = cfg.log_config
     if args.load_from is not None:
-        cfg.load_from = args.load_from
+        assert False, "Not supported any more, use the python config to set load_from"
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
     if args.gpu_ids is not None:
@@ -146,6 +206,19 @@ def main(args):
     model = build_train_model(
         cfg, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
     model.init_weights()
+
+    print("LOADED A CHECKPOINT")
+    # breakpoint()
+    # model.backbone.patch_embed1.proj.weight vs backbone.patch_embed1.proj.weight
+    # ema_model.backbone.patch_embed3.proj.bias vs ema_backbone.block3.34.attn.norm.bias
+    # imnet_model.backbone.block3.26.norm1.weight vs imnet_backbone.block1.1.norm1.bias
+    # ? vs imnet_decode_head.scale_attention.fuse_layer.bn.weight
+    if cfg.load_from:
+        checkpoint = load_checkpoint(
+            model,
+            # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
+            cfg.load_from,
+            map_location='cpu')
 
     logger.info(model)
 

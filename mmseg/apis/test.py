@@ -142,6 +142,7 @@ def single_gpu_test(model,
     model.eval()
     results = []
     dataset = data_loader.dataset
+    dataset.init_cml_metrics()
     prog_bar = mmcv.ProgressBar(len(dataset))
     # The pipeline about how the data_loader retrieval samples from dataset:
     # sampler -> batch_sampler -> indices
@@ -165,7 +166,10 @@ def single_gpu_test(model,
 
         return
 
+    it = 0
+
     for batch_indices, data in zip(loader_indices, data_loader):
+        it += 1
         result_tk = None
         logits = True if cache else False
         with torch.no_grad():

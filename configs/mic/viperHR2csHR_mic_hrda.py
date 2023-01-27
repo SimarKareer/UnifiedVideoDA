@@ -16,6 +16,7 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
+# load_from = "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -81,6 +82,7 @@ uda = dict(
     mask_lambda=1,
     # Use random patch masking with a patch size of 64x64
     # and a mask ratio of 0.7
+    l_warp_lambda=1,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True))
 # Optimizer Hyperparameters
