@@ -1,0 +1,6 @@
+[submodule "submodules/mmcv-1.3.7"]
+	path = submodules/mmcv-1.3.7
+	url = git@github.com:SimarKareer/mmcv-1.3.7.git
+[submodule "submodules/mmcv"]
+	path = submodules/mmcv
+	url = git@github.com:SimarKareer/mmcv.git

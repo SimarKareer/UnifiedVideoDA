@@ -347,6 +347,9 @@ class DACS(UDADecorator):
                 },
             )
 
+        # if self.local_iter % 5 == 0:
+        #     for i in range(torch.cuda.device_count()):
+        #         print(torch.cuda.memory_summary(i))
         # Init/update ema model
         if self.local_iter == 0:
             self._init_ema_weights()

@@ -130,6 +130,7 @@ def load_checkpoint(model,
     return checkpoint
 
 def main(args):
+    print("RUNNING TRAIN.PY")
     args = parse_args(args)
 
     cfg = Config.fromfile(args.config)
@@ -156,18 +157,22 @@ def main(args):
     if args.gpu_ids is not None:
         cfg.gpu_ids = args.gpu_ids
     else:
-        cfg.gpu_ids = range(1) if args.gpus is None else range(args.gpus)
+        cfg.gpu_ids = range(1) if cfg.n_gpus is None else range(cfg.n_gpus)
 
     # init distributed env first, since logger depends on the dist info.
     if cfg.launcher == 'none':
         distributed = False
     else:
         distributed = True
+        # breakpoint()
         init_dist(cfg.launcher, **cfg.dist_params)
+    # breakpoint()
+    print("FINISHED INIT DIST")
 
     # create work_dir
     mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
     # dump config
+    cfg.dump("config.py")
     cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))
     # snapshot source code
     # gen_code_archive(cfg.work_dir)

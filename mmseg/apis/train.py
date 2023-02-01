@@ -103,46 +103,47 @@ def train_segmentor(model,
             drop_last=True) for ds in dataset
     ]
 
+
     # put model on gpus
     # breakpoint()
-    if distributed:
-        print("DEVICE COUNT: ", torch.cuda.device_count())
-        print("LOCAL RANK: ", os.environ["LOCAL_RANK"])
-        find_unused_parameters = cfg.get('find_unused_parameters', False)
-        use_ddp_wrapper = cfg.get('use_ddp_wrapper', False)
-        # Sets the `find_unused_parameters` parameter in
-        # torch.nn.parallel.DistributedDataParallel
-        device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
-        torch.cuda.set_device(device)
-        model=model.to(device)
-
-
-        mmcv.print_log('Use DDP Wrapper.', 'mmseg')
-        model = DistributedDataParallelWrapper(
-            model, device_ids=[device], output_device=device
-        )
-
     # if distributed:
+    #     print("DEVICE COUNT: ", torch.cuda.device_count())
+    #     print("LOCAL RANK: ", os.environ["LOCAL_RANK"])
     #     find_unused_parameters = cfg.get('find_unused_parameters', False)
     #     use_ddp_wrapper = cfg.get('use_ddp_wrapper', False)
     #     # Sets the `find_unused_parameters` parameter in
     #     # torch.nn.parallel.DistributedDataParallel
-    #     if use_ddp_wrapper:
-    #         mmcv.print_log('Use DDP Wrapper.', 'mmseg')
-    #         model = DistributedDataParallelWrapper(
-    #             model.cuda(),
-    #             device_ids=[torch.cuda.current_device()],
-    #             broadcast_buffers=False,
-    #             find_unused_parameters=find_unused_parameters)
-    #     else:
-    #         model = MMDistributedDataParallel(
-    #             model.cuda(),
-    #             device_ids=[torch.cuda.current_device()],
-    #             broadcast_buffers=False,
-    #             find_unused_parameters=find_unused_parameters)
-    # else:
-    #     model = MMDataParallel(
-    #         model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
+    #     device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
+    #     torch.cuda.set_device(device)
+    #     model=model.to(device)
+
+
+    #     mmcv.print_log('Use DDP Wrapper.', 'mmseg')
+    #     model = DistributedDataParallelWrapper(
+    #         model, device_ids=[device], output_device=device
+    #     )
+
+    if distributed:
+        find_unused_parameters = cfg.get('find_unused_parameters', False)
+        use_ddp_wrapper = cfg.get('use_ddp_wrapper', False)
+        # Sets the `find_unused_parameters` parameter in
+        # torch.nn.parallel.DistributedDataParallel
+        if use_ddp_wrapper:
+            mmcv.print_log('Use DDP Wrapper.', 'mmseg')
+            model = DistributedDataParallelWrapper(
+                model.cuda(),
+                device_ids=[torch.cuda.current_device()],
+                broadcast_buffers=False,
+                find_unused_parameters=find_unused_parameters)
+        else:
+            model = MMDistributedDataParallel(
+                model.cuda(),
+                device_ids=[torch.cuda.current_device()],
+                broadcast_buffers=False,
+                find_unused_parameters=find_unused_parameters)
+    else:
+        model = MMDataParallel(
+            model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
 
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)
