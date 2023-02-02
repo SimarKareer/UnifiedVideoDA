@@ -442,7 +442,7 @@ class DACS(UDADecorator):
             
             log_vars["L_warp"] = 0
             # breakpoint()
-            if self.local_iter > 1500:
+            if self.local_iter > 1500 and self.l_warp_lambda != 0:
 
                 pseudo_label_tk_t = pseudo_label.clone()
                 pseudo_weight_tk_t = []

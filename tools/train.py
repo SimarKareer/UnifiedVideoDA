@@ -62,6 +62,8 @@ def parse_args(args):
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
+    parser.add_argument('--lr', type=float, default=0.0)
+    parser.add_argument('--l-warp-lambda', type=int, default=0)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -166,13 +168,24 @@ def main(args):
         distributed = True
         # breakpoint()
         init_dist(cfg.launcher, **cfg.dist_params)
+    
+    # breakpoint()
+    if args.lr is not None:
+        print("Overwriting LR to ", args.lr)
+        cfg.optimizer.lr = args.lr
+
+    if args.l_warp_lambda is not None:
+        print("Overwriting l_warp_lambda to ", args.l_warp_lambda)
+        cfg.uda.l_warp_lambda = args.l_warp_lambda
+
+
     # breakpoint()
     print("FINISHED INIT DIST")
 
     # create work_dir
     mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
     # dump config
-    cfg.dump("config.py")
+    # cfg.dump("config.py")
     cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))
     # snapshot source code
     # gen_code_archive(cfg.work_dir)
@@ -212,7 +225,6 @@ def main(args):
         cfg, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
     model.init_weights()
 
-    print("LOADED A CHECKPOINT")
     # breakpoint()
     # model.backbone.patch_embed1.proj.weight vs backbone.patch_embed1.proj.weight
     # ema_model.backbone.patch_embed3.proj.bias vs ema_backbone.block3.34.attn.norm.bias
@@ -224,6 +236,8 @@ def main(args):
             # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
             cfg.load_from,
             map_location='cpu')
+        print("LOADED A CHECKPOINT")
+        
 
     logger.info(model)
 

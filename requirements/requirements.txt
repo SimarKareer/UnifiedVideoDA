@@ -22,3 +22,4 @@ tqdm==4.48.2
 typing-extensions==3.7.4.3
 wcwidth==0.2.5
 yapf==0.31.0
+wandb

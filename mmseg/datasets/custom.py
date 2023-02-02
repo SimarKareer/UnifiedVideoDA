@@ -702,8 +702,7 @@ class CustomDataset(Dataset):
                 self.cml_intersect["mIoU"] += intersection
                 self.cml_union["mIoU"] += union
                 pre_eval_results.append(iau_miou)
-
-            if index % 50 == 0:
+            if index % 499 == 0:
                 self.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
                 # for key in [k for k in metrics if k != "mask_count"]:
                 #     intersection = self.cml_intersect[key]

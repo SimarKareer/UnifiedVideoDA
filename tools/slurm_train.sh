@@ -9,8 +9,6 @@ GPUS=${GPUS:-4}
 GPUS_PER_NODE=${GPUS_PER_NODE:-4}
 CPUS_PER_TASK=${CPUS_PER_TASK:-5}
 SRUN_ARGS=""
-# PY_ARGS=${@:4}
-# export MASTER_ADDR=$(srun --ntasks=1 hostname 2>&1 | tail -n1)
 
 PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
 srun -p ${PARTITION} \
@@ -20,6 +18,6 @@ srun -p ${PARTITION} \
     --ntasks-per-node=${GPUS_PER_NODE} \
     --cpus-per-task=${CPUS_PER_TASK} \
     --kill-on-bad-exit=1 \
-    --constraint="a40|rtx_6000" \
-    --exclude="clippy" \
+    --constraint="a40" \
+    --exclude="clippy,xaea-12" \
     python -u tools/train.py ${CONFIG} --launcher="slurm"
