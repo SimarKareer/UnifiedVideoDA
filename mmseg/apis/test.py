@@ -283,8 +283,81 @@ def single_gpu_test(model,
             prog_bar.update()
     return results
 
-
 def multi_gpu_test(model,
+                   data_loader,
+                   tmpdir=None,
+                   gpu_collect=False,
+                   efficient_test=False,
+                   pre_eval=False,
+                   format_only=False,
+                   format_args={},
+                   metrics=["mIoU"],
+                   sub_metrics=[]):
+    """Updated multi_gpu_test for multiframe / flow loaders"""
+    breakpoint()
+
+    if efficient_test:
+        warnings.warn(
+            'DeprecationWarning: ``efficient_test`` will be deprecated, the '
+            'evaluation is CPU memory friendly with pre_eval=True')
+        mmcv.mkdir_or_exist('.efficient_test')
+    # when none of them is set true, return segmentation results as
+    # a list of np.array.
+    assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
+        '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
+        'exclusive, only one of them could be true .'
+
+    model.eval()
+    results = []
+    dataset = data_loader.dataset
+    dataset.init_cml_metrics()
+    # The pipeline about how the data_loader retrieval samples from dataset:
+    # sampler -> batch_sampler -> indices
+    # The indices are passed to dataset_fetcher to get data from dataset.
+    # data_fetcher -> collate_fn(dataset[index]) -> data_sample
+    # we use batch_sampler to get correct data idx
+
+    # batch_sampler based on DistributedSampler, the indices only point to data
+    # samples of related machine.
+    loader_indices = data_loader.batch_sampler
+
+    rank, world_size = get_dist_info()
+    if rank == 0:
+        prog_bar = mmcv.ProgressBar(len(dataset))
+
+    it = 0
+    for batch_indices, data in zip(loader_indices, data_loader):
+        with torch.no_grad():
+            refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            result = model(return_loss=False, logits=False, **refined_data)
+
+        if metrics:
+            assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
+            # TODO: adapt samples_per_gpu > 1.
+            # only samples_per_gpu=1 valid now
+            result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=None, metrics=metrics, sub_metrics=sub_metrics)
+            
+
+        results.extend(result)
+
+        if rank == 0:
+            batch_size = len(result) * world_size
+            for _ in range(batch_size):
+                prog_bar.update()
+        
+        it += 1
+        if it == 2:
+            break
+
+    # collect results from all ranks
+    if gpu_collect:
+        results = collect_results_gpu(results, len(dataset))
+    else:
+        results = collect_results_cpu(results, len(dataset), tmpdir)
+    return results
+
+
+def multi_gpu_test_old(model,
                    data_loader,
                    tmpdir=None,
                    gpu_collect=False,

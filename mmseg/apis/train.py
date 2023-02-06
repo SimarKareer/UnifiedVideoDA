@@ -185,12 +185,12 @@ def train_segmentor(model,
             val_dataset,
             samples_per_gpu=1,
             workers_per_gpu=cfg.data.workers_per_gpu,
-            dist=False,
+            dist=distributed,
             shuffle=False)
         eval_cfg = cfg.get('evaluation', {})
         eval_cfg['by_epoch'] = cfg.runner['type'] != 'IterBasedRunner'
-        # eval_hook = DistEvalHook if distributed else EvalHook
-        eval_hook = EvalHook
+        eval_hook = DistEvalHook if distributed else EvalHook
+        # eval_hook = EvalHook
         runner.register_hook(eval_hook(val_dataloader, **eval_cfg))
 
     if cfg.resume_from:
