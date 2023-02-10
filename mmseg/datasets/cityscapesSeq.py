@@ -30,7 +30,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
             img_suffix=img_suffix,
             seg_map_suffix=seg_map_suffix,
             crop_pseudo_margins=None,
-            # load_annotations=True,
+            load_annotations=False,
             **kwargs)
         SeqUtils.__init__(self)
         
@@ -46,14 +46,12 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
             self.pseudo_margins = None
 
         self.flow_dir = flow_dir
-        # breakpoint()
-        self.past_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
-        self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
-        # breakpoint()
-        # self.flow_dir = "/srv/share4/datasets/VIPER_Flowv2/train/flow_occ" #TODO Temporary, must fix or will give horrible error
-        # self.flow_dir = "/srv/share4/datasets/VIPER_Flow/train/flow"
+        self.fut_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=-1)
+        self.img_infos = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
+        self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
+
+
         self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
-        # breakpoint()
 
         
         viperClasses = ("unlabeled", "ambiguous", "sky","road","sidewalk","railtrack","terrain","tree","vegetation","building","infrastructure","fence","billboard","traffic light","traffic sign","mobilebarrier","firehydrant","chair","trash","trashcan","person","animal","bicycle","motorcycle","car","van","bus","truck","trailer","train","plane","boat")

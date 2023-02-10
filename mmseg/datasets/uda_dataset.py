@@ -154,12 +154,15 @@ class UDADataset(object):
         # match. Therefore, we use synchronized cropping, where the same
         # subcrop region is applied to s1 and s2.
         s1, s2 = self.synchronized_crop(s1, s2)
+        out = {k: v for k, v in s1.items()}
+        for k, v in s2.items():
+            out["target_" + k] = v
         out = {
             **s1, 'target_img_metas': s2['img_metas'],
             'target_img': s2['img'], "target_img_extra": s2
         }
-        if 'valid_pseudo_mask' in s2:
-            out['valid_pseudo_mask'] = s2['valid_pseudo_mask']
+        # if 'valid_pseudo_mask' in s2:
+        #     out['valid_pseudo_mask'] = s2['valid_pseudo_mask']
         return out
 
     def __getitem__(self, idx):
@@ -173,8 +176,11 @@ class UDADataset(object):
                 **s1, 'target_img_metas': s2['img_metas'],
                 'target_img': s2['img']
             }
-            if 'valid_pseudo_mask' in s2:
-                out['valid_pseudo_mask'] = s2['valid_pseudo_mask']
+            # out = {k: v for k, v in s1.items()}
+            # for k, v in s2.items():
+            #     out["target_" + k] = v
+            # if 'valid_pseudo_mask' in s2:
+            #     out['valid_pseudo_mask'] = s2['valid_pseudo_mask']
             return out
 
     def __len__(self):

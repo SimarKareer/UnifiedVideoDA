@@ -22,13 +22,15 @@ class ViperSeqDataset(SeqUtils, ViperDataset):
             split=split,
             img_suffix=img_suffix,
             seg_map_suffix=seg_map_suffix,
-            # load_annotations=False,
+            load_annotations=False,
             **kwargs)
         SeqUtils.__init__(self)
         
         self.flow_dir = flow_dir
-        self.past_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
-        self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=frame_offset)
+        self.fut_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=-1)
+        self.img_infos = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
+        self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
+
 
         self.unpack_list = "train" in split
 

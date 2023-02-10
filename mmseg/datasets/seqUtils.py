@@ -74,9 +74,9 @@ class SeqUtils():
 
         if self.test_mode:
             # imt_imtk_flow = self.prepare_test_img(self.img_infos, idx)
-            assert(self.past_images is not None)
+            assert(self.fut_images is not None)
             assert(self.flows is not None)
-            imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.past_images, flow_infos=self.flows)
+            imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
 
             # im_tk = self.prepare_test_img(self.past_images, idx)
             # for k, v in im_tk.items():
@@ -87,10 +87,10 @@ class SeqUtils():
             # print("Train mode")
             if self.flows is None:
                 # print("flow off")
-                imt_imtk_flow = self.prepare_train_img_no_flow(self.img_infos, idx, im_tk_infos=self.past_images)
+                imt_imtk_flow = self.prepare_train_img_no_flow(self.img_infos, idx, im_tk_infos=self.fut_images)
             else:
                 # print("flow on")
-                imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.past_images, flow_infos=self.flows)
+                imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
 
             # im_tk = self.prepare_train_img(self.past_images, idx)
             # for k, v in im_tk.items():
@@ -158,7 +158,7 @@ class SeqUtils():
             dict: Training data and annotation after pipeline with new keys
                 introduced by pipeline.
         """
-
+        assert False, "Broken after I made viper and cityscapes consistent"
         img_info = infos[idx]
         ann_info = self.get_ann_info(infos, idx)
         results = dict(img_info=img_info, ann_info=ann_info)
@@ -278,18 +278,21 @@ class SeqUtils():
         # print("im's after load: ", ims)
         # print("im's after load: ", type(ims))
         # print("im's after load: ", type(ims["img_info"]))
-        img_metas = {}
-        for k, v in ims.items():
-            if k not in ["img", "gt_semantic_seg", "img_info", "ann_info", "seg_prefix", "img_prefix", "seg_fields"]:
-                img_metas[k] = v
-        # print(img_metas["img_shape"])
-        # assert(img_metas["img_shape"] == (1080, 1920, 8))
+        def get_metas(loaded_images):
+            img_metas = {}
+            for k, v in loaded_images.items():
+                if k not in ["img", "gt_semantic_seg", "img_info", "ann_info", "seg_prefix", "img_prefix", "seg_fields"]:
+                    img_metas[k] = v
+            # print(img_metas["img_shape"])
+            # assert(img_metas["img_shape"] == (1080, 1920, 8))
 
-        img_metas["img_shape"] = (1080, 1920, 3)
-        img_metas["pad_shape"] = (1080, 1920, 3)
-        # del img_metas["scale_idx"]
-        # del img_metas["keep_ratio"]
-        finalIms["img_metas"] = [DataContainer(img_metas, cpu_only=True)]
+            img_metas["img_shape"] = (1080, 1920, 3)
+            img_metas["pad_shape"] = (1080, 1920, 3)
+            # del img_metas["scale_idx"]
+            # del img_metas["keep_ratio"]
+            return img_metas
+        finalIms["img_metas"] = [DataContainer(get_metas(ims), cpu_only=True)]
+        finalIms["imtk_metas"] = [DataContainer(get_metas(imtk), cpu_only=True)]
 
         # print("2gt sem seg no wrapping: ", finalIms["gt_semantic_seg"][0].shape)
         # print("2gttk sem seg no wrapping: ", finalIms["imtk_gt_semantic_seg"][0].shape)
@@ -307,7 +310,7 @@ class SeqUtils():
                 # print(k, len(k))
                 if isinstance(v, list) and isinstance(v[0], torch.Tensor):
                     finalIms[k] = v[0]
-                if k == "img_metas":
+                if k == "img_metas" or k == "imtk_metas":
                     # print("img_metas", len(v))
                     finalIms[k] = v[0]
         # finalIms["img_metas"] = [DataContainer([[{}]])]
@@ -315,6 +318,20 @@ class SeqUtils():
         # print("finalIms2", finalIms)
 
         # return self.pipeline(results)
+        # breakpoint()
+        # print("finalIms", finalIms.keys())
+        # assert len(finalIms.keys()) in [7, 8], "FinalIms seems to have been changed, make sure to fix the remapping"
+        # remapped_finalIms = { #This before img was past and imtk was future, now img is future and imtk is past.  Meaning imtk has the label.  THis is an issue
+        #     "img_metas": finalIms["imtk_metas"],
+        #     "imtk_metas": finalIms["img_metas"],
+        #     "img": finalIms["imtk"],
+        #     "imtk": finalIms["img"],
+        #     "gt_semantic_seg": finalIms["imtk_gt_semantic_seg"],
+        #     "imtk_gt_semantic_seg": finalIms["gt_semantic_seg"],
+        #     "flow": finalIms["flow"],
+        # }
+        # if "valid_pseudo_mask" in finalIms:
+        #     remapped_finalIms["valid_pseudo_mask"] = finalIms["valid_pseudo_mask"]
         return finalIms
 
     def prepare_test_img(self, infos, idx):

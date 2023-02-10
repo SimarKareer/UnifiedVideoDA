@@ -15,11 +15,12 @@ import time
 import mmcv
 import torch
 from mmcv.runner import init_dist, _load_checkpoint, load_state_dict
+from mmcv.runner.checkpoint import summarize_keys
 from mmcv.utils import Config, DictAction, get_git_hash
 
 from mmseg import __version__
-from mmseg.apis import set_random_seed, train_segmentor
-from mmseg.datasets import build_dataset
+from mmseg.apis import set_random_seed, train_segmentor, multi_gpu_test, single_gpu_test
+from mmseg.datasets import build_dataset, build_dataloader
 from mmseg.models.builder import build_train_model
 from mmseg.utils import collect_env, get_root_logger
 from mmseg.utils.collect_env import gen_code_archive
@@ -62,8 +63,12 @@ def parse_args(args):
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
-    parser.add_argument('--lr', type=float, default=0.0)
-    parser.add_argument('--l-warp-lambda', type=int, default=0)
+    parser.add_argument('--analysis', type=bool, default=False)
+    parser.add_argument('--nowandb', type=bool, default=False)
+    parser.add_argument('--eval', type=bool, default=False)
+    parser.add_argument('--lr', type=float, default=None)
+    parser.add_argument('--l-warp-lambda', type=float, default=None)
+    parser.add_argument('--l-mix-lambda', type=float, default=None)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -75,7 +80,8 @@ def load_checkpoint(model,
                     map_location=None,
                     strict=False,
                     logger=None,
-                    revise_keys=[(r'^module\.', '')]):
+                    revise_keys=False,
+                    invert_dict=False):
     """Load checkpoint from a file or URI.
 
     Args:
@@ -87,10 +93,7 @@ def load_checkpoint(model,
         strict (bool): Whether to allow different params for the model and
             checkpoint.
         logger (:mod:`logging.Logger` or None): The logger for error message.
-        revise_keys (list): A list of customized keywords to modify the
-            state_dict in checkpoint. Each item is a (pattern, replacement)
-            pair of the regular expression operations. Default: strip
-            the prefix 'module.' by [(r'^module\\.', '')].
+        revise_keys (bool): Whether to revise keys in state_dict.
 
 
     Returns:
@@ -107,6 +110,13 @@ def load_checkpoint(model,
     else:
         state_dict = checkpoint
     # strip prefix of state_dict
+    # breakpoint()
+
+    print("Loaded state dict has keys: ", summarize_keys(state_dict.keys(), split=1))
+
+    print("Target State Dict has keys: ", summarize_keys(model.state_dict().keys(), split=2))
+
+
 
     revise_dict = {
         "ema_backbone": "ema_model.backbone",
@@ -116,17 +126,22 @@ def load_checkpoint(model,
         "backbone": "model.backbone",
         "ema_decode_head": "ema_model.decode_head",
     }
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        for old_name, new_name in revise_dict.items():
-            if old_name in k:
-                k = k.replace(old_name, new_name)
-                break
-        new_state_dict[k] = v
-        # state_dict = {re.sub(p, r, k): v for k, v in state_dict.items()}
+    if invert_dict:
+        revise_dict = {v: k for k, v in revise_dict.items()}
+
+    new_state_dict = state_dict
+    if revise_keys:
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            for old_name, new_name in revise_dict.items():
+                if old_name in k:
+                    k = k.replace(old_name, new_name)
+                    break
+            new_state_dict[k] = v
+            # state_dict = {re.sub(p, r, k): v for k, v in state_dict.items()}
 
     # load state_dict
-    load_state_dict(model, state_dict, strict, logger)
+    load_state_dict(model, new_state_dict, strict, logger)
 
 
     return checkpoint
@@ -166,10 +181,8 @@ def main(args):
         distributed = False
     else:
         distributed = True
-        # breakpoint()
         init_dist(cfg.launcher, **cfg.dist_params)
     
-    # breakpoint()
     if args.lr is not None:
         print("Overwriting LR to ", args.lr)
         cfg.optimizer.lr = args.lr
@@ -178,8 +191,21 @@ def main(args):
         print("Overwriting l_warp_lambda to ", args.l_warp_lambda)
         cfg.uda.l_warp_lambda = args.l_warp_lambda
 
+    if args.l_mix_lambda is not None:
+        print("Overwriting l_mix_lambda to ", args.l_mix_lambda)
+        cfg.uda.l_mix_lambda = args.l_mix_lambda
+    
+    if args.nowandb:
+        for i in range(len(cfg.log_config.hooks)):
+            if cfg.log_config.hooks[i].type == "MMSegWandbHook":
+                cfg.log_config.hooks.pop(i)
+                break
 
-    # breakpoint()
+    if args.eval:
+        print("EVAL MODE")
+        cfg.runner.max_iters = 1
+        cfg.evaluation.interval = 1
+
     print("FINISHED INIT DIST")
 
     # create work_dir
@@ -235,7 +261,9 @@ def main(args):
             model,
             # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
             cfg.load_from,
-            map_location='cpu')
+            map_location='cpu',
+            revise_keys=False,
+            invert_dict=False)
         print("LOADED A CHECKPOINT")
         
 

@@ -24,6 +24,9 @@ from .pipelines import Compose, LoadAnnotations
 from mmseg.core.evaluation.metrics import flow_prop_iou, correctness_confusion
 from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 
+from torch.nn.modules.dropout import _DropoutNd
+from timm.models.layers import DropPath
+
 import pdb
 @DATASETS.register_module()
 class CustomDataset(Dataset):
@@ -102,7 +105,7 @@ class CustomDataset(Dataset):
                  classes=None,
                  palette=None,
                  gt_seg_map_loader_cfg=None,
-                #  load_annotations=True
+                 load_annotations=True
                 #  file_client_args=dict(backend='disk')
                  ):
         if isinstance(pipeline, dict) or isinstance(pipeline, mmcv.utils.config.ConfigDict):
@@ -147,16 +150,14 @@ class CustomDataset(Dataset):
                 self.split = osp.join(self.data_root, self.split)
 
         # load annotations
-        # if load_annotations:
-        self.img_infos = self.load_annotations(self.img_dir, self.img_suffix,
-                                            self.ann_dir,
-                                            self.seg_map_suffix, self.split)
+        if load_annotations:
+            self.img_infos = self.load_annotations(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split)
 
         self.init_cml_metrics()
 
     def init_cml_metrics(self):
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity"]}
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]}
         self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.cml_correct_consis = {k: np.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
@@ -373,8 +374,124 @@ class CustomDataset(Dataset):
         # print("HI: ", cml_sum)
         print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
 
+    def pre_eval_dataloader_consis(self, curr_preds, data, future_preds, metrics=["mIoU"], sub_metrics=[]):
+        assert(curr_preds) is not None
 
-    def pre_eval_dataloader_consis(self, preds, indices, data, predstk, cached=None, metrics=["mIoU", "pred_pred", "pred_gt", "gt_pred"], sub_metrics=["mask_count", "correct_consis"]):
+        pre_eval_results = []
+        curr_pred = curr_preds[0][:, :, None]
+        future_pred = future_preds[0][:, :, None]
+
+        curr_seg_map = data["gt_semantic_seg"][0]
+        future_seg_map = data["imtk_gt_semantic_seg"][0]
+        # if future_seg_map.shape[0] == 1 and len(future_seg_map) == 4 or curr_seg_map.shape[0] == 1 and len(curr_seg_map) == 4:
+        #     assert False, "check this out"
+        if future_seg_map.shape[0] == 1 and len(future_seg_map.shape) == 4:
+            future_seg_map = future_seg_map.squeeze(0)
+        
+        if curr_seg_map.shape[0] == 1 and len(curr_seg_map.shape) == 4:
+            curr_seg_map = curr_seg_map.squeeze(0)
+
+        flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
+        return_mask_count = False # Stubbed for now
+        # breakpoint()
+        
+        if "pred_pred" in metrics:
+            iau_pred_pred = flow_prop_iou(
+                future_pred,
+                curr_pred,
+                flow,
+                num_classes=len(self.CLASSES),
+                ignore_index=self.ignore_index,
+                label_map=self.label_map,
+                reduce_zero_label=self.reduce_zero_label,
+                # indices=indices,
+                return_mask_count=return_mask_count,
+                preds_t_tk=None
+            )
+            if return_mask_count:
+                iau_pred_pred, mask_count = iau_pred_pred
+                self.mask_counts["pred_pred"][mask_count[0]] += mask_count[1]
+                self.total_mask_counts["pred_pred"][mask_count[2]] += mask_count[3]
+
+
+            intersection, union, _, _ = iau_pred_pred
+            self.cml_intersect["pred_pred"] += intersection
+            self.cml_union["pred_pred"] += union
+        
+        if "gt_pred" in metrics:
+            # props pred at t -> ground truth at t-k
+            iau_gt_pred = flow_prop_iou(
+                future_pred,
+                curr_seg_map.permute((1, 2, 0)),
+                flow,
+                num_classes=len(self.CLASSES),
+                ignore_index=self.ignore_index,
+                label_map=self.label_map,
+                reduce_zero_label=self.reduce_zero_label,
+                # indices=indices,
+                return_mask_count=return_mask_count,
+                preds_t_tk=None,
+                return_mask=True
+            )
+            if return_mask_count:
+                iau_gt_pred, mask_count = iau_gt_pred
+                self.mask_counts["gt_pred"][mask_count[0]] += mask_count[1]
+                self.total_mask_counts["gt_pred"][mask_count[2]] += mask_count[3]
+
+            intersection, union, _, _, gt_pred_iou_mask = iau_gt_pred
+            self.cml_intersect["gt_pred"] += intersection
+            self.cml_union["gt_pred"] += union
+
+        if "M5" in metrics:
+            consis = (curr_pred == future_pred).squeeze(-1) #where past frame pred matches future frame
+            # breakpoint()
+
+            iau = intersect_and_union(
+                curr_pred.squeeze(-1), #past frame
+                curr_seg_map.squeeze(0), #past GT
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                # indices=indices,
+                return_mask=False,
+                custom_mask=consis #where past and future agree
+            )
+
+            intersection, union, _, _ = iau
+            self.cml_intersect["M5"] += intersection
+            self.cml_union["M5"] += union
+
+        if "mIoU_gt_pred" in metrics:
+            iau_miou = intersect_and_union(
+                curr_pred.squeeze(-1),
+                curr_seg_map.squeeze(0),
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                reduce_zero_label=self.reduce_zero_label,
+                custom_mask = gt_pred_iou_mask
+            )
+            intersection, union, _, _ = iau_miou
+            self.cml_intersect["mIoU_gt_pred"] += intersection
+            self.cml_union["mIoU_gt_pred"] += union
+        
+        if "mIoU" in metrics:
+            iau_miou = intersect_and_union(
+                curr_pred.squeeze(-1),
+                curr_seg_map.squeeze(0),
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                reduce_zero_label=self.reduce_zero_label
+            )
+            intersection, union, _, _ = iau_miou
+            self.cml_intersect["mIoU"] += intersection
+            self.cml_union["mIoU"] += union
+            pre_eval_results.append(iau_miou)
+
+        return pre_eval_results
+
+    def pre_eval_dataloader_consis_old(self, preds, indices, data, predstk, cached=None, metrics=["mIoU", "pred_pred", "gt_pred"], sub_metrics=["mask_count", "correct_consis"]):
         """Collect eval result from each iteration.
 
         Args:
@@ -384,7 +501,7 @@ class CustomDataset(Dataset):
                 indices.
             data (dict): dict containing the images and annotations.
             predstk: prediction on frame t-k
-            metrics (list[str]): metrics in ["mIoU", "pred_pred", "pred_gt", "gt_pred"]
+            metrics (list[str]): metrics in ["mIoU", "pred_pred", "gt_pred"]
             sub_metrics (list[str]): eval settings in ["mask_count", "correct_consis"]
             cached dictionary of all necessary cached values to quickly compute metrics {"predt", "predtk", "gt_t", "gt_tk", "pred_t_tk"}
 
@@ -663,8 +780,8 @@ class CustomDataset(Dataset):
             
             if "mIoU_gt_pred" in metrics:
                 iau_miou = intersect_and_union(
-                    pred.squeeze(-1),
-                    seg_map.squeeze(0),
+                    predtk.squeeze(-1),
+                    seg_map_tk.squeeze(0),
                     len(self.CLASSES),
                     self.ignore_index,
                     # as the labels has been converted when dataset initialized
@@ -685,8 +802,8 @@ class CustomDataset(Dataset):
                 # print("got mIoU")
                 
                 iau_miou = intersect_and_union(
-                    pred.squeeze(-1),
-                    seg_map.squeeze(0),
+                    predtk.squeeze(-1),
+                    seg_map_tk.squeeze(0),
                     len(self.CLASSES),
                     self.ignore_index,
                     # as the labels has been converted when dataset initialized
@@ -702,8 +819,8 @@ class CustomDataset(Dataset):
                 self.cml_intersect["mIoU"] += intersection
                 self.cml_union["mIoU"] += union
                 pre_eval_results.append(iau_miou)
-            if index % 499 == 0:
-                self.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+            # if index % 499 == 0:
+                # self.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
                 # for key in [k for k in metrics if k != "mask_count"]:
                 #     intersection = self.cml_intersect[key]
                 #     union = self.cml_union[key]
@@ -850,6 +967,7 @@ class CustomDataset(Dataset):
         Returns:
             dict[str, float]: Default metrics.
         """
+        # assert False, "[Simar Note] I stopped using this, in favor of pre_eval_dataloader_consis"
         if isinstance(metric, str):
             metric = [metric]
         allowed_metrics = ['mIoU', 'mDice', 'mFscore']
@@ -930,3 +1048,61 @@ class CustomDataset(Dataset):
             })
 
         return eval_results
+
+    def get_pl(self, model, target_img, target_img_metas):
+        ema_logits = model.get_ema_model().generate_pseudo_label(target_img.cuda(), target_img_metas) #NOTE: I sure hope .cuda correctly assigns GPUS
+        # seg_debug['Target'] = model.get_ema_model().debug_output
+
+        pseudo_label, pseudo_weight = model.get_pseudo_label_and_weight(ema_logits)
+        del ema_logits
+        return pseudo_label, pseudo_weight
+
+    def pl_analysis(self, model_ddp, data, metrics):
+        model = model_ddp.module
+        breakpoint()
+        for m in model.get_ema_model().modules():
+            if isinstance(m, _DropoutNd):
+                m.training = False
+            if isinstance(m, DropPath):
+                m.training = False
+        
+        curr_seg_map = data["gt_semantic_seg"][0]
+        future_seg_map = data["imtk_gt_semantic_seg"][0]
+
+        curr_metas, curr_img = data["img_metas"][0].data[0], data["img"][0].data
+        curr_pseudo_label, curr_pseudo_weight = self.get_pl(model, curr_img, curr_metas)
+
+        future_metas, future_img = data["imtk_metas"][0].data[0], data["imtk"][0].data
+        future_pseudo_label, future_pseudo_weight = self.get_pl(model, future_img, future_metas)
+
+        breakpoint()
+
+
+
+
+        # pseudo_weight = model.filter_valid_pseudo_region(pseudo_weight, valid_pseudo_mask)
+        # gt_pixel_weight = torch.ones((pseudo_weight.shape))
+
+        # if "PL1" in train_metrics:
+        #     print("got PL1")
+            
+        #     iau_miou = intersect_and_union(
+        #         pred.squeeze(0),
+        #         seg_map.squeeze(0),
+        #         len(self.CLASSES),
+        #         self.ignore_index,
+        #         # as the labels has been converted when dataset initialized
+        #         # in `get_palette_for_custom_classes ` this `label_map`
+        #         # should be `dict()`, see
+        #         # https://github.com/open-mmlab/mmsegmentation/issues/1415
+        #         # for more ditails
+        #         label_map=self.label_map,
+        #         reduce_zero_label=self.reduce_zero_label,
+        #         indices=indices
+        #     )
+        #     intersection, union, _, _ = iau_miou
+        #     self.cml_intersect["PL1"] += intersection
+        #     self.cml_union["PL1"] += union
+
+
+        # Now just calc iou of pseudo_label and backpropped PL.  Might want to make a function in the model so we can call this

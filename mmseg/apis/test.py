@@ -18,6 +18,7 @@ import pickle
 from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import torch.distributed as dist
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -294,7 +295,6 @@ def multi_gpu_test(model,
                    metrics=["mIoU"],
                    sub_metrics=[]):
     """Updated multi_gpu_test for multiframe / flow loaders"""
-    breakpoint()
 
     if efficient_test:
         warnings.warn(
@@ -306,6 +306,7 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
+    print("TESTING METRICS: ", metrics)
 
     model.eval()
     results = []
@@ -325,17 +326,23 @@ def multi_gpu_test(model,
     if rank == 0:
         prog_bar = mmcv.ProgressBar(len(dataset))
 
+    eval_metrics = [met for met in metrics if "PL" not in met]
+    pl_metrics = [met for met in metrics if "PL" in met]
+
     it = 0
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
             result = model(return_loss=False, logits=False, **refined_data)
 
+            if len(metrics) > 1 or metrics[0] != "mIoU":
+                refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
+                result_tk = model(return_loss=False, logits=False, **refined_data)
+
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
-            # TODO: adapt samples_per_gpu > 1.
-            # only samples_per_gpu=1 valid now
-            result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=None, metrics=metrics, sub_metrics=sub_metrics)
+
+            result = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics)
             
 
         results.extend(result)
@@ -344,16 +351,27 @@ def multi_gpu_test(model,
             batch_size = len(result) * world_size
             for _ in range(batch_size):
                 prog_bar.update()
-        
+
         it += 1
-        if it == 2:
-            break
+
+    
+    for met in metrics:
+        dataset.cml_intersect[met] = dataset.cml_intersect[met].cuda()
+        dataset.cml_union[met] = dataset.cml_union[met].cuda()
+
+        dist.all_reduce(dataset.cml_intersect[met], op=dist.ReduceOp.SUM)
+        dist.all_reduce(dataset.cml_union[met], op=dist.ReduceOp.SUM)
+    if rank == 0:
+        dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+    dataset.init_cml_metrics()
 
     # collect results from all ranks
     if gpu_collect:
         results = collect_results_gpu(results, len(dataset))
     else:
         results = collect_results_cpu(results, len(dataset), tmpdir)
+
+    
     return results
 
 
@@ -455,4 +473,5 @@ def multi_gpu_test_old(model,
         results = collect_results_gpu(results, len(dataset))
     else:
         results = collect_results_cpu(results, len(dataset), tmpdir)
+
     return results

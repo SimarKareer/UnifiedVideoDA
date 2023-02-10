@@ -77,6 +77,7 @@ class DACS(UDADecorator):
         self.psweight_ignore_bottom = cfg['pseudo_weight_ignore_bottom']
         self.fdist_lambda = cfg['imnet_feature_dist_lambda']
         self.l_warp_lambda = cfg['l_warp_lambda']
+        self.l_mix_lambda = cfg['l_mix_lambda']
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
         self.enable_fdist = self.fdist_lambda > 0
@@ -308,6 +309,7 @@ class DACS(UDADecorator):
                       target_flow=None,
                       imtk=None,
                       imtk_gt_semantic_seg=None,
+                      imtk_metas=None,
                       target_img_extra=None
                       ):
         """Forward function for training.
@@ -481,7 +483,6 @@ class DACS(UDADecorator):
 
                 warped_pl_loss.backward()
             
-
             # Apply mixing
             mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
             mixed_seg_weight = pseudo_weight.clone()
@@ -513,7 +514,7 @@ class DACS(UDADecorator):
             mix_losses = add_prefix(mix_losses, 'mix')
             mix_loss, mix_log_vars = self._parse_losses(mix_losses)
             log_vars.update(mix_log_vars)
-            mix_loss.backward()
+            (mix_loss * self.l_mix_lambda).backward()
 
         # Masked Training
         if self.enable_masking and self.mask_mode.startswith('separate'):

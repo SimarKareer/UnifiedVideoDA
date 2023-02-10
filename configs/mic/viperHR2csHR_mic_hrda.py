@@ -16,7 +16,7 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-# load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/lwarp1/iter_20000.pth"
+load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -83,6 +83,7 @@ uda = dict(
     # Use random patch masking with a patch size of 64x64
     # and a mask ratio of 0.7
     l_warp_lambda=1.0,
+    l_mix_lambda=1.0,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True))
 # Optimizer Hyperparameters
@@ -100,7 +101,7 @@ gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=1)
-evaluation = dict(interval=4000, metric='mIoU')
+evaluation = dict(interval=4000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
 exp = 'basic'
@@ -112,3 +113,4 @@ name_uda = 'dacs_a999_fdthings_rcs0.01-2.0_cpl2_m64-0.7-spta'
 name_opt = 'adamw_6e-05_pmTrue_poly10warm_1x2_40k'
 
 # For the other configurations used in the paper, please refer to experiment.py
+#CS Invalid Metrics: "M6Sanity", "mIoU_gt_pred", "mIoU"
