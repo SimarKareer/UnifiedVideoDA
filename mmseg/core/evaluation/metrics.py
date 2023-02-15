@@ -203,7 +203,7 @@ def intersect_and_union(pred_label,
         reduce_zero_label (bool): Whether ignore zero label. The parameter will
             work only when label is str. Default: False.
         return_mask (bool): Whether return mask. Default: False.
-        custom_mask (ndarray): Mask for ignoring certain pixels in iou calc. Default: None.
+        custom_mask (ndarray): Will calc IoU over only pixels where mask == True. Default: None.
 
      Returns:
          torch.Tensor: The intersection of prediction and ground truth
@@ -261,6 +261,7 @@ def intersect_and_union(pred_label,
 
     if custom_mask is not None:
         mask = custom_mask
+        mask = ignore_indices(mask)
     else:
         mask = (label != ignore_index)
         mask = ignore_indices(mask)

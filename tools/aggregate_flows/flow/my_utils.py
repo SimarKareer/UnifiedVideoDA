@@ -8,6 +8,59 @@ import matplotlib.pyplot as plt
 from tools.aggregate_flows.flow.util_flow import ReadKittiPngFile
 import torch
 
+def multiBarChart(data, labels, title="title", xlabel="xlabel", ylabel="ylabel", ax=None, colors=None, figsize=(10, 5), save_path=None):
+    """
+    Args:
+        data: dict of lists of data to plot
+        labels: list of labels for each data list
+        title: title of plot
+        xlabel: x axis label
+        ylabel: y axis label
+        colors: list of colors
+        figsize: size of figure
+        save_path: path to save figure
+    """
+    plotter = ax if ax is not None else plt
+    legend = list(data.keys())
+    data = list(data.values())
+
+    if colors is None:
+        colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+    # assert len(data) == len(labels)
+    # assert len(data) == len(legend)
+    # assert len(data) <= len(colors)
+    
+    # Create plot
+    # fig, ax = plt.subplots(figsize=figsize)
+    index = np.arange(len(data[0]))
+    bar_width = 0.15
+    opacity = 0.8
+
+    
+    for i in range(len(data)):
+        plotter.bar(index + bar_width * i, data[i], bar_width,
+                 alpha=opacity,
+                 color=colors[i],
+                 label=legend[i])
+
+    if ax is None:
+        plotter.xlabel(xlabel)
+        plotter.ylabel(ylabel)
+        plotter.title(title)
+        plotter.xticks(index + bar_width, labels, rotation=45)
+        plotter.legend()
+    else:
+        plotter.set_xlabel(xlabel)
+        plotter.set_ylabel(ylabel)
+        plotter.set_title(title)
+        plotter.set_xticks(index + bar_width)
+        plotter.set_xticklabels(labels, rotation=45)
+        plotter.legend()
+    
+    
+    # if save_path is not None:
+    #     plotter.savefig(save_path)
+    # plotter.show()
 
 def visFlow(flow, image=None, threshold=2.0, skip_amount=30):
     """
@@ -147,6 +200,22 @@ def mergeFlow(flow1, flow2):
     # print("indices: ", indices)
     # print("output flow: ", output_flow)
     return np.transpose(output_flow, (1, 2, 0))
+
+def errorVizClasses(prediction, gt):
+    """
+    prediction: H, W
+    gt: H, W
+    Returns H, W displaying the ground truth image whereever the prediction is wrong
+    """
+    assert(prediction.shape == gt.shape)
+    H, W = prediction.shape
+    out = np.ones((H, W))*255
+    out[gt != prediction] = gt[gt != prediction]
+    # out[gt == prediction] = prediction[gt == prediction]
+    return out
+
+
+
 
 def backpropFlow(flow, im):
     """
