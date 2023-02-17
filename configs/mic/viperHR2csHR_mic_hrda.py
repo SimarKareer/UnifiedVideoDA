@@ -17,6 +17,7 @@ _base_ = [
     '../_base_/schedules/poly10warm.py'
 ]
 # load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration

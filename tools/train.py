@@ -260,15 +260,15 @@ def main(args):
     # ema_model.backbone.patch_embed3.proj.bias vs ema_backbone.block3.34.attn.norm.bias
     # imnet_model.backbone.block3.26.norm1.weight vs imnet_backbone.block1.1.norm1.bias
     # ? vs imnet_decode_head.scale_attention.fuse_layer.bn.weight
-    if cfg.load_from:
-        checkpoint = load_checkpoint(
-            model,
-            # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
-            cfg.load_from,
-            map_location='cpu',
-            revise_keys=False,
-            invert_dict=False)
-        print("LOADED A CHECKPOINT")
+    # if cfg.load_from:
+    #     checkpoint = load_checkpoint(
+    #         model,
+    #         # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
+    #         cfg.load_from,
+    #         map_location='cpu',
+    #         revise_keys=False,
+    #         invert_dict=False)
+    #     print("LOADED A CHECKPOINT")
         
 
     logger.info(model)
