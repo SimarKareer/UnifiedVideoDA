@@ -64,6 +64,7 @@ def parse_args(args):
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument('--analysis', type=bool, default=False)
+    parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--nowandb', type=bool, default=False)
     parser.add_argument('--eval', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=None)
@@ -205,6 +206,9 @@ def main(args):
         print("EVAL MODE")
         cfg.runner.max_iters = 1
         cfg.evaluation.interval = 1
+    
+    if args.source_only2:
+        cfg.uda.source_only2=True
 
     print("FINISHED INIT DIST")
 

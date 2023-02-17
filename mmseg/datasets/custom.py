@@ -1058,8 +1058,8 @@ class CustomDataset(Dataset):
         return pseudo_label, pseudo_weight
 
     def pl_analysis(self, model_ddp, data, metrics):
+        assert False, "shouldn't behere"
         model = model_ddp.module
-        breakpoint()
         for m in model.get_ema_model().modules():
             if isinstance(m, _DropoutNd):
                 m.training = False
@@ -1075,7 +1075,6 @@ class CustomDataset(Dataset):
         future_metas, future_img = data["imtk_metas"][0].data[0], data["imtk"][0].data
         future_pseudo_label, future_pseudo_weight = self.get_pl(model, future_img, future_metas)
 
-        breakpoint()
 
 
 

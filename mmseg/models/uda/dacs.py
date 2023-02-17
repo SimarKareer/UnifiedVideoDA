@@ -73,6 +73,7 @@ class DACS(UDADecorator):
         self.local_iter = 0
         self.max_iters = cfg['max_iters']
         self.source_only = cfg['source_only']
+        self.source_only2 = cfg['source_only2']
         self.alpha = cfg['alpha']
         self.pseudo_threshold = cfg['pseudo_threshold']
         self.psweight_ignore_top = cfg['pseudo_weight_ignore_top']
@@ -351,7 +352,7 @@ class DACS(UDADecorator):
         batch_size = img.shape[0]
         dev = img.device
 
-        DEBUG = True
+        DEBUG = False
 
         if DEBUG:
             rows, cols = 5, 5
@@ -403,6 +404,11 @@ class DACS(UDADecorator):
         clean_loss, clean_log_vars = self._parse_losses(clean_losses)
         log_vars.update(clean_log_vars)
         clean_loss.backward(retain_graph=self.enable_fdist)
+        if self.source_only2:
+            del src_feat, clean_loss
+            del seg_debug
+            return log_vars
+        
         if self.print_grad_magnitude:
             params = self.get_model().backbone.parameters()
             seg_grads = [
@@ -527,7 +533,6 @@ class DACS(UDADecorator):
             (mix_loss * self.l_mix_lambda).backward()
 
             if DEBUG:
-                breakpoint()
                 invNorm = transforms.Compose([
                     transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
                     transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
@@ -602,7 +607,6 @@ class DACS(UDADecorator):
                 # fig.close()
                 large_fig.savefig("work_dirs/debugViperCS/debug_large.png")
                 # large_fig.close()
-                breakpoint()
 
         # Masked Training
         if self.enable_masking and self.mask_mode.startswith('separate'):

@@ -16,7 +16,7 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -84,6 +84,7 @@ uda = dict(
     # and a mask ratio of 0.7
     l_warp_lambda=1.0,
     l_mix_lambda=1.0,
+    source_only2=False,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True))
 # Optimizer Hyperparameters
@@ -100,8 +101,8 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=1)
-evaluation = dict(interval=4000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
+checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=8)
+evaluation = dict(interval=2000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
 exp = 'basic'
