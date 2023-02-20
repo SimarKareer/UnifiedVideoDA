@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
 """Modified from https://github.com/open-
 mmlab/mmdetection/blob/master/tools/analysis_tools/analyze_logs.py."""
 import argparse
@@ -31,9 +31,9 @@ def plot_curve(log_dicts, args):
             plot_epochs = []
             plot_iters = []
             plot_values = []
-            # In some log files exist lines of validation,
-            # `mode` list is used to only collect iter number
-            # of training line.
+            # In some log files, iters number is not correct, `pre_iter` is
+            # used to prevent generate wrong lines.
+            pre_iter = -1
             for epoch in epochs:
                 epoch_logs = log_dict[epoch]
                 if metric not in epoch_logs.keys():
@@ -43,9 +43,11 @@ def plot_curve(log_dicts, args):
                     plot_values.append(epoch_logs[metric][0])
                 else:
                     for idx in range(len(epoch_logs[metric])):
-                        if epoch_logs['mode'][idx] == 'train':
-                            plot_iters.append(epoch_logs['iter'][idx])
-                            plot_values.append(epoch_logs[metric][idx])
+                        if pre_iter > epoch_logs['iter'][idx]:
+                            continue
+                        pre_iter = epoch_logs['iter'][idx]
+                        plot_iters.append(epoch_logs['iter'][idx])
+                        plot_values.append(epoch_logs[metric][idx])
             ax = plt.gca()
             label = legend[i * num_metrics + j]
             if metric in ['mIoU', 'mAcc', 'aAcc']:

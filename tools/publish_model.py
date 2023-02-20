@@ -1,8 +1,11 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modifications: Remove auxiliary models
+
 import argparse
-import subprocess
 
 import torch
+
+# import subprocess
 
 
 def parse_args():
@@ -19,12 +22,22 @@ def process_checkpoint(in_file, out_file):
     # remove optimizer for smaller file size
     if 'optimizer' in checkpoint:
         del checkpoint['optimizer']
+    # remove auxiliary models
+    for k in list(checkpoint['state_dict'].keys()):
+        if 'imnet_model' in k or 'ema_model' in k:
+            del checkpoint['state_dict'][k]
     # if it is necessary to remove some sensitive data in checkpoint['meta'],
     # add the code here.
+    if 'meta' in checkpoint:
+        del checkpoint['meta']
+    # inspect checkpoint
+    print('Checkpoint keys:', checkpoint.keys())
+    print('Checkpoint state_dict keys:', checkpoint['state_dict'].keys())
+    # save checkpoint
     torch.save(checkpoint, out_file)
-    sha = subprocess.check_output(['sha256sum', out_file]).decode()
-    final_file = out_file.rstrip('.pth') + '-{}.pth'.format(sha[:8])
-    subprocess.Popen(['mv', out_file, final_file])
+    # sha = subprocess.check_output(['sha256sum', out_file]).decode()
+    # final_file = out_file.rstrip('.pth') + '-{}.pth'.format(sha[:8])
+    # subprocess.Popen(['mv', out_file, final_file])
 
 
 def main():

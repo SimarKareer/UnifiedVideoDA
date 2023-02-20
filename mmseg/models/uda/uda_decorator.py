@@ -1,4 +1,11 @@
 # Obtained from: https://github.com/lhoyer/DAFormer
+# Modifications:
+# - Add img_interval
+# - Add upscale_pred flag
+# ---------------------------------------------------------------
+# Copyright (c) 2021-2022 ETH Zurich, Lukas Hoyer. All rights reserved.
+# Licensed under the Apache License, Version 2.0
+# ---------------------------------------------------------------
 
 from copy import deepcopy
 
@@ -32,6 +39,7 @@ class UDADecorator(BaseSegmentor):
         self.train_cfg = cfg['model']['train_cfg']
         self.test_cfg = cfg['model']['test_cfg']
         self.num_classes = cfg['model']['decode_head']['num_classes']
+        self.debug_img_interval = self.train_cfg['log_config']['img_interval']
 
     def get_model(self):
         return get_module(self.model)
@@ -40,10 +48,10 @@ class UDADecorator(BaseSegmentor):
         """Extract features from images."""
         return self.get_model().extract_feat(img)
 
-    def encode_decode(self, img, img_metas):
+    def encode_decode(self, img, img_metas, upscale_pred=True):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
-        return self.get_model().encode_decode(img, img_metas)
+        return self.get_model().encode_decode(img, img_metas, upscale_pred)
 
     def forward_train(self,
                       img,
@@ -89,9 +97,9 @@ class UDADecorator(BaseSegmentor):
         """
         return self.get_model().inference(img, img_meta, rescale)
 
-    def simple_test(self, img, img_meta, rescale=True):
+    def simple_test(self, img, img_meta, rescale=True, logits=False):
         """Simple test with single image."""
-        return self.get_model().simple_test(img, img_meta, rescale)
+        return self.get_model().simple_test(img, img_meta, rescale, logits=logits)
 
     def aug_test(self, imgs, img_metas, rescale=True):
         """Test with augmentations.

@@ -18,6 +18,7 @@ import pickle
 from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import torch.distributed as dist
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -89,8 +90,8 @@ def single_gpu_test(model,
                     pre_eval=False,
                     format_only=False,
                     format_args={},
-                    metrics=["mIoU", "pred_pred", "gt_pred"],
-                    sub_metrics=["mask_count", "correct_consis"],
+                    metrics=["mIoU"],
+                    sub_metrics=[],
                     label_space=None,
                     cache=False,
                     use_cache=False
@@ -142,6 +143,7 @@ def single_gpu_test(model,
     model.eval()
     results = []
     dataset = data_loader.dataset
+    dataset.init_cml_metrics()
     prog_bar = mmcv.ProgressBar(len(dataset))
     # The pipeline about how the data_loader retrieval samples from dataset:
     # sampler -> batch_sampler -> indices
@@ -165,20 +167,24 @@ def single_gpu_test(model,
 
         return
 
+    it = 0
+
     for batch_indices, data in zip(loader_indices, data_loader):
+        it += 1
         result_tk = None
         logits = True if cache else False
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            # breakpoint()
             result = model(return_loss=False, logits=logits, **refined_data)
             if cache or "pred_pred" in metrics or "M6Sanity" in metrics:
                 refined_data = {"img_metas": data["img_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=logits, **refined_data)
             
-            if label_space != dataset.label_space:
-                result = remap_labels(result, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
-                if result_tk is not None:
-                    result_tk = remap_labels(result_tk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
+            # if label_space != dataset.label_space:
+            #     result = remap_labels(result, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
+            #     if result_tk is not None:
+            #         result_tk = remap_labels(result_tk, dataset.convert_map[f"{label_space}_{dataset.label_space}"])
         
         if cache:
             if len(result) > 1:
@@ -251,7 +257,8 @@ def single_gpu_test(model,
         if format_only:
             result = dataset.format_results(
                 result, indices=batch_indices, **format_args)
-        if pre_eval:
+
+        if metrics:
             # TODO: adapt samples_per_gpu > 1.
             # only samples_per_gpu=1 valid now
             # Note: while above result is full preds, here it's just metrics
@@ -262,7 +269,6 @@ def single_gpu_test(model,
             # colored_gt = labelMapToIm(gt, dataset.palette_to_id)
             # cv2.imwrite("work_dirs/ims/a.png", colored_pred.numpy().astype(np.int16))
             # cv2.imwrite("work_dirs/ims/b.png", colored_gt.numpy().astype(np.int16))
-
 
             if "gt_semantic_seg" in data: # Will run the original mmseg style eval if the dataloader doesn't provide ground truth
                 result = dataset.pre_eval_dataloader_consis(result, batch_indices, data, predstk=result_tk, metrics=metrics, sub_metrics=sub_metrics)
@@ -276,11 +282,100 @@ def single_gpu_test(model,
         batch_size = len(result)
         for _ in range(batch_size):
             prog_bar.update()
+    return results
 
+def multi_gpu_test(model,
+                   data_loader,
+                   tmpdir=None,
+                   gpu_collect=False,
+                   efficient_test=False,
+                   pre_eval=False,
+                   format_only=False,
+                   format_args={},
+                   metrics=["mIoU"],
+                   sub_metrics=[]):
+    """Updated multi_gpu_test for multiframe / flow loaders"""
+
+    if efficient_test:
+        warnings.warn(
+            'DeprecationWarning: ``efficient_test`` will be deprecated, the '
+            'evaluation is CPU memory friendly with pre_eval=True')
+        mmcv.mkdir_or_exist('.efficient_test')
+    # when none of them is set true, return segmentation results as
+    # a list of np.array.
+    assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
+        '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
+        'exclusive, only one of them could be true .'
+    print("TESTING METRICS: ", metrics)
+
+    model.eval()
+    results = []
+    dataset = data_loader.dataset
+    dataset.init_cml_metrics()
+    # The pipeline about how the data_loader retrieval samples from dataset:
+    # sampler -> batch_sampler -> indices
+    # The indices are passed to dataset_fetcher to get data from dataset.
+    # data_fetcher -> collate_fn(dataset[index]) -> data_sample
+    # we use batch_sampler to get correct data idx
+
+    # batch_sampler based on DistributedSampler, the indices only point to data
+    # samples of related machine.
+    loader_indices = data_loader.batch_sampler
+
+    rank, world_size = get_dist_info()
+    if rank == 0:
+        prog_bar = mmcv.ProgressBar(len(dataset))
+
+    eval_metrics = [met for met in metrics if "PL" not in met]
+    pl_metrics = [met for met in metrics if "PL" in met]
+
+    it = 0
+    for batch_indices, data in zip(loader_indices, data_loader):
+        with torch.no_grad():
+            refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            result = model(return_loss=False, logits=False, **refined_data)
+
+            if len(metrics) > 1 or metrics[0] != "mIoU":
+                refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
+                result_tk = model(return_loss=False, logits=False, **refined_data)
+
+        if metrics:
+            assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
+
+            result = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics)
+            
+
+        results.extend(result)
+
+        if rank == 0:
+            batch_size = len(result) * world_size
+            for _ in range(batch_size):
+                prog_bar.update()
+
+        it += 1
+
+    
+    for met in metrics:
+        dataset.cml_intersect[met] = dataset.cml_intersect[met].cuda()
+        dataset.cml_union[met] = dataset.cml_union[met].cuda()
+
+        dist.all_reduce(dataset.cml_intersect[met], op=dist.ReduceOp.SUM)
+        dist.all_reduce(dataset.cml_union[met], op=dist.ReduceOp.SUM)
+    if rank == 0:
+        dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+    dataset.init_cml_metrics()
+
+    # collect results from all ranks
+    if gpu_collect:
+        results = collect_results_gpu(results, len(dataset))
+    else:
+        results = collect_results_cpu(results, len(dataset), tmpdir)
+
+    
     return results
 
 
-def multi_gpu_test(model,
+def multi_gpu_test_old(model,
                    data_loader,
                    tmpdir=None,
                    gpu_collect=False,
@@ -378,4 +473,5 @@ def multi_gpu_test(model,
         results = collect_results_gpu(results, len(dataset))
     else:
         results = collect_results_cpu(results, len(dataset), tmpdir)
+
     return results

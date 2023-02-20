@@ -1,5 +1,15 @@
-# The entropy minimization is based on:
-# https://github.com/valeoai/ADVENT
+# Obtained from: https://github.com/lhoyer/HRDA
+# Modifications:
+# - Add masked image consistency
+# - Update debug image system
+# ---------------------------------------------------------------
+# Copyright (c) 2022 ETH Zurich, Lukas Hoyer. All rights reserved.
+# Licensed under the Apache License, Version 2.0
+# ---------------------------------------------------------------
+
+# The entropy minimization is based on: https://github.com/valeoai/ADVENT
+# Copyright (c) 2019 Valeo. Licensed under the Apache License, Version 2.0
+# A copy of the license is available at resources/license_advent
 
 import os
 
@@ -10,9 +20,11 @@ from matplotlib import pyplot as plt
 
 from mmseg.core import add_prefix
 from mmseg.models import UDA, HRDAEncoderDecoder
+from mmseg.models.uda.masking_consistency_module import \
+    MaskingConsistencyModule
 from mmseg.models.uda.uda_decorator import UDADecorator
 from mmseg.models.utils.dacs_transforms import denorm, get_mean_std
-from mmseg.models.utils.visualization import subplotimg
+from mmseg.models.utils.visualization import prepare_debug_out, subplotimg
 from mmseg.ops import resize
 
 
@@ -40,7 +52,11 @@ class MinEnt(UDADecorator):
     def __init__(self, **cfg):
         super(MinEnt, self).__init__(**cfg)
         self.lambda_ent = cfg['lambda_ent']
-        self.debug_img_interval = cfg['debug_img_interval']
+        self.mask_mode = cfg['mask_mode']
+
+        if self.mask_mode is not None:
+            self.mic = MaskingConsistencyModule(require_teacher=True, cfg=cfg)
+
         self.local_iter = 0
 
     def train_step(self, data_batch, optimizer, **kwargs):
@@ -79,8 +95,20 @@ class MinEnt(UDADecorator):
             log_vars=log_vars, num_samples=len(data_batch['img_metas']))
         return outputs
 
-    def forward_train(self, img, img_metas, gt_semantic_seg, target_img,
-                      target_img_metas):
+    def update_debug_state(self):
+        debug = self.local_iter % self.debug_img_interval == 0
+        self.get_model().automatic_debug = False
+        self.get_model().debug = debug
+        if self.mic is not None:
+            self.mic.debug = debug
+
+    def forward_train(self,
+                      img,
+                      img_metas,
+                      gt_semantic_seg,
+                      target_img,
+                      target_img_metas,
+                      valid_pseudo_mask=None):
         """Forward function for training.
 
         Args:
@@ -96,17 +124,20 @@ class MinEnt(UDADecorator):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        if self.local_iter % self.debug_img_interval == 0:
-            self.model.decode_head.debug = True
-        else:
-            self.model.decode_head.debug = False
+        self.update_debug_state()
         seg_debug = {}
+
+        if self.mic is not None:
+            self.mic.update_weights(self.get_model(), self.local_iter)
 
         # train on source
         src_losses = dict()
         pred = self.model.forward_with_aux(img, img_metas)
-        seg_debug['Source'] = self.get_model().decode_head.debug_output
         loss = self.model.decode_head.losses(pred['main'], gt_semantic_seg)
+        if self.get_model().debug:
+            self.get_model().process_debug(img, img_metas)
+            seg_debug['Source'] = self.get_model().debug_output
+            self.get_model().debug_output = {}
         if isinstance(self.model, HRDAEncoderDecoder):
             self.model.decode_head.reset_crop()
         src_losses.update(add_prefix(loss, 'decode'))
@@ -139,6 +170,17 @@ class MinEnt(UDADecorator):
                 F.softmax(pred_trg[k], dim=1))
         trg_loss, trg_log_vars = self._parse_losses(trg_losses)
         trg_loss.backward()
+
+        # masking consistency
+        masked_log_vars = dict()
+        if self.mic is not None:
+            masked_loss = self.mic(self.get_model(), img, img_metas,
+                                   gt_semantic_seg, target_img,
+                                   target_img_metas, valid_pseudo_mask)
+            seg_debug.update(self.mic.debug_output)
+            masked_loss = add_prefix(masked_loss, 'masked')
+            masked_loss, masked_log_vars = self._parse_losses(masked_loss)
+            masked_loss.backward()
 
         if self.local_iter % self.debug_img_interval == 0:
             out_dir = os.path.join(self.train_cfg['work_dir'], 'debug')
@@ -186,7 +228,8 @@ class MinEnt(UDADecorator):
 
             if seg_debug['Source'] is not None and seg_debug:
                 for j in range(batch_size):
-                    rows, cols = 2, len(seg_debug['Source'])
+                    rows = len(seg_debug)
+                    cols = max(len(seg_debug[k]) for k in seg_debug.keys())
                     fig, axs = plt.subplots(
                         rows,
                         cols,
@@ -202,17 +245,10 @@ class MinEnt(UDADecorator):
                     )
                     for k1, (n1, outs) in enumerate(seg_debug.items()):
                         for k2, (n2, out) in enumerate(outs.items()):
-                            if out.shape[1] == 3:
-                                vis = torch.clamp(
-                                    denorm(out, means, stds), 0, 1)
-                                subplotimg(axs[k1][k2], vis[j], f'{n1} {n2}')
-                            else:
-                                if out.ndim == 3:
-                                    args = dict(cmap='cityscapes')
-                                else:
-                                    args = dict(cmap='gray', vmin=0, vmax=1)
-                                subplotimg(axs[k1][k2], out[j], f'{n1} {n2}',
-                                           **args)
+                            subplotimg(
+                                axs[k1][k2],
+                                **prepare_debug_out(f'{n1} {n2}', out[j],
+                                                    means, stds))
                     for ax in axs.flat:
                         ax.axis('off')
                     plt.savefig(

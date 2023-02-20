@@ -1,4 +1,5 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
 import math
 
 import torch
@@ -271,9 +272,12 @@ class Bottleneck(_Bottleneck):
 class ResNeSt(ResNetV1d):
     """ResNeSt backbone.
 
+<<<<<<< HEAD
+=======
     This backbone is the implementation of `ResNeSt:
     Split-Attention Networks <https://arxiv.org/abs/2004.08955>`_.
 
+>>>>>>> main
     Args:
         groups (int): Number of groups of Bottleneck. Default: 1
         base_width (int): Base width of Bottleneck. Default: 4

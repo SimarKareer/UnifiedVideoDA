@@ -1,4 +1,5 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
 import warnings
 
 import torch.nn as nn
@@ -310,9 +311,6 @@ class Bottleneck(BaseModule):
 @BACKBONES.register_module()
 class ResNet(BaseModule):
     """ResNet backbone.
-
-    This backbone is the improved implementation of `Deep Residual Learning
-    for Image Recognition <https://arxiv.org/abs/1512.03385>`_.
 
     Args:
         depth (int): Depth of resnet, from {18, 34, 50, 101, 152}.
@@ -689,10 +687,11 @@ class ResNet(BaseModule):
 class ResNetV1c(ResNet):
     """ResNetV1c variant described in [1]_.
 
-    Compared with default ResNet(ResNetV1b), ResNetV1c replaces the 7x7 conv in
-    the input stem with three 3x3 convs. For more details please refer to `Bag
-    of Tricks for Image Classification with Convolutional Neural Networks
-    <https://arxiv.org/abs/1812.01187>`_.
+    Compared with default ResNet(ResNetV1b), ResNetV1c replaces the 7x7 conv
+    in the input stem with three 3x3 convs.
+
+    References:
+        .. [1] https://arxiv.org/pdf/1812.01187.pdf
     """
 
     def __init__(self, **kwargs):

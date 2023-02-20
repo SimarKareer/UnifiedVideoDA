@@ -1,12 +1,21 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modifications:
+# - Support for seg_weight and forward_with_aux
+# - Update debug output system
+
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from matplotlib import pyplot as plt
 
 from mmseg.core import add_prefix
 from mmseg.ops import resize
 from .. import builder
 from ..builder import SEGMENTORS
+from ..utils.dacs_transforms import get_mean_std
+from ..utils.visualization import prepare_debug_out, subplotimg
 from .base import BaseSegmentor
 
 
@@ -41,6 +50,12 @@ class EncoderDecoder(BaseSegmentor):
 
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
+        self.automatic_debug = True
+        self.debug = False
+        self.debug_output = {}
+        if train_cfg is not None and 'log_config' in train_cfg:
+            self.debug_img_interval = train_cfg['log_config']['img_interval']
+        self.local_iter = 0
 
         assert self.with_decode_head
 
@@ -49,7 +64,6 @@ class EncoderDecoder(BaseSegmentor):
         self.decode_head = builder.build_head(decode_head)
         self.align_corners = self.decode_head.align_corners
         self.num_classes = self.decode_head.num_classes
-        self.out_channels = self.decode_head.out_channels
 
     def _init_auxiliary_head(self, auxiliary_head):
         """Initialize ``auxiliary_head``"""
@@ -68,25 +82,72 @@ class EncoderDecoder(BaseSegmentor):
             x = self.neck(x)
         return x
 
-    def encode_decode(self, img, img_metas):
+    def generate_pseudo_label(self, img, img_metas):
+        self.update_debug_state()
+        if self.debug:
+            self.debug_output = {
+                'Image': img,
+            }
+        out = self.encode_decode(img, img_metas)
+        if self.debug:
+            self.debug_output.update(self.decode_head.debug_output)
+            self.debug_output['Pred'] = out.cpu().numpy()
+
+        return out
+
+    def encode_decode(self, img, img_metas, upscale_pred=True):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         x = self.extract_feat(img)
         out = self._decode_head_forward_test(x, img_metas)
+        if upscale_pred:
+            out = resize(
+                input=out,
+                size=img.shape[2:],
+                mode='bilinear',
+                align_corners=self.align_corners)
+        return out
+
+    def forward_with_aux(self, img, img_metas):
+        self.update_debug_state()
+
+        ret = {}
+
+        x = self.extract_feat(img)
+        out = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         out = resize(
             input=out,
             size=img.shape[2:],
             mode='bilinear',
             align_corners=self.align_corners)
-        return out
+        ret['main'] = out
 
-    def _decode_head_forward_train(self, x, img_metas, gt_semantic_seg):
+        if self.with_auxiliary_head:
+            assert not isinstance(self.auxiliary_head, nn.ModuleList)
+            out_aux = self.auxiliary_head.forward_test(x, img_metas,
+                                                       self.test_cfg)
+            out_aux = resize(
+                input=out_aux,
+                size=img.shape[2:],
+                mode='bilinear',
+                align_corners=self.align_corners)
+            ret['aux'] = out_aux
+
+        return ret
+
+    def _decode_head_forward_train(self,
+                                   x,
+                                   img_metas,
+                                   gt_semantic_seg,
+                                   seg_weight=None,
+                                   return_logits=False):
         """Run forward function and calculate loss for decode head in
         training."""
         losses = dict()
         loss_decode = self.decode_head.forward_train(x, img_metas,
                                                      gt_semantic_seg,
-                                                     self.train_cfg)
+                                                     self.train_cfg,
+                                                     seg_weight, return_logits)
 
         losses.update(add_prefix(loss_decode, 'decode'))
         return losses
@@ -97,7 +158,11 @@ class EncoderDecoder(BaseSegmentor):
         seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         return seg_logits
 
-    def _auxiliary_head_forward_train(self, x, img_metas, gt_semantic_seg):
+    def _auxiliary_head_forward_train(self,
+                                      x,
+                                      img_metas,
+                                      gt_semantic_seg,
+                                      seg_weight=None):
         """Run forward function and calculate loss for auxiliary head in
         training."""
         losses = dict()
@@ -105,7 +170,7 @@ class EncoderDecoder(BaseSegmentor):
             for idx, aux_head in enumerate(self.auxiliary_head):
                 loss_aux = aux_head.forward_train(x, img_metas,
                                                   gt_semantic_seg,
-                                                  self.train_cfg)
+                                                  self.train_cfg, seg_weight)
                 losses.update(add_prefix(loss_aux, f'aux_{idx}'))
         else:
             loss_aux = self.auxiliary_head.forward_train(
@@ -120,7 +185,21 @@ class EncoderDecoder(BaseSegmentor):
 
         return seg_logit
 
-    def forward_train(self, img, img_metas, gt_semantic_seg):
+    def update_debug_state(self):
+        self.debug_output = {}
+        if self.automatic_debug:
+            self.debug = (self.local_iter % self.debug_img_interval == 0)
+        self.decode_head.debug = self.debug
+        if self.with_auxiliary_head:
+            self.auxiliary_head.debug = self.debug
+
+    def forward_train(self,
+                      img,
+                      img_metas,
+                      gt_semantic_seg,
+                      seg_weight=None,
+                      return_feat=False,
+                      return_logits=False):
         """Forward function for training.
 
         Args:
@@ -136,21 +215,68 @@ class EncoderDecoder(BaseSegmentor):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        self.update_debug_state()
 
         x = self.extract_feat(img)
 
         losses = dict()
+        if return_feat:
+            losses['features'] = x
 
         loss_decode = self._decode_head_forward_train(x, img_metas,
-                                                      gt_semantic_seg)
+                                                      gt_semantic_seg,
+                                                      seg_weight,
+                                                      return_logits)
         losses.update(loss_decode)
 
         if self.with_auxiliary_head:
             loss_aux = self._auxiliary_head_forward_train(
-                x, img_metas, gt_semantic_seg)
+                x, img_metas, gt_semantic_seg, seg_weight)
             losses.update(loss_aux)
 
+        if self.debug:
+            self.process_debug(img, img_metas)
+
+        self.local_iter += 1
         return losses
+
+    def process_debug(self, img, img_metas):
+        self.debug_output = {
+            'Image': img,
+            **self.decode_head.debug_output,
+        }
+        if self.with_auxiliary_head:
+            self.debug_output.update(
+                add_prefix(self.auxiliary_head.debug_output, 'Aux'))
+        if self.automatic_debug:
+            out_dir = os.path.join(self.train_cfg['work_dir'], 'encdec_debug')
+            os.makedirs(out_dir, exist_ok=True)
+            means, stds = get_mean_std(img_metas, img.device)
+            for j in range(img.shape[0]):
+                rows, cols = 1, len(self.debug_output)
+                fig, axs = plt.subplots(
+                    rows,
+                    cols,
+                    figsize=(3 * cols, 3 * rows),
+                    gridspec_kw={
+                        'hspace': 0.1,
+                        'wspace': 0,
+                        'top': 0.92,
+                        'bottom': 0,
+                        'right': 1,
+                        'left': 0
+                    },
+                )
+                for k, (n, v) in enumerate(self.debug_output.items()):
+                    subplotimg(axs[k],
+                               **prepare_debug_out(n, v[j], means, stds))
+                for ax in axs.flat:
+                    ax.axis('off')
+                plt.savefig(
+                    os.path.join(out_dir,
+                                 f'{(self.local_iter + 1):06d}_{j}.png'))
+                plt.close()
+            del self.debug_output
 
     # TODO refactor
     def slide_inference(self, img, img_meta, rescale):
@@ -162,27 +288,53 @@ class EncoderDecoder(BaseSegmentor):
 
         h_stride, w_stride = self.test_cfg.stride
         h_crop, w_crop = self.test_cfg.crop_size
+        batched_slide = self.test_cfg.get('batched_slide', False)
         batch_size, _, h_img, w_img = img.size()
-        out_channels = self.out_channels
+        num_classes = self.num_classes
         h_grids = max(h_img - h_crop + h_stride - 1, 0) // h_stride + 1
         w_grids = max(w_img - w_crop + w_stride - 1, 0) // w_stride + 1
-        preds = img.new_zeros((batch_size, out_channels, h_img, w_img))
+        preds = img.new_zeros((batch_size, num_classes, h_img, w_img))
         count_mat = img.new_zeros((batch_size, 1, h_img, w_img))
-        for h_idx in range(h_grids):
-            for w_idx in range(w_grids):
-                y1 = h_idx * h_stride
-                x1 = w_idx * w_stride
-                y2 = min(y1 + h_crop, h_img)
-                x2 = min(x1 + w_crop, w_img)
-                y1 = max(y2 - h_crop, 0)
-                x1 = max(x2 - w_crop, 0)
-                crop_img = img[:, :, y1:y2, x1:x2]
-                crop_seg_logit = self.encode_decode(crop_img, img_meta)
+        if batched_slide:
+            crop_imgs, crops = [], []
+            for h_idx in range(h_grids):
+                for w_idx in range(w_grids):
+                    y1 = h_idx * h_stride
+                    x1 = w_idx * w_stride
+                    y2 = min(y1 + h_crop, h_img)
+                    x2 = min(x1 + w_crop, w_img)
+                    y1 = max(y2 - h_crop, 0)
+                    x1 = max(x2 - w_crop, 0)
+                    crop_img = img[:, :, y1:y2, x1:x2]
+                    crop_imgs.append(crop_img)
+                    crops.append((y1, y2, x1, x2))
+            crop_imgs = torch.cat(crop_imgs, dim=0)
+            crop_seg_logits = self.encode_decode(crop_imgs, img_meta)
+            for i in range(len(crops)):
+                y1, y2, x1, x2 = crops[i]
+                crop_seg_logit = \
+                    crop_seg_logits[i * batch_size:(i + 1) * batch_size]
                 preds += F.pad(crop_seg_logit,
                                (int(x1), int(preds.shape[3] - x2), int(y1),
                                 int(preds.shape[2] - y2)))
 
                 count_mat[:, :, y1:y2, x1:x2] += 1
+        else:
+            for h_idx in range(h_grids):
+                for w_idx in range(w_grids):
+                    y1 = h_idx * h_stride
+                    x1 = w_idx * w_stride
+                    y2 = min(y1 + h_crop, h_img)
+                    x2 = min(x1 + w_crop, w_img)
+                    y1 = max(y2 - h_crop, 0)
+                    x1 = max(x2 - w_crop, 0)
+                    crop_img = img[:, :, y1:y2, x1:x2]
+                    crop_seg_logit = self.encode_decode(crop_img, img_meta)
+                    preds += F.pad(crop_seg_logit,
+                                   (int(x1), int(preds.shape[3] - x2), int(y1),
+                                    int(preds.shape[2] - y2)))
+
+                    count_mat[:, :, y1:y2, x1:x2] += 1
         assert (count_mat == 0).sum() == 0
         if torch.onnx.is_in_onnx_export():
             # cast count_mat to constant while exporting to ONNX
@@ -190,9 +342,6 @@ class EncoderDecoder(BaseSegmentor):
                 count_mat.cpu().detach().numpy()).to(device=img.device)
         preds = preds / count_mat
         if rescale:
-            # remove padding area
-            resize_shape = img_meta[0]['img_shape'][:2]
-            preds = preds[:, :, :resize_shape[0], :resize_shape[1]]
             preds = resize(
                 preds,
                 size=img_meta[0]['ori_shape'][:2],
@@ -210,9 +359,6 @@ class EncoderDecoder(BaseSegmentor):
             if torch.onnx.is_in_onnx_export():
                 size = img.shape[2:]
             else:
-                # remove padding area
-                resize_shape = img_meta[0]['img_shape'][:2]
-                seg_logit = seg_logit[:, :, :resize_shape[0], :resize_shape[1]]
                 size = img_meta[0]['ori_shape'][:2]
             seg_logit = resize(
                 seg_logit,
@@ -246,8 +392,9 @@ class EncoderDecoder(BaseSegmentor):
             seg_logit = self.slide_inference(img, img_meta, rescale)
         else:
             seg_logit = self.whole_inference(img, img_meta, rescale)
-        if self.out_channels == 1:
-            output = F.sigmoid(seg_logit)
+        if hasattr(self.decode_head, 'debug_output_attention') and \
+                self.decode_head.debug_output_attention:
+            output = seg_logit
         else:
             output = F.softmax(seg_logit, dim=1)
         flip = img_meta[0]['flip']
@@ -269,9 +416,9 @@ class EncoderDecoder(BaseSegmentor):
             return seg_logit
 
         seg_logit = self.inference(img, img_meta, rescale)
-        if self.out_channels == 1:
-            seg_pred = (seg_logit >
-                        self.decode_head.threshold).to(seg_logit).squeeze(1)
+        if hasattr(self.decode_head, 'debug_output_attention') and \
+                self.decode_head.debug_output_attention:
+            seg_pred = seg_logit[:, 0]
         else:
             seg_pred = seg_logit.argmax(dim=1)
         if torch.onnx.is_in_onnx_export():
@@ -296,11 +443,7 @@ class EncoderDecoder(BaseSegmentor):
             cur_seg_logit = self.inference(imgs[i], img_metas[i], rescale)
             seg_logit += cur_seg_logit
         seg_logit /= len(imgs)
-        if self.out_channels == 1:
-            seg_pred = (seg_logit >
-                        self.decode_head.threshold).to(seg_logit).squeeze(1)
-        else:
-            seg_pred = seg_logit.argmax(dim=1)
+        seg_pred = seg_logit.argmax(dim=1)
         seg_pred = seg_pred.cpu().numpy()
         # unravel batch dim
         seg_pred = list(seg_pred)

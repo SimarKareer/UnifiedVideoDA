@@ -22,6 +22,8 @@ def update_legacy_cfg(cfg):
     # The saved json config does not differentiate between list and tuple
     cfg.data.test.pipeline[1]['img_scale'] = tuple(
         cfg.data.test.pipeline[1]['img_scale'])
+    cfg.data.val.pipeline[1]['img_scale'] = tuple(
+        cfg.data.val.pipeline[1]['img_scale'])
     # Support legacy checkpoints
     if cfg.model.decode_head.type == 'UniHead':
         cfg.model.decode_head.type = 'DAFormerHead'
@@ -43,7 +45,11 @@ def parse_args():
         '--aug-test', action='store_true', help='Use Flip and Multi scale aug')
     parser.add_argument(
         '--inference-mode',
-        choices=['same', 'whole', 'slide'],
+        choices=[
+            'same',
+            'whole',
+            'slide',
+        ],
         default='same',
         help='Inference mode.')
     parser.add_argument(
@@ -63,15 +69,11 @@ def parse_args():
         'useful when you want to format the result to a specific format and '
         'submit it to the test server')
     parser.add_argument(
-        '--eval', #called metrics later in code
+        '--eval',
         type=str,
         nargs='+',
-        help='["mIoU", "pred_pred", "gt_pred"]')
-    parser.add_argument(
-        '--sub-metrics',
-        type=str,
-        nargs='+',
-        help='["mask_count", "correct_consis"]')
+        help='evaluation metrics, which depends on the dataset, e.g., "mIoU"'
+        ' for generic datasets, and "cityscapes" for Cityscapes')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
@@ -125,7 +127,7 @@ def main():
     cfg = mmcv.Config.fromfile(args.config)
     if args.options is not None:
         cfg.merge_from_dict(args.options)
-    # cfg = update_legacy_cfg(cfg) #I think this removes ability to use json config but that's not needed for us
+    # cfg = update_legacy_cfg(cfg)
     # set cudnn_benchmark
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
@@ -214,16 +216,8 @@ def main():
 
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model,
-            data_loader,
-            args.show,
-            args.show_dir,
-            efficient_test,
-            args.opacity,
-            metrics=args.eval,
-            sub_metrics=args.sub_metrics,
-            pre_eval=True,
-            label_space=cfg.label_space)
+        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
+                                  efficient_test, args.opacity)
     else:
         model = MMDistributedDataParallel(
             model.cuda(),
@@ -241,7 +235,9 @@ def main():
         if args.format_only:
             dataset.format_results(outputs, **kwargs)
         if args.eval:
-            dataset.evaluate(outputs, args.eval, **kwargs)
+            res = dataset.evaluate(outputs, args.eval, **kwargs)
+            print([k for k, v in res.items() if 'IoU' in k])
+            print([round(v * 100, 1) for k, v in res.items() if 'IoU' in k])
 
 
 if __name__ == '__main__':

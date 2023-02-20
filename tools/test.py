@@ -9,15 +9,34 @@ import warnings
 import mmcv
 import torch
 from mmcv.cnn.utils import revert_sync_batchnorm
+from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
                          wrap_fp16_model)
 from mmcv.utils import DictAction
 
-from mmseg import digit_version
 from mmseg.apis import multi_gpu_test, single_gpu_test
 from mmseg.datasets import build_dataloader, build_dataset
-from mmseg.models import build_segmentor, build_train_model
+from mmseg.models import build_segmentor
+from mmseg import digit_version
 from mmseg.utils import build_ddp, build_dp, get_device, setup_multi_processes
+
+def update_legacy_cfg(cfg):
+    # The saved json config does not differentiate between list and tuple
+    cfg.data.test.pipeline[1]['img_scale'] = tuple(
+        cfg.data.test.pipeline[1]['img_scale'])
+    cfg.data.val.pipeline[1]['img_scale'] = tuple(
+        cfg.data.val.pipeline[1]['img_scale'])
+    # Support legacy checkpoints
+    if cfg.model.decode_head.type == 'UniHead':
+        cfg.model.decode_head.type = 'DAFormerHead'
+        cfg.model.decode_head.decoder_params.fusion_cfg.pop('fusion', None)
+    if cfg.model.type == 'MultiResEncoderDecoder':
+        cfg.model.type = 'HRDAEncoderDecoder'
+    if cfg.model.decode_head.type == 'MultiResAttentionWrapper':
+        cfg.model.decode_head.type = 'HRDAHead'
+    cfg.model.backbone.pop('ema_drop_path_rate', None)
+    return cfg
+
 
 
 def parse_args():
@@ -26,6 +45,25 @@ def parse_args():
     parser.add_argument('config', help='test config file path')
     parser.add_argument('checkpoint', help='checkpoint file')
     parser.add_argument(
+        '--aug-test', action='store_true', help='Use Flip and Multi scale aug')
+    parser.add_argument(
+        '--inference-mode',
+        choices=[
+            'same',
+            'whole',
+            'slide',
+        ],
+        default='same',
+        help='Inference mode.')
+    parser.add_argument(
+        '--test-set',
+        action='store_true',
+        help='Run inference on the test set')
+    parser.add_argument(
+        '--hrda-out',
+        choices=['', 'LR', 'HR', 'ATT'],
+        default='',
+        help='Extract LR and HR predictions from HRDA architecture.')
         '--work-dir',
         help=('if specified, the evaluation metric results will be dumped'
               'into the directory as json'))
@@ -145,6 +183,7 @@ def main():
     cfg = mmcv.Config.fromfile(args.config)
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
+    # NOTE: legacy cfg?
 
     # set multi-process settings
     setup_multi_processes(cfg)
@@ -160,71 +199,54 @@ def main():
         cfg.data.test.pipeline[1].flip = True
     cfg.model.pretrained = None
     cfg.data.test.test_mode = True
+    if args.inference_mode == 'same':
+        # Use pre-defined inference mode
+        pass
+    elif args.inference_mode == 'whole':
+        print('Force whole inference.')
+        cfg.model.test_cfg.mode = 'whole'
+    elif args.inference_mode == 'slide':
+        print('Force slide inference.')
+        cfg.model.test_cfg.mode = 'slide'
+        crsize = cfg.data.train.get('sync_crop_size', cfg.crop_size)
+        cfg.model.test_cfg.crop_size = crsize
+        cfg.model.test_cfg.stride = [int(e / 2) for e in crsize]
+        cfg.model.test_cfg.batched_slide = True
+    else:
+        raise NotImplementedError(args.inference_mode)
 
-    if args.gpu_id is not None:
-        cfg.gpu_ids = [args.gpu_id]
+    if args.hrda_out == 'LR':
+        cfg['model']['decode_head']['fixed_attention'] = 0.0
+    elif args.hrda_out == 'HR':
+        cfg['model']['decode_head']['fixed_attention'] = 1.0
+    elif args.hrda_out == 'ATT':
+        cfg['model']['decode_head']['debug_output_attention'] = True
+    elif args.hrda_out == '':
+        pass
+    else:
+        raise NotImplementedError(args.hrda_out)
+
+    if args.test_set:
+        for k in cfg.data.test:
+            if isinstance(cfg.data.test[k], str):
+                cfg.data.test[k] = cfg.data.test[k].replace('val', 'test')
 
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
-        cfg.gpu_ids = [args.gpu_id]
         distributed = False
-        if len(cfg.gpu_ids) > 1:
-            warnings.warn(f'The gpu-ids is reset from {cfg.gpu_ids} to '
-                          f'{cfg.gpu_ids[0:1]} to avoid potential error in '
-                          'non-distribute testing time.')
-            cfg.gpu_ids = cfg.gpu_ids[0:1]
     else:
         distributed = True
         init_dist(args.launcher, **cfg.dist_params)
 
-    rank, _ = get_dist_info()
-    # allows not to create
-    if args.work_dir is not None and rank == 0:
-        mmcv.mkdir_or_exist(osp.abspath(args.work_dir))
-        timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-        if args.aug_test:
-            json_file = osp.join(args.work_dir,
-                                 f'eval_multi_scale_{timestamp}.json')
-        else:
-            json_file = osp.join(args.work_dir,
-                                 f'eval_single_scale_{timestamp}.json')
-    elif rank == 0:
-        work_dir = osp.join('./work_dirs',
-                            osp.splitext(osp.basename(args.config))[0])
-        mmcv.mkdir_or_exist(osp.abspath(work_dir))
-        timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-        if args.aug_test:
-            json_file = osp.join(work_dir,
-                                 f'eval_multi_scale_{timestamp}.json')
-        else:
-            json_file = osp.join(work_dir,
-                                 f'eval_single_scale_{timestamp}.json')
-
     # build the dataloader
     # TODO: support multiple images per gpu (only minor changes are needed)
     dataset = build_dataset(cfg.data.test)
-    # The default loader config
-    loader_cfg = dict(
-        # cfg.gpus will be ignored if distributed
-        num_gpus=len(cfg.gpu_ids),
+    data_loader = build_dataloader(
+        dataset,
+        samples_per_gpu=1,
+        workers_per_gpu=cfg.data.workers_per_gpu,
         dist=distributed,
         shuffle=False)
-    # The overall dataloader settings
-    loader_cfg.update({
-        k: v
-        for k, v in cfg.data.items() if k not in [
-            'train', 'val', 'test', 'train_dataloader', 'val_dataloader',
-            'test_dataloader'
-        ]
-    })
-    test_loader_cfg = {
-        **loader_cfg,
-        'samples_per_gpu': 1,
-        'shuffle': False,  # Not shuffle by default
-        **cfg.data.get('test_dataloader', {})
-    }
-    # build the dataloader
-    data_loader = build_dataloader(dataset, **test_loader_cfg)
 
     # build the model and load checkpoint
     cfg.model.train_cfg = None
@@ -232,7 +254,11 @@ def main():
     fp16_cfg = cfg.get('fp16', None)
     if fp16_cfg is not None:
         wrap_fp16_model(model)
-    checkpoint = load_checkpoint(model, args.checkpoint, map_location='cpu')
+    checkpoint = load_checkpoint(
+        model,
+        args.checkpoint,
+        map_location='cpu',
+        revise_keys=[(r'^module\.', ''), ('model.', '')])
     if 'CLASSES' in checkpoint.get('meta', {}):
         model.CLASSES = checkpoint['meta']['CLASSES']
     else:

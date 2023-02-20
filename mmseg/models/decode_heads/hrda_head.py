@@ -1,3 +1,12 @@
+# Obtained from: https://github.com/lhoyer/HRDA
+# Modifications:
+# - Add return_logits flag
+# - Update debug_output
+# ---------------------------------------------------------------
+# Copyright (c) 2022 ETH Zurich, Lukas Hoyer. All rights reserved.
+# Licensed under the Apache License, Version 2.0
+# ---------------------------------------------------------------
+
 from copy import deepcopy
 
 import torch
@@ -8,7 +17,7 @@ from ...ops import resize as _resize
 from .. import builder
 from ..builder import HEADS
 from ..segmentors.hrda_encoder_decoder import crop
-from .decode_head_mod import BaseDecodeHeadMod
+from .decode_head import BaseDecodeHead
 
 
 def scale_box(box, scale):
@@ -25,7 +34,7 @@ def scale_box(box, scale):
 
 
 @HEADS.register_module()
-class HRDAHead(BaseDecodeHeadMod):
+class HRDAHead(BaseDecodeHead):
 
     def __init__(self,
                  single_scale_head,
@@ -213,12 +222,15 @@ class HRDAHead(BaseDecodeHeadMod):
                       img_metas,
                       gt_semantic_seg,
                       train_cfg,
-                      seg_weight=None):
+                      seg_weight=None,
+                      return_logits=False):
         """Forward function for training."""
         if self.enable_hr_crop:
             assert self.hr_crop_box is not None
         seg_logits = self.forward(inputs)
         losses = self.losses(seg_logits, gt_semantic_seg, seg_weight)
+        if return_logits:
+            losses['logits'] = seg_logits
         self.reset_crop()
         return losses
 
@@ -244,8 +256,9 @@ class HRDAHead(BaseDecodeHeadMod):
                 cropped_seg_weight = crop(seg_weight, self.hr_crop_box)
             else:
                 cropped_seg_weight = seg_weight
-            self.debug_output['Cropped GT'] = \
-                cropped_seg_label.squeeze(1).detach().cpu().numpy()
+            if self.debug:
+                self.debug_output['Cropped GT'] = \
+                    cropped_seg_label.squeeze(1).detach().cpu().numpy()
             loss.update(
                 add_prefix(
                     super(HRDAHead, self).losses(hr_seg, cropped_seg_label,
@@ -260,5 +273,12 @@ class HRDAHead(BaseDecodeHeadMod):
             loss['lr.loss_seg'] *= self.lr_loss_weight
         if self.hr_loss_weight > 0:
             loss['hr.loss_seg'] *= self.hr_loss_weight
+
+        if self.debug:
+            self.debug_output['GT'] = \
+                seg_label.squeeze(1).detach().cpu().numpy()
+            # Remove debug output from cross entropy loss
+            self.debug_output.pop('Seg. Pred.', None)
+            self.debug_output.pop('Seg. GT', None)
 
         return loss

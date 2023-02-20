@@ -1,4 +1,5 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
 import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule
@@ -92,26 +93,12 @@ class PSPHead(BaseDecodeHead):
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg)
 
-    def _forward_feature(self, inputs):
-        """Forward function for feature maps before classifying each pixel with
-        ``self.cls_seg`` fc.
-
-        Args:
-            inputs (list[Tensor]): List of multi-level img features.
-
-        Returns:
-            feats (Tensor): A tensor of shape (batch_size, self.channels,
-                H, W) which is feature map for last layer of decoder head.
-        """
+    def forward(self, inputs):
+        """Forward function."""
         x = self._transform_inputs(inputs)
         psp_outs = [x]
         psp_outs.extend(self.psp_modules(x))
         psp_outs = torch.cat(psp_outs, dim=1)
-        feats = self.bottleneck(psp_outs)
-        return feats
-
-    def forward(self, inputs):
-        """Forward function."""
-        output = self._forward_feature(inputs)
+        output = self.bottleneck(psp_outs)
         output = self.cls_seg(output)
         return output

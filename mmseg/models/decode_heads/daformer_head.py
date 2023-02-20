@@ -1,4 +1,8 @@
 # Obtained from: https://github.com/lhoyer/DAFormer
+# ---------------------------------------------------------------
+# Copyright (c) 2021-2022 ETH Zurich, Lukas Hoyer. All rights reserved.
+# Licensed under the Apache License, Version 2.0
+# ---------------------------------------------------------------
 
 import torch
 import torch.nn as nn
@@ -8,7 +12,7 @@ from mmseg.models.decode_heads.isa_head import ISALayer
 from mmseg.ops import resize
 from ..builder import HEADS
 from .aspp_head import ASPPModule
-from .decode_head_mod import BaseDecodeHeadMod
+from .decode_head import BaseDecodeHead
 from .segformer_head import MLP
 from .sep_aspp_head import DepthwiseSeparableASPPModule
 
@@ -118,7 +122,7 @@ def build_layer(in_channels, out_channels, type, **kwargs):
 
 
 @HEADS.register_module()
-class DAFormerHead(BaseDecodeHeadMod):
+class DAFormerHead(BaseDecodeHead):
 
     def __init__(self, **kwargs):
         super(DAFormerHead, self).__init__(

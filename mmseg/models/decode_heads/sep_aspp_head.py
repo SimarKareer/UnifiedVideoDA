@@ -1,4 +1,5 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
 import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule

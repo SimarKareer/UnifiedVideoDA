@@ -1,27 +1,32 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modifications:
+# - Provide args as argument to main()
+# - Snapshot source code
+# - Build UDA model instead of regular one
+# - Add deterministic config flag
+
 import argparse
 import copy
 import os
 import os.path as osp
+import sys
 import time
-import warnings
 
 import mmcv
 import torch
-import torch.distributed as dist
-from mmcv.cnn.utils import revert_sync_batchnorm
-from mmcv.runner import get_dist_info, init_dist
+from mmcv.runner import init_dist, _load_checkpoint, load_state_dict
+from mmcv.runner.checkpoint import summarize_keys
 from mmcv.utils import Config, DictAction, get_git_hash
 
 from mmseg import __version__
-from mmseg.apis import init_random_seed, set_random_seed, train_segmentor
-from mmseg.datasets import build_dataset
-from mmseg.models import build_segmentor, build_train_model
-from mmseg.utils import (collect_env, get_device, get_root_logger,
-                         setup_multi_processes)
+from mmseg.apis import set_random_seed, train_segmentor, multi_gpu_test, single_gpu_test
+from mmseg.datasets import build_dataset, build_dataloader
+from mmseg.models.builder import build_train_model
+from mmseg.utils import collect_env, get_root_logger
+from mmseg.utils.collect_env import gen_code_archive
 
 
-def parse_args():
+def parse_args(args):
     parser = argparse.ArgumentParser(description='Train a segmentor')
     parser.add_argument('config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
@@ -37,84 +42,117 @@ def parse_args():
     group_gpus.add_argument(
         '--gpus',
         type=int,
-        help='(Deprecated, please use --gpu-id) number of gpus to use '
+        help='number of gpus to use '
         '(only applicable to non-distributed training)')
     group_gpus.add_argument(
         '--gpu-ids',
         type=int,
         nargs='+',
-        help='(Deprecated, please use --gpu-id) ids of gpus to use '
-        '(only applicable to non-distributed training)')
-    group_gpus.add_argument(
-        '--gpu-id',
-        type=int,
-        default=0,
-        help='id of gpu to use '
+        help='ids of gpus to use '
         '(only applicable to non-distributed training)')
     parser.add_argument('--seed', type=int, default=None, help='random seed')
-    parser.add_argument(
-        '--diff_seed',
-        action='store_true',
-        help='Whether or not set different seeds for different ranks')
     parser.add_argument(
         '--deterministic',
         action='store_true',
         help='whether to set deterministic options for CUDNN backend.')
     parser.add_argument(
-        '--options',
-        nargs='+',
-        action=DictAction,
-        help="--options is deprecated in favor of --cfg_options' and it will "
-        'not be supported in version v0.22.0. Override some settings in the '
-        'used config, the key-value pair in xxx=yyy format will be merged '
-        'into config file. If the value to be overwritten is a list, it '
-        'should be like key="[a,b]" or key=a,b It also allows nested '
-        'list/tuple values, e.g. key="[(a,b),(c,d)]" Note that the quotation '
-        'marks are necessary and that no white space is allowed.')
-    parser.add_argument(
-        '--cfg-options',
-        nargs='+',
-        action=DictAction,
-        help='override some settings in the used config, the key-value pair '
-        'in xxx=yyy format will be merged into config file. If the value to '
-        'be overwritten is a list, it should be like key="[a,b]" or key=a,b '
-        'It also allows nested list/tuple values, e.g. key="[(a,b),(c,d)]" '
-        'Note that the quotation marks are necessary and that no white space '
-        'is allowed.')
+        '--options', nargs='+', action=DictAction, help='custom options')
     parser.add_argument(
         '--launcher',
         choices=['none', 'pytorch', 'slurm', 'mpi'],
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
-    parser.add_argument(
-        '--auto-resume',
-        action='store_true',
-        help='resume from the latest checkpoint automatically.')
-    args = parser.parse_args()
+    parser.add_argument('--analysis', type=bool, default=False)
+    parser.add_argument('--nowandb', type=bool, default=False)
+    parser.add_argument('--eval', type=bool, default=False)
+    parser.add_argument('--lr', type=float, default=None)
+    parser.add_argument('--l-warp-lambda', type=float, default=None)
+    parser.add_argument('--l-mix-lambda', type=float, default=None)
+    args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
 
-    if args.options and args.cfg_options:
-        raise ValueError(
-            '--options and --cfg-options cannot be both '
-            'specified, --options is deprecated in favor of --cfg-options. '
-            '--options will not be supported in version v0.22.0.')
-    if args.options:
-        warnings.warn('--options is deprecated in favor of --cfg-options. '
-                      '--options will not be supported in version v0.22.0.')
-        args.cfg_options = args.options
-
     return args
 
+def load_checkpoint(model,
+                    filename,
+                    map_location=None,
+                    strict=False,
+                    logger=None,
+                    revise_keys=False,
+                    invert_dict=False):
+    """Load checkpoint from a file or URI.
 
-def main():
-    args = parse_args()
+    Args:
+        model (Module): Module to load checkpoint.
+        filename (str): Accept local filepath, URL, ``torchvision://xxx``,
+            ``open-mmlab://xxx``. Please refer to ``docs/model_zoo.md`` for
+            details.
+        map_location (str): Same as :func:`torch.load`.
+        strict (bool): Whether to allow different params for the model and
+            checkpoint.
+        logger (:mod:`logging.Logger` or None): The logger for error message.
+        revise_keys (bool): Whether to revise keys in state_dict.
+
+
+    Returns:
+        dict or OrderedDict: The loaded checkpoint.
+    """
+    checkpoint = _load_checkpoint(filename, map_location, logger)
+    # OrderedDict is a subclass of dict
+    if not isinstance(checkpoint, dict):
+        raise RuntimeError(
+            f'No state_dict found in checkpoint file {filename}')
+    # get state_dict from checkpoint
+    if 'state_dict' in checkpoint:
+        state_dict = checkpoint['state_dict']
+    else:
+        state_dict = checkpoint
+    # strip prefix of state_dict
+    # breakpoint()
+
+    print("Loaded state dict has keys: ", summarize_keys(state_dict.keys(), split=1))
+
+    print("Target State Dict has keys: ", summarize_keys(model.state_dict().keys(), split=2))
+
+
+
+    revise_dict = {
+        "ema_backbone": "ema_model.backbone",
+        "imnet_backbone": 'imnet_model.backbone',
+        "decode_head": "model.decode_head",
+        "imnet_decode_head": "imnet_model.decode_head",
+        "backbone": "model.backbone",
+        "ema_decode_head": "ema_model.decode_head",
+    }
+    if invert_dict:
+        revise_dict = {v: k for k, v in revise_dict.items()}
+
+    new_state_dict = state_dict
+    if revise_keys:
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            for old_name, new_name in revise_dict.items():
+                if old_name in k:
+                    k = k.replace(old_name, new_name)
+                    break
+            new_state_dict[k] = v
+            # state_dict = {re.sub(p, r, k): v for k, v in state_dict.items()}
+
+    # load state_dict
+    load_state_dict(model, new_state_dict, strict, logger)
+
+
+    return checkpoint
+
+def main(args):
+    print("RUNNING TRAIN.PY")
+    args = parse_args(args)
 
     cfg = Config.fromfile(args.config)
-    if args.cfg_options is not None:
-        cfg.merge_from_dict(args.cfg_options)
-
+    if args.options is not None:
+        cfg.merge_from_dict(args.options)
     # set cudnn_benchmark
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
@@ -127,49 +165,60 @@ def main():
         # use config filename as default work_dir if cfg.work_dir is None
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
+    cfg.model.train_cfg.work_dir = cfg.work_dir
+    cfg.model.train_cfg.log_config = cfg.log_config
     if args.load_from is not None:
-        cfg.load_from = args.load_from
+        assert False, "Not supported any more, use the python config to set load_from"
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
-    if args.gpus is not None:
-        cfg.gpu_ids = range(1)
-        warnings.warn('`--gpus` is deprecated because we only support '
-                      'single GPU mode in non-distributed training. '
-                      'Use `gpus=1` now.')
     if args.gpu_ids is not None:
-        cfg.gpu_ids = args.gpu_ids[0:1]
-        warnings.warn('`--gpu-ids` is deprecated, please use `--gpu-id`. '
-                      'Because we only support single GPU mode in '
-                      'non-distributed training. Use the first GPU '
-                      'in `gpu_ids` now.')
-    if args.gpus is None and args.gpu_ids is None:
-        cfg.gpu_ids = [args.gpu_id]
+        cfg.gpu_ids = args.gpu_ids
+    else:
+        cfg.gpu_ids = range(1) if cfg.n_gpus is None else range(cfg.n_gpus)
 
-    cfg.auto_resume = args.auto_resume
-
-    # print("CUDA LAUNCH BLOCKING: ", os.environ["CUDA_LAUNCH_BLOCKING"])
-    # os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
     # init distributed env first, since logger depends on the dist info.
-    if args.launcher == 'none':
+    if cfg.launcher == 'none':
         distributed = False
     else:
         distributed = True
-        init_dist(args.launcher, **cfg.dist_params)
-        # gpu_ids is used to calculate iter when resuming checkpoint
-        _, world_size = get_dist_info()
-        cfg.gpu_ids = range(world_size)
+        init_dist(cfg.launcher, **cfg.dist_params)
+    
+    if args.lr is not None:
+        print("Overwriting LR to ", args.lr)
+        cfg.optimizer.lr = args.lr
+
+    if args.l_warp_lambda is not None:
+        print("Overwriting l_warp_lambda to ", args.l_warp_lambda)
+        cfg.uda.l_warp_lambda = args.l_warp_lambda
+
+    if args.l_mix_lambda is not None:
+        print("Overwriting l_mix_lambda to ", args.l_mix_lambda)
+        cfg.uda.l_mix_lambda = args.l_mix_lambda
+    
+    if args.nowandb:
+        for i in range(len(cfg.log_config.hooks)):
+            if cfg.log_config.hooks[i].type == "MMSegWandbHook":
+                cfg.log_config.hooks.pop(i)
+                break
+
+    if args.eval:
+        print("EVAL MODE")
+        cfg.runner.max_iters = 1
+        cfg.evaluation.interval = 1
+
+    print("FINISHED INIT DIST")
 
     # create work_dir
     mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
     # dump config
+    # cfg.dump("config.py")
     cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))
+    # snapshot source code
+    # gen_code_archive(cfg.work_dir)
     # init the logger before other steps
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     log_file = osp.join(cfg.work_dir, f'{timestamp}.log')
     logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
-
-    # set multi-process settings
-    setup_multi_processes(cfg)
 
     # init the meta dict to record some important information such as
     # environment info and seed, which will be logged
@@ -187,29 +236,36 @@ def main():
     logger.info(f'Config:\n{cfg.pretty_text}')
 
     # set random seeds
-    cfg.device = get_device()
-    seed = init_random_seed(args.seed, device=cfg.device)
-    seed = seed + dist.get_rank() if args.diff_seed else seed
-    logger.info(f'Set random seed to {seed}, '
-                f'deterministic: {args.deterministic}')
-    set_random_seed(seed, deterministic=args.deterministic)
-    cfg.seed = seed
-    meta['seed'] = seed
-    meta['exp_name'] = osp.basename(args.config)
+    if args.seed is None and 'seed' in cfg:
+        args.seed = cfg['seed']
+    if args.seed is not None:
+        deterministic = args.deterministic or cfg.get('deterministic')
+        logger.info(f'Set random seed to {args.seed}, deterministic: '
+                    f'{deterministic}')
+        set_random_seed(args.seed, deterministic=deterministic)
+    cfg.seed = args.seed
+    meta['seed'] = args.seed
+    meta['exp_name'] = osp.splitext(osp.basename(args.config))[0]
 
-    model = build_segmentor(
-        cfg.model,
-        train_cfg=cfg.get('train_cfg'),
-        test_cfg=cfg.get('test_cfg'))
+    model = build_train_model(
+        cfg, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
     model.init_weights()
 
-    # SyncBN is not support for DP
-    if not distributed:
-        warnings.warn(
-            'SyncBN is only supported with DDP. To be compatible with DP, '
-            'we convert SyncBN to BN. Please use dist_train.sh which can '
-            'avoid this error.')
-        model = revert_sync_batchnorm(model)
+    # breakpoint()
+    # model.backbone.patch_embed1.proj.weight vs backbone.patch_embed1.proj.weight
+    # ema_model.backbone.patch_embed3.proj.bias vs ema_backbone.block3.34.attn.norm.bias
+    # imnet_model.backbone.block3.26.norm1.weight vs imnet_backbone.block1.1.norm1.bias
+    # ? vs imnet_decode_head.scale_attention.fuse_layer.bn.weight
+    if cfg.load_from:
+        checkpoint = load_checkpoint(
+            model,
+            # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
+            cfg.load_from,
+            map_location='cpu',
+            revise_keys=False,
+            invert_dict=False)
+        print("LOADED A CHECKPOINT")
+        
 
     logger.info(model)
 
@@ -241,4 +297,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])

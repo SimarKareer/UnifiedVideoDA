@@ -1,4 +1,7 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modifications: Save label with train_id color map if opacity==1
+
+import os
 import warnings
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
@@ -7,7 +10,9 @@ import mmcv
 import numpy as np
 import torch
 import torch.distributed as dist
+from mmcv import mkdir_or_exist
 from mmcv.runner import BaseModule, auto_fp16
+from PIL import Image
 
 
 class BaseSegmentor(BaseModule, metaclass=ABCMeta):
@@ -39,7 +44,7 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def encode_decode(self, img, img_metas):
+    def encode_decode(self, img, img_metas, upscale_pred=True):
         """Placeholder for encode images with backbone and decode into a
         semantic segmentation map of the same size as input."""
         pass
@@ -145,27 +150,15 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
 
         return outputs
 
-    def val_step(self, data_batch, optimizer=None, **kwargs):
+    def val_step(self, data_batch, **kwargs):
         """The iteration step during validation.
 
         This method shares the same signature as :func:`train_step`, but used
         during val epochs. Note that the evaluation after training epochs is
         not implemented with this method, but an evaluation hook.
         """
-        losses = self(**data_batch)
-        loss, log_vars = self._parse_losses(losses)
-
-        log_vars_ = dict()
-        for loss_name, loss_value in log_vars.items():
-            k = loss_name + '_val'
-            log_vars_[k] = loss_value
-
-        outputs = dict(
-            loss=loss,
-            log_vars=log_vars_,
-            num_samples=len(data_batch['img_metas']))
-
-        return outputs
+        output = self(**data_batch, **kwargs)
+        return output
 
     @staticmethod
     def _parse_losses(losses):
@@ -193,17 +186,6 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
         loss = sum(_value for _key, _value in log_vars.items()
                    if 'loss' in _key)
 
-        # If the loss_vars has different length, raise assertion error
-        # to prevent GPUs from infinite waiting.
-        if dist.is_available() and dist.is_initialized():
-            log_var_length = torch.tensor(len(log_vars), device=loss.device)
-            dist.all_reduce(log_var_length)
-            message = (f'rank {dist.get_rank()}' +
-                       f' len(log_vars): {len(log_vars)}' + ' keys: ' +
-                       ','.join(log_vars.keys()) + '\n')
-            assert log_var_length == len(log_vars) * dist.get_world_size(), \
-                'loss log variables are different across GPUs!\n' + message
-
         log_vars['loss'] = loss
         for loss_name, loss_value in log_vars.items():
             # reduce loss when distributed training
@@ -218,7 +200,6 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
                     img,
                     result,
                     palette=None,
-                    classes=None,
                     win_name='',
                     show=False,
                     wait_time=0,
@@ -246,34 +227,30 @@ class BaseSegmentor(BaseModule, metaclass=ABCMeta):
         Returns:
             img (Tensor): Only if not `show` or `out_file`
         """
-        if classes == None:
-            classes = self.CLASSES
-        
         img = mmcv.imread(img)
         img = img.copy()
         seg = result[0]
         if palette is None:
             if self.PALETTE is None:
-                # Get random state before set seed,
-                # and restore random state later.
-                # It will prevent loss of randomness, as the palette
-                # may be different in each iteration if not specified.
-                # See: https://github.com/open-mmlab/mmdetection/issues/5844
-                state = np.random.get_state()
-                np.random.seed(42)
-                # random palette
                 palette = np.random.randint(
-                    0, 255, size=(len(classes), 3))
-                np.random.set_state(state)
+                    0, 255, size=(len(self.CLASSES), 3))
             else:
                 palette = self.PALETTE
         palette = np.array(palette)
-        # print("Palette: ", palette)
-        # print("CLASSES: ", classes)
-        assert palette.shape[0] == len(classes)
+        assert palette.shape[0] == len(self.CLASSES)
         assert palette.shape[1] == 3
         assert len(palette.shape) == 2
         assert 0 < opacity <= 1.0
+
+        # Save label with train_id color map
+        if out_file is not None and opacity == 1.0:
+            palette = np.array(self.PALETTE, dtype=np.uint8)
+            out = Image.fromarray(np.array(seg).astype(np.uint8)).convert('P')
+            out.putpalette(palette)
+            mkdir_or_exist(os.path.abspath(os.path.dirname(out_file)))
+            out.save(out_file)
+            return
+
         color_seg = np.zeros((seg.shape[0], seg.shape[1], 3), dtype=np.uint8)
         for label, color in enumerate(palette):
             color_seg[seg == label, :] = color

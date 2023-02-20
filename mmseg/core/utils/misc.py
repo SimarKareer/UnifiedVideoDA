@@ -1,4 +1,6 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
+
 def add_prefix(inputs, prefix):
     """Add prefix for dict.
 

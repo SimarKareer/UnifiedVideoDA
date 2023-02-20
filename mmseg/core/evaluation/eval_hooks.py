@@ -80,10 +80,12 @@ class DistEvalHook(_DistEvalHook):
                  by_epoch=False,
                  efficient_test=False,
                  pre_eval=False,
+                 metrics=["mIoU"],
                  **kwargs):
         super().__init__(*args, by_epoch=by_epoch, **kwargs)
         self.pre_eval = pre_eval
         self.latest_results = None
+        self.metrics = metrics
         if efficient_test:
             warnings.warn(
                 'DeprecationWarning: ``efficient_test`` for evaluation hook '
@@ -119,7 +121,8 @@ class DistEvalHook(_DistEvalHook):
             self.dataloader,
             tmpdir=tmpdir,
             gpu_collect=self.gpu_collect,
-            pre_eval=self.pre_eval)
+            pre_eval=self.pre_eval,
+            metrics=self.metrics)
         self.latest_results = results
         runner.log_buffer.clear()
 

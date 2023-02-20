@@ -4,6 +4,8 @@
 #
 # This work is licensed under the NVIDIA Source Code License
 # ---------------------------------------------------------------
+# A copy of the license is available at resources/license_segformer
+
 import math
 import warnings
 from functools import partial
@@ -184,7 +186,7 @@ class OverlapPatchEmbed(nn.Module):
 
 
 @BACKBONES.register_module()
-class MixVisionTransformer2(BaseModule):
+class MixVisionTransformer(BaseModule):
 
     def __init__(self,
                  img_size=224,
@@ -453,7 +455,7 @@ class DWConv(nn.Module):
 
 
 @BACKBONES.register_module()
-class mit_b0(MixVisionTransformer2):
+class mit_b0(MixVisionTransformer):
 
     def __init__(self, **kwargs):
         super(mit_b0, self).__init__(
@@ -469,7 +471,7 @@ class mit_b0(MixVisionTransformer2):
 
 
 @BACKBONES.register_module()
-class mit_b1(MixVisionTransformer2):
+class mit_b1(MixVisionTransformer):
 
     def __init__(self, **kwargs):
         super(mit_b1, self).__init__(
@@ -485,7 +487,7 @@ class mit_b1(MixVisionTransformer2):
 
 
 @BACKBONES.register_module()
-class mit_b2(MixVisionTransformer2):
+class mit_b2(MixVisionTransformer):
 
     def __init__(self, **kwargs):
         super(mit_b2, self).__init__(
@@ -501,7 +503,7 @@ class mit_b2(MixVisionTransformer2):
 
 
 @BACKBONES.register_module()
-class mit_b3(MixVisionTransformer2):
+class mit_b3(MixVisionTransformer):
 
     def __init__(self, **kwargs):
         super(mit_b3, self).__init__(
@@ -517,7 +519,7 @@ class mit_b3(MixVisionTransformer2):
 
 
 @BACKBONES.register_module()
-class mit_b4(MixVisionTransformer2):
+class mit_b4(MixVisionTransformer):
 
     def __init__(self, **kwargs):
         super(mit_b4, self).__init__(
@@ -533,7 +535,7 @@ class mit_b4(MixVisionTransformer2):
 
 
 @BACKBONES.register_module()
-class mit_b5(MixVisionTransformer2):
+class mit_b5(MixVisionTransformer):
 
     def __init__(self, **kwargs):
         super(mit_b5, self).__init__(

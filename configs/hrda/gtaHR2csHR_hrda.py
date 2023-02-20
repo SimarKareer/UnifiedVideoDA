@@ -1,4 +1,11 @@
+# Obtained from: https://github.com/lhoyer/HRDA
+# ---------------------------------------------------------------
+# Copyright (c) 2022 ETH Zurich, Lukas Hoyer. All rights reserved.
+# Licensed under the Apache License, Version 2.0
+# ---------------------------------------------------------------
+
 # Default HRDA Configuration for GTA->Cityscapes
+# SIMAR: currently I've messeg around here and it's set up for VIPER.  I should separate this into a separate file.
 _base_ = [
     '../_base_/default_runtime.py',
     # DAFormer Network Architecture

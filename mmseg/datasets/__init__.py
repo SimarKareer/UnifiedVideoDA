@@ -6,8 +6,14 @@ from .cityscapes import CityscapesDataset
 from .coco_stuff import COCOStuffDataset
 from .custom import CustomDataset
 from .dark_zurich import DarkZurichDataset
-from .dataset_wrappers import (ConcatDataset, MultiImageMixDataset,
+from .dataset_wrappers import (ConcatDataset,
                                RepeatDataset)
+
+from .dataset_wrappers import ConcatDataset, RepeatDataset
+from .gta import GTADataset
+from .synthia import SynthiaDataset
+from .uda_dataset import UDADataset
+
 from .drive import DRIVEDataset
 from .hrf import HRFDataset
 from .isaid import iSAIDDataset
@@ -20,6 +26,8 @@ from .stare import STAREDataset
 from .voc import PascalVOCDataset
 from .viper import ViperDataset
 from .viperSeq import ViperSeqDataset
+from .cityscapesSeq import CityscapesSeqDataset
+from .seqUtils import SeqUtils
 
 __all__ = [
     'CustomDataset', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
@@ -29,5 +37,5 @@ __all__ = [
     'STAREDataset', 'DarkZurichDataset', 'NightDrivingDataset',
     'COCOStuffDataset', 'LoveDADataset', 'MultiImageMixDataset',
     'iSAIDDataset', 'ISPRSDataset', 'PotsdamDataset', "ViperDataset",
-    "ViperSeqDataset"
+    "ViperSeqDataset", "SeqUtils"
 ]

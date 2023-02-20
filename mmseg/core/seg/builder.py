@@ -1,4 +1,5 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+
 from mmcv.utils import Registry, build_from_cfg
 
 PIXEL_SAMPLERS = Registry('pixel sampler')

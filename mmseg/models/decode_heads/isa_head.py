@@ -1,14 +1,16 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modification: Add ISALayer
+
 import math
 
 import torch
 import torch.nn.functional as F
 from mmcv.cnn import ConvModule
+from torch import nn
 
 from ..builder import HEADS
 from ..utils import SelfAttentionBlock as _SelfAttentionBlock
 from .decode_head import BaseDecodeHead
-import torch.nn as nn
 
 
 class SelfAttentionBlock(_SelfAttentionBlock):
@@ -22,7 +24,13 @@ class SelfAttentionBlock(_SelfAttentionBlock):
         act_cfg (dict | None): Config of activation layers.
     """
 
-    def __init__(self, in_channels, channels, conv_cfg, norm_cfg, act_cfg):
+    def __init__(self,
+                 in_channels,
+                 channels,
+                 conv_cfg,
+                 norm_cfg,
+                 act_cfg,
+                 key_query_num_convs=2):
         super(SelfAttentionBlock, self).__init__(
             key_in_channels=in_channels,
             query_in_channels=in_channels,
@@ -31,7 +39,7 @@ class SelfAttentionBlock(_SelfAttentionBlock):
             share_key_query=False,
             query_downsample=None,
             key_downsample=None,
-            key_query_num_convs=2,
+            key_query_num_convs=key_query_num_convs,
             key_query_norm=True,
             value_out_num_convs=1,
             value_out_norm=False,
@@ -54,6 +62,8 @@ class SelfAttentionBlock(_SelfAttentionBlock):
         """Forward function."""
         context = super(SelfAttentionBlock, self).forward(x, x)
         return self.output_project(context)
+
+
 class ISALayer(nn.Module):
 
     def __init__(self,

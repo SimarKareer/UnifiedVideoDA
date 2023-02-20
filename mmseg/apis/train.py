@@ -1,3 +1,7 @@
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modifications:
+# - Add ddp_wrapper from mmgen
+
 # Copyright (c) OpenMMLab. All rights reserved.
 import os
 import random
@@ -6,6 +10,13 @@ import warnings
 import mmcv
 import numpy as np
 import torch
+from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
+from mmcv.runner import build_optimizer, build_runner
+
+from mmseg.core import DistEvalHook, EvalHook
+from mmseg.core.ddp_wrapper import DistributedDataParallelWrapper
+from mmseg.datasets import build_dataloader, build_dataset
+from mmseg.utils import get_root_logger
 import torch.distributed as dist
 from mmcv.runner import (HOOKS, DistSamplerSeedHook, EpochBasedRunner,
                          build_runner, get_dist_info)
@@ -80,42 +91,59 @@ def train_segmentor(model,
 
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
-    # The default loader config
-    loader_cfg = dict(
-        # cfg.gpus will be ignored if distributed
-        num_gpus=len(cfg.gpu_ids),
-        dist=distributed,
-        seed=cfg.seed,
-        drop_last=True)
-    # The overall dataloader settings
-    loader_cfg.update({
-        k: v
-        for k, v in cfg.data.items() if k not in [
-            'train', 'val', 'test', 'train_dataloader', 'val_dataloader',
-            'test_dataloader'
-        ]
-    })
+    data_loaders = [
+        build_dataloader(
+            ds,
+            cfg.data.samples_per_gpu,
+            cfg.data.workers_per_gpu,
+            # cfg.gpus will be ignored if distributed
+            len(cfg.gpu_ids),
+            dist=distributed,
+            seed=cfg.seed,
+            drop_last=True) for ds in dataset
+    ]
 
-    # The specific dataloader settings
-    train_loader_cfg = {**loader_cfg, **cfg.data.get('train_dataloader', {})}
-    data_loaders = [build_dataloader(ds, **train_loader_cfg) for ds in dataset]
 
-    # put model on devices
+    # put model on gpus
+    # breakpoint()
+    # if distributed:
+    #     print("DEVICE COUNT: ", torch.cuda.device_count())
+    #     print("LOCAL RANK: ", os.environ["LOCAL_RANK"])
+    #     find_unused_parameters = cfg.get('find_unused_parameters', False)
+    #     use_ddp_wrapper = cfg.get('use_ddp_wrapper', False)
+    #     # Sets the `find_unused_parameters` parameter in
+    #     # torch.nn.parallel.DistributedDataParallel
+    #     device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
+    #     torch.cuda.set_device(device)
+    #     model=model.to(device)
+
+
+    #     mmcv.print_log('Use DDP Wrapper.', 'mmseg')
+    #     model = DistributedDataParallelWrapper(
+    #         model, device_ids=[device], output_device=device
+    #     )
+
     if distributed:
         find_unused_parameters = cfg.get('find_unused_parameters', False)
+        use_ddp_wrapper = cfg.get('use_ddp_wrapper', False)
         # Sets the `find_unused_parameters` parameter in
-        # DDP wrapper
-        model = build_ddp(
-            model,
-            cfg.device,
-            device_ids=[int(os.environ['LOCAL_RANK'])],
-            broadcast_buffers=False,
-            find_unused_parameters=find_unused_parameters)
+        # torch.nn.parallel.DistributedDataParallel
+        if use_ddp_wrapper:
+            mmcv.print_log('Use DDP Wrapper.', 'mmseg')
+            model = DistributedDataParallelWrapper(
+                model.cuda(),
+                device_ids=[torch.cuda.current_device()],
+                broadcast_buffers=False,
+                find_unused_parameters=find_unused_parameters)
+        else:
+            model = MMDistributedDataParallel(
+                model.cuda(),
+                device_ids=[torch.cuda.current_device()],
+                broadcast_buffers=False,
+                find_unused_parameters=find_unused_parameters)
     else:
-        if not torch.cuda.is_available():
-            assert digit_version(mmcv.__version__) >= digit_version('1.4.4'), \
-                'Please use MMCV >= 1.4.4 for CPU training!'
-        model = build_dp(model, cfg.device, device_ids=cfg.gpu_ids)
+        model = MMDataParallel(
+            model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
 
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)
@@ -153,44 +181,18 @@ def train_segmentor(model,
     # register eval hooks
     if validate:
         val_dataset = build_dataset(cfg.data.val, dict(test_mode=True))
-        # The specific dataloader settings
-        val_loader_cfg = {
-            **loader_cfg,
-            'samples_per_gpu': 1,
-            'shuffle': False,  # Not shuffle by default
-            **cfg.data.get('val_dataloader', {}),
-        }
-        val_dataloader = build_dataloader(val_dataset, **val_loader_cfg)
+        val_dataloader = build_dataloader(
+            val_dataset,
+            samples_per_gpu=1,
+            workers_per_gpu=cfg.data.workers_per_gpu,
+            dist=distributed,
+            shuffle=False)
         eval_cfg = cfg.get('evaluation', {})
         eval_cfg['by_epoch'] = cfg.runner['type'] != 'IterBasedRunner'
         eval_hook = DistEvalHook if distributed else EvalHook
-        # In this PR (https://github.com/open-mmlab/mmcv/pull/1193), the
-        # priority of IterTimerHook has been modified from 'NORMAL' to 'LOW'.
-        runner.register_hook(
-            eval_hook(val_dataloader, **eval_cfg), priority='LOW')
+        # eval_hook = EvalHook
+        runner.register_hook(eval_hook(val_dataloader, **eval_cfg))
 
-    # user-defined hooks
-    if cfg.get('custom_hooks', None):
-        custom_hooks = cfg.custom_hooks
-        assert isinstance(custom_hooks, list), \
-            f'custom_hooks expect list type, but got {type(custom_hooks)}'
-        for hook_cfg in cfg.custom_hooks:
-            assert isinstance(hook_cfg, dict), \
-                'Each item in custom_hooks expects dict type, but got ' \
-                f'{type(hook_cfg)}'
-            hook_cfg = hook_cfg.copy()
-            priority = hook_cfg.pop('priority', 'NORMAL')
-            hook = build_from_cfg(hook_cfg, HOOKS)
-            runner.register_hook(hook, priority=priority)
-
-    # trace_config = dict(type='tb_trace', dir_name='work_dir', by_epoch=False)
-    # profiler_config = dict(on_trace_ready=trace_config)
-    # runner.register_profiler_hook(profiler_config)
-
-    if cfg.resume_from is None and cfg.get('auto_resume'):
-        resume_from = find_latest_checkpoint(cfg.work_dir)
-        if resume_from is not None:
-            cfg.resume_from = resume_from
     if cfg.resume_from:
         runner.resume(cfg.resume_from)
     elif cfg.load_from:

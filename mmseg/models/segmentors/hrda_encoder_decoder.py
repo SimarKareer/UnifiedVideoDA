@@ -1,10 +1,19 @@
-# From HRDA repo @LukasHoyer
+# Obtained from: https://github.com/lhoyer/HRDA
+# Modifications:
+# - Add return_logits flag
+# - Add upscale_pred flag
+# - Update debug_output system
+# ---------------------------------------------------------------
+# Copyright (c) 2022 ETH Zurich, Lukas Hoyer. All rights reserved.
+# Licensed under the Apache License, Version 2.0
+# ---------------------------------------------------------------
+
 import numpy as np
 import torch
 
 from mmseg.ops import resize
 from ..builder import SEGMENTORS
-from .encoder_decoder_mod import EncoderDecoderMod
+from .encoder_decoder import EncoderDecoder
 
 
 def get_crop_bbox(img_h, img_w, crop_size, divisible=1):
@@ -37,7 +46,7 @@ def crop(img, crop_bbox):
 
 
 @SEGMENTORS.register_module()
-class HRDAEncoderDecoder(EncoderDecoderMod):
+class HRDAEncoderDecoder(EncoderDecoder):
     last_train_crop_box = {}
 
     def __init__(self,
@@ -155,7 +164,14 @@ class HRDAEncoderDecoder(EncoderDecoderMod):
             scaled_img = self.resize(img, self.feature_scale)
             return self.extract_unscaled_feat(scaled_img)
 
-    def encode_decode(self, img, img_metas):
+    def generate_pseudo_label(self, img, img_metas):
+        self.update_debug_state()
+        out = self.encode_decode(img, img_metas)
+        if self.debug:
+            self.debug_output = self.decode_head.debug_output
+        return out
+
+    def encode_decode(self, img, img_metas, upscale_pred=True):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         mres_feats = []
@@ -173,11 +189,12 @@ class HRDAEncoderDecoder(EncoderDecoderMod):
                 self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
                     scaled_img.detach()
         out = self._decode_head_forward_test(mres_feats, img_metas)
-        out = resize(
-            input=out,
-            size=img.shape[2:],
-            mode='bilinear',
-            align_corners=self.align_corners)
+        if upscale_pred:
+            out = resize(
+                input=out,
+                size=img.shape[2:],
+                mode='bilinear',
+                align_corners=self.align_corners)
         return out
 
     def _forward_train_features(self, img):
@@ -213,7 +230,8 @@ class HRDAEncoderDecoder(EncoderDecoderMod):
                       img_metas,
                       gt_semantic_seg,
                       seg_weight=None,
-                      return_feat=False):
+                      return_feat=False,
+                      return_logits=False):
         """Forward function for training.
 
         Args:
@@ -229,7 +247,8 @@ class HRDAEncoderDecoder(EncoderDecoderMod):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        
+        self.update_debug_state()
+
         losses = dict()
 
         mres_feats, prob_vis = self._forward_train_features(img)
@@ -245,7 +264,8 @@ class HRDAEncoderDecoder(EncoderDecoderMod):
 
         loss_decode = self._decode_head_forward_train(mres_feats, img_metas,
                                                       gt_semantic_seg,
-                                                      seg_weight)
+                                                      seg_weight,
+                                                      return_logits)
         losses.update(loss_decode)
 
         if self.decode_head.debug and prob_vis is not None:
@@ -254,6 +274,9 @@ class HRDAEncoderDecoder(EncoderDecoderMod):
         if self.with_auxiliary_head:
             raise NotImplementedError
 
+        if self.debug:
+            self.debug_output.update(self.decode_head.debug_output)
+        self.local_iter += 1
         return losses
 
     def forward_with_aux(self, img, img_metas):

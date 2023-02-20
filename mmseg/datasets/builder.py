@@ -1,4 +1,7 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modifications:
+# - Support UDADataset
+
 import copy
 import platform
 import random
@@ -8,10 +11,8 @@ import numpy as np
 import torch
 from mmcv.parallel import collate
 from mmcv.runner import get_dist_info
-from mmcv.utils import Registry, build_from_cfg, digit_version
-from torch.utils.data import DataLoader
-
-from .samplers import DistributedSampler
+from mmcv.utils import Registry, build_from_cfg
+from torch.utils.data import DataLoader, DistributedSampler
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973
@@ -32,8 +33,6 @@ def _concat_dataset(cfg, default_args=None):
     img_dir = cfg['img_dir']
     ann_dir = cfg.get('ann_dir', None)
     split = cfg.get('split', None)
-    # pop 'separate_eval' since it is not a valid key for common datasets.
-    separate_eval = cfg.pop('separate_eval', True)
     num_img_dir = len(img_dir) if isinstance(img_dir, (list, tuple)) else 1
     if ann_dir is not None:
         num_ann_dir = len(ann_dir) if isinstance(ann_dir, (list, tuple)) else 1
@@ -61,25 +60,23 @@ def _concat_dataset(cfg, default_args=None):
             data_cfg['split'] = split[i]
         datasets.append(build_dataset(data_cfg, default_args))
 
-    return ConcatDataset(datasets, separate_eval)
+    return ConcatDataset(datasets)
 
 
 def build_dataset(cfg, default_args=None):
     """Build datasets."""
-    from .dataset_wrappers import (ConcatDataset, MultiImageMixDataset,
-                                   RepeatDataset)
-    if isinstance(cfg, (list, tuple)):
+    from .dataset_wrappers import ConcatDataset, RepeatDataset
+    from mmseg.datasets import UDADataset
+    # breakpoint()
+    if cfg['type'] == 'UDADataset':
+        # print(cfg["type"])
+        dataset = UDADataset(source=build_dataset(cfg['source'], default_args), target=build_dataset(cfg['target'], default_args), cfg=cfg)
+        # print(cfg["type"])
+    elif isinstance(cfg, (list, tuple)):
         dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
     elif cfg['type'] == 'RepeatDataset':
-        dataset = RepeatDataset(
-            build_dataset(cfg['dataset'], default_args), cfg['times'])
-    elif cfg['type'] == 'MultiImageMixDataset':
-        cp_cfg = copy.deepcopy(cfg)
-        cp_cfg['dataset'] = build_dataset(cp_cfg['dataset'])
-        cp_cfg.pop('type')
-        dataset = MultiImageMixDataset(**cp_cfg)
-    elif isinstance(cfg.get('img_dir'), (list, tuple)) or isinstance(
-            cfg.get('split', None), (list, tuple)):
+        dataset = RepeatDataset(build_dataset(cfg['dataset'], default_args), cfg['times'])
+    elif isinstance(cfg.get('img_dir'), (list, tuple)) or isinstance(cfg.get('split', None), (list, tuple)):
         dataset = _concat_dataset(cfg, default_args)
     else:
         dataset = build_from_cfg(cfg, DATASETS, default_args)
@@ -131,7 +128,7 @@ def build_dataloader(dataset,
     rank, world_size = get_dist_info()
     if dist:
         sampler = DistributedSampler(
-            dataset, world_size, rank, shuffle=shuffle, seed=seed)
+            dataset, world_size, rank, shuffle=shuffle)
         shuffle = False
         batch_size = samples_per_gpu
         num_workers = workers_per_gpu
@@ -144,7 +141,7 @@ def build_dataloader(dataset,
         worker_init_fn, num_workers=num_workers, rank=rank,
         seed=seed) if seed is not None else None
 
-    if digit_version(torch.__version__) >= digit_version('1.8.0'):
+    if torch.__version__ >= '1.8.0':
         data_loader = DataLoader(
             dataset,
             batch_size=batch_size,
@@ -188,4 +185,3 @@ def worker_init_fn(worker_id, num_workers, rank, seed):
     worker_seed = num_workers * rank + worker_id + seed
     np.random.seed(worker_seed)
     random.seed(worker_seed)
-    torch.manual_seed(worker_seed)

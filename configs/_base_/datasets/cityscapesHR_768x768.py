@@ -1,3 +1,9 @@
+# Obtained from: https://github.com/lhoyer/HRDA
+# ---------------------------------------------------------------
+# Copyright (c) 2022 ETH Zurich, Lukas Hoyer. All rights reserved.
+# Licensed under the Apache License, Version 2.0
+# ---------------------------------------------------------------
+
 # dataset settings
 dataset_type = 'CityscapesDataset'
 data_root = 'data/cityscapes/'

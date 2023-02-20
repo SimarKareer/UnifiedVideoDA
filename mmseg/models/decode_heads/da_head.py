@@ -1,4 +1,6 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+# Obtained from: https://github.com/open-mmlab/mmsegmentation/tree/v0.16.0
+# Modifications: Support for seg_weight
+
 import torch
 import torch.nn.functional as F
 from mmcv.cnn import ConvModule, Scale
@@ -162,18 +164,20 @@ class DAHead(BaseDecodeHead):
         """Forward function for testing, only ``pam_cam`` is used."""
         return self.forward(inputs)[0]
 
-    def losses(self, seg_logit, seg_label):
+    def losses(self, seg_logit, seg_label, seg_weight=None):
         """Compute ``pam_cam``, ``pam``, ``cam`` loss."""
         pam_cam_seg_logit, pam_seg_logit, cam_seg_logit = seg_logit
         loss = dict()
         loss.update(
             add_prefix(
-                super(DAHead, self).losses(pam_cam_seg_logit, seg_label),
-                'pam_cam'))
+                super(DAHead, self).losses(pam_cam_seg_logit, seg_label,
+                                           seg_weight), 'pam_cam'))
         loss.update(
             add_prefix(
-                super(DAHead, self).losses(pam_seg_logit, seg_label), 'pam'))
+                super(DAHead, self).losses(pam_seg_logit, seg_label,
+                                           seg_weight), 'pam'))
         loss.update(
             add_prefix(
-                super(DAHead, self).losses(cam_seg_logit, seg_label), 'cam'))
+                super(DAHead, self).losses(cam_seg_logit, seg_label,
+                                           seg_weight), 'cam'))
         return loss

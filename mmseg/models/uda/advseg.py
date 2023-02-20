@@ -1,5 +1,7 @@
 # The adversarial domain adaptation is based on:
 # https://github.com/wasidennis/AdaptSegNet
+# Note from https://github.com/wasidennis/AdaptSegNet#note:
+# The model and code are available for non-commercial research purposes only.
 
 import os
 
@@ -12,9 +14,11 @@ from torch.autograd import Variable
 from mmseg.core import add_prefix
 from mmseg.models import UDA, HRDAEncoderDecoder
 from mmseg.models.uda.fcdiscriminator import FCDiscriminator
+from mmseg.models.uda.masking_consistency_module import \
+    MaskingConsistencyModule
 from mmseg.models.uda.uda_decorator import UDADecorator
 from mmseg.models.utils.dacs_transforms import denorm, get_mean_std
-from mmseg.models.utils.visualization import subplotimg
+from mmseg.models.utils.visualization import prepare_debug_out, subplotimg
 from mmseg.ops import resize
 
 
@@ -31,7 +35,7 @@ class AdvSeg(UDADecorator):
         self.lr_D_min = cfg['lr_D_min']
         self.discriminator_type = cfg['discriminator_type']
         self.lambda_adv_target = cfg['lambda_adv_target']
-        self.debug_img_interval = cfg['debug_img_interval']
+        self.mask_mode = cfg['mask_mode']
 
         self.model_D = nn.ModuleDict()
         self.optimizer_D = {}
@@ -51,6 +55,9 @@ class AdvSeg(UDADecorator):
             self.loss_fn_D = torch.nn.MSELoss()
         else:
             raise NotImplementedError(self.discriminator_type)
+
+        if self.mask_mode is not None:
+            self.mic = MaskingConsistencyModule(require_teacher=True, cfg=cfg)
 
     def train_step(self, data_batch, optimizer, **kwargs):
         """The iteration step during training.
@@ -99,8 +106,20 @@ class AdvSeg(UDADecorator):
         assert len(optimizer.param_groups) == 1
         optimizer.param_groups[0]['lr'] = lr
 
-    def forward_train(self, img, img_metas, gt_semantic_seg, target_img,
-                      target_img_metas):
+    def update_debug_state(self):
+        debug = self.local_iter % self.debug_img_interval == 0
+        self.get_model().automatic_debug = False
+        self.get_model().debug = debug
+        if self.mic is not None:
+            self.mic.debug = debug
+
+    def forward_train(self,
+                      img,
+                      img_metas,
+                      gt_semantic_seg,
+                      target_img,
+                      target_img_metas,
+                      valid_pseudo_mask=None):
         """Forward function for training.
 
         Args:
@@ -119,11 +138,11 @@ class AdvSeg(UDADecorator):
         source_label = 0
         target_label = 1
 
-        if self.local_iter % self.debug_img_interval == 0:
-            self.model.decode_head.debug = True
-        else:
-            self.model.decode_head.debug = False
+        self.update_debug_state()
         seg_debug = {}
+
+        if self.mic is not None:
+            self.mic.update_weights(self.get_model(), self.local_iter)
 
         #######################################################################
         # Train Generator
@@ -135,8 +154,11 @@ class AdvSeg(UDADecorator):
         # train with source
         source_losses = dict()
         pred = self.model.forward_with_aux(img, img_metas)
-        seg_debug['Source'] = self.get_model().decode_head.debug_output
         loss = self.model.decode_head.losses(pred['main'], gt_semantic_seg)
+        if self.get_model().debug:
+            self.get_model().process_debug(img, img_metas)
+            seg_debug['Source'] = self.get_model().debug_output
+            self.get_model().debug_output = {}
         source_losses.update(add_prefix(loss, 'decode'))
         if isinstance(self.model, HRDAEncoderDecoder):
             self.model.decode_head.reset_crop()
@@ -151,7 +173,6 @@ class AdvSeg(UDADecorator):
         pred_trg = self.model.forward_with_aux(target_img, target_img_metas)
         if isinstance(self.model, HRDAEncoderDecoder):
             self.model.decode_head.reset_crop()
-        seg_debug['Target'] = self.get_model().decode_head.debug_output
 
         if isinstance(self.model, HRDAEncoderDecoder):
             for k in pred.keys():
@@ -189,6 +210,17 @@ class AdvSeg(UDADecorator):
                 f'G_trg.loss.{k}'] = self.lambda_adv_target[k] * loss_G
         g_trg_loss, g_trg_log_vars = self._parse_losses(g_trg_losses)
         g_trg_loss.backward()
+
+        # masking consistency
+        masked_log_vars = dict()
+        if self.mic is not None:
+            masked_loss = self.mic(self.get_model(), img, img_metas,
+                                   gt_semantic_seg, target_img,
+                                   target_img_metas, valid_pseudo_mask)
+            seg_debug.update(self.mic.debug_output)
+            masked_loss = add_prefix(masked_loss, 'masked')
+            masked_loss, masked_log_vars = self._parse_losses(masked_loss)
+            masked_loss.backward()
 
         #######################################################################
         # Train Discriminator
@@ -282,7 +314,8 @@ class AdvSeg(UDADecorator):
 
             if seg_debug['Source'] is not None and seg_debug:
                 for j in range(batch_size):
-                    rows, cols = 2, len(seg_debug['Source'])
+                    rows = len(seg_debug)
+                    cols = max(len(seg_debug[k]) for k in seg_debug.keys())
                     fig, axs = plt.subplots(
                         rows,
                         cols,
@@ -298,17 +331,10 @@ class AdvSeg(UDADecorator):
                     )
                     for k1, (n1, outs) in enumerate(seg_debug.items()):
                         for k2, (n2, out) in enumerate(outs.items()):
-                            if out.shape[1] == 3:
-                                vis = torch.clamp(
-                                    denorm(out, means, stds), 0, 1)
-                                subplotimg(axs[k1][k2], vis[j], f'{n1} {n2}')
-                            else:
-                                if out.ndim == 3:
-                                    args = dict(cmap='cityscapes')
-                                else:
-                                    args = dict(cmap='gray', vmin=0, vmax=1)
-                                subplotimg(axs[k1][k2], out[j], f'{n1} {n2}',
-                                           **args)
+                            subplotimg(
+                                axs[k1][k2],
+                                **prepare_debug_out(f'{n1} {n2}', out[j],
+                                                    means, stds))
                     for ax in axs.flat:
                         ax.axis('off')
                     plt.savefig(
@@ -321,5 +347,6 @@ class AdvSeg(UDADecorator):
             **source_log_vars,
             **g_trg_log_vars,
             **d_src_log_vars,
-            **d_trg_log_vars
+            **d_trg_log_vars,
+            **masked_log_vars,
         }
