@@ -65,6 +65,7 @@ def parse_args(args):
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument('--analysis', type=bool, default=False)
     parser.add_argument('--source-only2', type=bool, default=False)
+    parser.add_argument('--auto-resume', type=bool, default=False)
     parser.add_argument('--nowandb', type=bool, default=False)
     parser.add_argument('--eval', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=None)
@@ -209,6 +210,12 @@ def main(args):
     
     if args.source_only2:
         cfg.uda.source_only2=True
+    
+    if args.auto_resume:
+        potential_resume = os.path.join(cfg.work_dir, "latest.pth")
+        if os.path.exists(potential_resume):
+            cfg.resume_from = potential_resume
+        print("AUTO RESUMING FROM ", cfg.resume_from)
 
     print("FINISHED INIT DIST")
 

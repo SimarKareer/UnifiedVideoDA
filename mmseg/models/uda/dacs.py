@@ -28,7 +28,7 @@ from timm.models.layers import DropPath
 from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
 
-from mmseg.core import add_prefix, intersect_and_union
+from mmseg.core import add_prefix, intersect_and_union, confusion_matrix, plot_confusion_matrix
 from mmseg.models import UDA, HRDAEncoderDecoder, build_segmentor
 from mmseg.models.segmentors.hrda_encoder_decoder import crop
 from mmseg.models.uda.masking_consistency_module import \
@@ -365,7 +365,7 @@ class DACS(UDADecorator):
             large_fig, large_axs = plt.subplots(
                 2,
                 2,
-                figsize=(5 * cols, 5 * rows),
+                figsize=(8 * cols, 8 * rows),
             )
 
         # if self.local_iter % 5 == 0:
@@ -470,7 +470,7 @@ class DACS(UDADecorator):
             # breakpoint()
             if DEBUG or self.local_iter > 1500 and self.l_warp_lambda != 0:
 
-                pseudo_label_warped = pseudo_label_fut.clone()
+                pseudo_label_warped = pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
                 for i in range(batch_size):
                     flowi = target_img_extra["flow"][i].cpu().numpy().transpose(1, 2, 0)
@@ -497,7 +497,7 @@ class DACS(UDADecorator):
                 warped_pl_loss = warped_pl_loss * self.l_warp_lambda
                 log_vars["L_warp"] = warped_pl_log_vars["loss"]
 
-                warped_pl_loss.backward()
+                warped_pl_loss.backward() #NOTE: do we need to retain graph?
             
             # Apply mixing
             mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
@@ -540,7 +540,7 @@ class DACS(UDADecorator):
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
                 subplotimg(axs[1][0], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
                 subplotimg(axs[0][1], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
-                subplotimg(axs[0][2], pseudo_label_fut[0], 'PL Plain', cmap="cityscapes")
+                subplotimg(axs[0][2], pseudo_label[0], 'PL Plain', cmap="cityscapes")
                 subplotimg(axs[0][3], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Mask')
 
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
@@ -571,6 +571,9 @@ class DACS(UDADecorator):
                 # ax[3][0].bar(warp_iou, CityscapesDataset.CLASSES)
                 
                 multiBarChart({"warp_iou": warp_iou, "plain_iou": plain_iou, "agreement_iou": pl_agreement_iou}, CityscapesDataset.CLASSES, title="Per class IoU", xlabel="Class", ylabel="IoU", ax=large_axs[0][0])
+
+                plot_confusion_matrix(confusion_matrix(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), num_classes=len(CityscapesDataset.CLASSES)), large_axs[1][0], class_names=CityscapesDataset.CLASSES, title="Warp PL Confusion Matrix", normalize=True)
+
 
                 axs[2][0].text(
                     0.1,
@@ -603,9 +606,9 @@ class DACS(UDADecorator):
                     cmap="cityscapes"
                 )
 
-                fig.savefig("work_dirs/debugViperCS/debug.png")
+                fig.savefig(f"work_dirs/PLQualAnalysis/ims{self.local_iter}.png")
                 # fig.close()
-                large_fig.savefig("work_dirs/debugViperCS/debug_large.png")
+                large_fig.savefig(f"work_dirs/PLQualAnalysis/graphs{self.local_iter}.png")
                 # large_fig.close()
 
         # Masked Training
