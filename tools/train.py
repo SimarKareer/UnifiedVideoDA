@@ -67,6 +67,7 @@ def parse_args(args):
     parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--auto-resume', type=bool, default=False)
     parser.add_argument('--nowandb', type=bool, default=False)
+    parser.add_argument('--wandbid', type=str, default=None)
     parser.add_argument('--eval', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=None)
     parser.add_argument('--l-warp-lambda', type=float, default=None)
@@ -216,6 +217,13 @@ def main(args):
         if os.path.exists(potential_resume):
             cfg.resume_from = potential_resume
         print("AUTO RESUMING FROM ", cfg.resume_from)
+    
+    if args.wandbid:
+        for i in range(len(cfg.log_config.hooks)):
+            if cfg.log_config.hooks[i].type == "MMSegWandbHook":
+                cfg.log_config.hooks[i].init_kwargs.id = args.wandbid
+                break
+    
 
     print("FINISHED INIT DIST")
 
