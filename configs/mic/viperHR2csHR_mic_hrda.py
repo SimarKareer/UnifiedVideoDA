@@ -65,7 +65,7 @@ data = dict(
         target=dict(crop_pseudo_margins=[30, 240, 30, 30]),
     ),
     # Use one separate thread/worker for data loading.
-    workers_per_gpu=5,
+    workers_per_gpu=2,
     # Batch size
     samples_per_gpu=2,
 )
@@ -87,7 +87,9 @@ uda = dict(
     l_mix_lambda=1.0,
     source_only2=False,
     mask_generator=dict(
-        type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True))
+        type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
+    debug_mode=False,
+)
 # Optimizer Hyperparameters
 optimizer_config = None
 optimizer = dict(

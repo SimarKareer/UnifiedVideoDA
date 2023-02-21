@@ -71,6 +71,7 @@ class DACS(UDADecorator):
     def __init__(self, **cfg):
         super(DACS, self).__init__(**cfg)
         self.local_iter = 0
+        self.debug_mode = cfg["debug_mode"]
         self.max_iters = cfg['max_iters']
         self.source_only = cfg['source_only']
         self.source_only2 = cfg['source_only2']
@@ -352,7 +353,7 @@ class DACS(UDADecorator):
         batch_size = img.shape[0]
         dev = img.device
 
-        DEBUG = False
+        DEBUG = self.debug_mode
 
         if DEBUG:
             rows, cols = 5, 5
