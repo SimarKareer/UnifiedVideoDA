@@ -21,10 +21,8 @@ class CityscapesDataset(CustomDataset):
     fixed to '_gtFine_labelTrainIds.png' for Cityscapes dataset.
     """
 
-    CLASSES = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
-               'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky',
-               'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle',
-               'bicycle')
+    # for Viper -> CS ignore [5, 3, 16, 12, 201, 255]
+    CLASSES = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle')
 
     PALETTE = [[128, 64, 128], [244, 35, 232], [70, 70, 70], [102, 102, 156],
                [190, 153, 153], [153, 153, 153], [250, 170, 30], [220, 220, 0],
@@ -48,6 +46,8 @@ class CityscapesDataset(CustomDataset):
         if crop_pseudo_margins:
             self.pseudo_margins = crop_pseudo_margins
         self.valid_mask_size = [1024, 2048]
+        self.ignore_index = [self.CLASSES.index(ignore) for ignore in ["pole", "wall", "train", "rider"]] + [201, 255]
+        print("For Cityscapes, ignore_index is: ", self.ignore_index)
 
     def pre_pipeline(self, results):
         super(CityscapesDataset, self).pre_pipeline(results)

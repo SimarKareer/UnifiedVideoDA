@@ -468,8 +468,7 @@ class DACS(UDADecorator):
             # save_image(im_t_tk, "work_dirs/debugViperCS/im_t_tk.png")
             
             log_vars["L_warp"] = 0
-            # breakpoint()
-            if DEBUG or self.local_iter > 1500 and self.l_warp_lambda != 0:
+            if DEBUG or self.local_iter > 1500 and self.l_warp_lambda >= 0:
 
                 pseudo_label_warped = pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
@@ -483,10 +482,6 @@ class DACS(UDADecorator):
                     pseudo_weight_warped.append(torch.from_numpy(pseudo_weight_i).to(dev))
                     pseudo_label_warped[i] = pltki[0]
                 pseudo_weight_warped = torch.stack(pseudo_weight_warped)
-                
-                
-                # breakpoint()
-
                 B, C, H, W = target_img_extra["imtk"].shape
                 warped_pl_losses = self.get_model().forward_train(
                     target_img,
@@ -546,27 +541,28 @@ class DACS(UDADecorator):
 
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
                 def fast_iou(pred, label):
-                    pl_warp_intersect, pl_warp_union, _, _ = intersect_and_union(
+                    pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
                         pred,
                         label,
                         19,
-                        255,
+                        [5, 3, 16, 12, 201, 255],
                         label_map=None,
                         reduce_zero_label=False,
-                        custom_mask = pseudo_weight_warped[0].cpu().numpy()
+                        custom_mask = pseudo_weight_warped[0].cpu().numpy(),
+                        return_mask=True
                     )
                     iou = (pl_warp_intersect / pl_warp_union).numpy()
                     miou = np.nanmean(iou)
-                    return iou, miou
+                    return iou, miou, mask
 
                 tolog = f"L_warp: {warped_pl_loss.item():.2f}\n"
                 tolog += f"L_mix: {mix_loss.item():.2f}\n"
 
-                warp_iou, warp_miou = fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
+                warp_iou, warp_miou, warp_iou_mask = fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
                 tolog += f"Warp PL miou: {warp_miou:.2f}\n"
-                plain_iou, plain_miou = fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
+                plain_iou, plain_miou, plain_iou_mask = fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
                 tolog += f"Plain PL miou: {plain_miou:.2f}\n"
-                pl_agreement_iou, pl_agreement_miou = fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy())
+                pl_agreement_iou, pl_agreement_miou, _ = fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy())
                 tolog += f"PL Agree miou: {pl_agreement_miou:.2f}\n"
                 # ax[3][0].bar(plain_iou, CityscapesDataset.CLASSES)
                 # ax[3][0].bar(warp_iou, CityscapesDataset.CLASSES)
@@ -605,6 +601,16 @@ class DACS(UDADecorator):
                     axs[2][3],
                     get_segmentation_error_vis(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy()), 'PL Agreement Error',
                     cmap="cityscapes"
+                )
+
+                subplotimg(
+                    axs[1][3],
+                    plain_iou_mask.repeat(3, 1, 1) * 255, "plain iou mask"
+                )
+
+                subplotimg(
+                    axs[1][4],
+                    warp_iou_mask.repeat(3, 1, 1) * 255, "warp iou mask"
                 )
 
                 fig.savefig(f"work_dirs/PLQualAnalysis/ims{self.local_iter}.png")

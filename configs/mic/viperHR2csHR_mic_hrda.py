@@ -10,7 +10,7 @@ _base_ = [
     # GTA->Cityscapes High-Resolution Data Loading
     '../_base_/datasets/uda_viper_CSSeq.py',
     # DAFormer Self-Training
-    '../_base_/uda/dacs_a999_fdthings.py',
+    '../_base_/uda/dacs_a999_fdthings_viper.py',
     # AdamW Optimizer
     '../_base_/schedules/adamw.py',
     # Linear Learning Rate Warmup with Subsequent Linear Decay
