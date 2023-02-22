@@ -225,6 +225,9 @@ def intersect_and_union(pred_label,
         pred_label = torch.from_numpy(np.load(pred_label))
     else:
         pred_label = torch.from_numpy((pred_label))
+    
+    if isinstance(ignore_index, int):
+        ignore_index = [ignore_index]
 
     if isinstance(label, str):
         label = torch.from_numpy(
@@ -256,17 +259,16 @@ def intersect_and_union(pred_label,
     def ignore_indices(mask):
         if not isinstance(mask, torch.Tensor):
             mask = torch.from_numpy(mask)
-        mask = torch.logical_and(mask, pred_label != ignore_index)
-        mask = torch.logical_and(mask, label != ignore_index)
-        mask = torch.logical_and(mask, label != 201)
-        mask = torch.logical_and(mask, pred_label != 201)
+        for idx in ignore_index:
+            mask = torch.logical_and(mask, pred_label != idx)
+            mask = torch.logical_and(mask, label != idx)
         return mask
 
     if custom_mask is not None:
         mask = custom_mask
         mask = ignore_indices(mask)
     else:
-        mask = (label != ignore_index)
+        mask = torch.ones_like(label, dtype=torch.bool)
         mask = ignore_indices(mask)
 
         # mask = torch.logical_and(mask, label != 201)
