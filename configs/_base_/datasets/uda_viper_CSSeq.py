@@ -1,6 +1,9 @@
 # dataset settings
 dataset_type = 'ViperSeqDataset'
-data_root = '/srv/share4/datasets/VIPER/'
+viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
+cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
+cs_train_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/frame_dist_1/backward/train'
+cs_val_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/frame_dist_1/backward/val'
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -150,7 +153,7 @@ data = dict(
         type='UDADataset',
         source=dict(
             type='ViperSeqDataset',
-            data_root='/srv/share4/datasets/VIPER/',
+            data_root=viper_data_root,
             img_dir='train/img',
             ann_dir='train/cls',
             split='splits/train.txt',
@@ -160,33 +163,33 @@ data = dict(
         ),
         target=dict(
             type='CityscapesSeqDataset',
-            data_root='/srv/share4/datasets/cityscapes-seq',
+            data_root=cs_data_root,
             img_dir='leftImg8bit_sequence/train',
             ann_dir='gtFine/train',
             split='splits/train.txt',
             pipeline=cityscapes_train_pipeline,
             frame_offset=1,
-            flow_dir="/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/train"
+            flow_dir=cs_train_flow_dir,
         )
     ),
     val=dict(
         type='CityscapesSeqDataset',
-        data_root='/srv/share4/datasets/cityscapes-seq',
+        data_root=cs_data_root,
         img_dir='leftImg8bit_sequence/val',
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=1,
-        flow_dir="/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/val"
+        flow_dir=cs_val_flow_dir
     ),
     test=dict(
         type='CityscapesSeqDataset',
-        data_root='/srv/share4/datasets/cityscapes-seq',
+        data_root=cs_data_root,
         img_dir='leftImg8bit_sequence/val',
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=1,
-        flow_dir="/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/val"
+        flow_dir=cs_val_flow_dir
     )
 )
