@@ -190,3 +190,5 @@ tools/exps/mic_viper/mic_viper_v2NoLabelMapShort2.sh
 tools/exps/mic_viper/mic_viper_v3.sh
 tools/exps/mic_viper/mic_viper_v3a2.sh
 tools/exps/mic_viper/mic_viper_v3overcap.sh
+tools/exps/lwarp2
+tools/exps/lwarp

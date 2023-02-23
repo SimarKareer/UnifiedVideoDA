@@ -154,6 +154,34 @@ class UDADataset(object):
         # match. Therefore, we use synchronized cropping, where the same
         # subcrop region is applied to s1 and s2.
         s1, s2 = self.synchronized_crop(s1, s2)
+        out = self.generate_out(s1, s2)
+        # if 'valid_pseudo_mask' in s2:
+        #     out['valid_pseudo_mask'] = s2['valid_pseudo_mask']
+        return out
+
+    def __getitem__(self, idx):
+        if self.rcs_enabled:
+            try:
+                return self.get_rare_class_sample()
+            except Exception as e:
+                print("RCS TRY ACCEPT")
+                mmcv.print_log(f'Error: {e}', 'mmseg')
+                return self.default_sample()
+        else:
+            try:
+                s1 = self.source[idx // len(self.target)]
+                s2 = self.target[idx % len(self.target)]
+                s1, s2 = self.synchronized_crop(s1, s2)
+                out = self.generate_out(s1, s2)
+                return out
+            except Exception as e:
+                mmcv.print_log(f'Error: {e}', 'mmseg')
+                return self.default_sample()
+    
+    def generate_out(self, s1, s2):
+        """
+        Generate output, make sure s1 and s2 have already been synchronize cropped!
+        """
         out = {k: v for k, v in s1.items()}
         for k, v in s2.items():
             out["target_" + k] = v
@@ -161,27 +189,16 @@ class UDADataset(object):
             **s1, 'target_img_metas': s2['img_metas'],
             'target_img': s2['img'], "target_img_extra": s2
         }
-        # if 'valid_pseudo_mask' in s2:
-        #     out['valid_pseudo_mask'] = s2['valid_pseudo_mask']
+
         return out
 
-    def __getitem__(self, idx):
-        if self.rcs_enabled:
-            return self.get_rare_class_sample()
-        else:
-            s1 = self.source[idx // len(self.target)]
-            s2 = self.target[idx % len(self.target)]
-            s1, s2 = self.synchronized_crop(s1, s2)
-            out = {
-                **s1, 'target_img_metas': s2['img_metas'],
-                'target_img': s2['img']
-            }
-            # out = {k: v for k, v in s1.items()}
-            # for k, v in s2.items():
-            #     out["target_" + k] = v
-            # if 'valid_pseudo_mask' in s2:
-            #     out['valid_pseudo_mask'] = s2['valid_pseudo_mask']
-            return out
+    def default_sample(self):
+        s1 = self.source[0]
+        s2 = self.target[0]
+        s1, s2 = self.synchronized_crop(s1, s2)
+        out = self.generate_out(s1, s2)
+        return out
+
 
     def __len__(self):
         return len(self.source) * len(self.target)

@@ -64,7 +64,10 @@ def parse_args(args):
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument('--analysis', type=bool, default=False)
+    parser.add_argument('--source-only2', type=bool, default=False)
+    parser.add_argument('--auto-resume', type=bool, default=False)
     parser.add_argument('--nowandb', type=bool, default=False)
+    parser.add_argument('--wandbid', type=str, default=None)
     parser.add_argument('--eval', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=None)
     parser.add_argument('--l-warp-lambda', type=float, default=None)
@@ -205,6 +208,22 @@ def main(args):
         print("EVAL MODE")
         cfg.runner.max_iters = 1
         cfg.evaluation.interval = 1
+    
+    if args.source_only2:
+        cfg.uda.source_only2=True
+    
+    if args.auto_resume:
+        potential_resume = os.path.join(cfg.work_dir, "latest.pth")
+        if os.path.exists(potential_resume):
+            cfg.resume_from = potential_resume
+        print("AUTO RESUMING FROM ", cfg.resume_from)
+    
+    if args.wandbid:
+        for i in range(len(cfg.log_config.hooks)):
+            if cfg.log_config.hooks[i].type == "MMSegWandbHook":
+                cfg.log_config.hooks[i].init_kwargs.id = args.wandbid
+                break
+    
 
     print("FINISHED INIT DIST")
 
@@ -256,15 +275,15 @@ def main(args):
     # ema_model.backbone.patch_embed3.proj.bias vs ema_backbone.block3.34.attn.norm.bias
     # imnet_model.backbone.block3.26.norm1.weight vs imnet_backbone.block1.1.norm1.bias
     # ? vs imnet_decode_head.scale_attention.fuse_layer.bn.weight
-    if cfg.load_from:
-        checkpoint = load_checkpoint(
-            model,
-            # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
-            cfg.load_from,
-            map_location='cpu',
-            revise_keys=False,
-            invert_dict=False)
-        print("LOADED A CHECKPOINT")
+    # if cfg.load_from:
+    #     checkpoint = load_checkpoint(
+    #         model,
+    #         # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
+    #         cfg.load_from,
+    #         map_location='cpu',
+    #         revise_keys=False,
+    #         invert_dict=False)
+    #     print("LOADED A CHECKPOINT")
         
 
     logger.info(model)
