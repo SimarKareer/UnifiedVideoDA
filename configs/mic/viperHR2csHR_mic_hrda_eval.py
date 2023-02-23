@@ -17,6 +17,7 @@ _base_ = [
     '../_base_/schedules/poly10warm.py'
 ]
 load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -64,7 +65,7 @@ data = dict(
         target=dict(crop_pseudo_margins=[30, 240, 30, 30]),
     ),
     # Use one separate thread/worker for data loading.
-    workers_per_gpu=5,
+    workers_per_gpu=2,
     # Batch size
     samples_per_gpu=2,
 )
@@ -82,10 +83,13 @@ uda = dict(
     mask_lambda=1,
     # Use random patch masking with a patch size of 64x64
     # and a mask ratio of 0.7
-    l_warp_lambda=0,    # used for baseline MIC
+    l_warp_lambda=1.0,
     l_mix_lambda=1.0,
+    source_only2=False,
     mask_generator=dict(
-        type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True))
+        type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
+    debug_mode=False,
+)
 # Optimizer Hyperparameters
 optimizer_config = None
 optimizer = dict(
@@ -100,10 +104,10 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=1)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=1)
+checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=8)
 evaluation = dict(interval=1, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
 # Meta Information for Result Analysis
-name = 'viperHR2csHR_mic_hrda_s2_eval_backwardflow'
+name = 'viperHR2csHR_mic_hrda_s2_backward_flow_eval'
 exp = 'basic'
 name_dataset = 'viperHR2cityscapesHR_1024x1024'
 name_architecture = 'hrda1-512-0.1_daformer_sepaspp_sl_mitb5'

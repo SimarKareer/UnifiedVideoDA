@@ -2,7 +2,7 @@ from signal import SIG_DFL
 from .builder import DATASETS
 from .custom import CustomDataset
 from .seqUtils import SeqUtils
-from .sythia import SynthiaDataset
+from .synthia import SynthiaDataset
 import mmcv
 from mmcv.utils import print_log
 from mmseg.utils import get_root_logger
@@ -37,7 +37,7 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
 
         self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
 
-        synthiaSeqClasses = #fill in
+        # synthiaSeqClasses = #fill in
 
         CSClasses = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle')
 

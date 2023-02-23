@@ -16,8 +16,8 @@ class SynthiaDataset(CustomDataset):
 
     def __init__(self, split, img_suffix, seg_map_suffix, **kwargs):
 
-        self.CLASSES = # search online whats the classes order
-        self.PALETTE = #search online whats the palette 
+        # self.CLASSES = # search online whats the classes order
+        # self.PALETTE = #search online whats the palette 
 
         if "Train" in seg_map_suffix:
             self.CLASSES = CityscapesDataset.CLASSES

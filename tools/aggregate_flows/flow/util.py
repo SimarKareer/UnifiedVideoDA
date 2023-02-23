@@ -4,7 +4,7 @@ import shutil
 import sys
 import traceback
 import zipfile
-from tools.aggregate_flows.common.rvc_download_helper import download_file_with_resume
+# from tools.aggregate_flows.common.rvc_download_helper import download_file_with_resume
 
 common_rvc_subfolder = os.path.realpath(
     os.path.join(

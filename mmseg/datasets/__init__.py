@@ -28,8 +28,8 @@ from .viper import ViperDataset
 from .viperSeq import ViperSeqDataset
 from .cityscapesSeq import CityscapesSeqDataset
 from .seqUtils import SeqUtils
-from .synthiaSeq import SynthiaSeqDataset
-from .syntha import SynthiaDataset
+from .SynthiaSeq import SynthiaSeqDataset
+from .synthia import SynthiaDataset
 
 __all__ = [
     'CustomDataset', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
