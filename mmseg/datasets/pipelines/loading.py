@@ -167,7 +167,7 @@ class LoadFlowFromFile(object):
 
     def __call__(self, results):
         flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
-        flow = loadFlowVec(flow_path)
+        flow = loadFlowVec(flow_path).astype(np.float32)
         results["flow"] = flow
         # print("Flow path given: ", flow_path, flow.shape)
 

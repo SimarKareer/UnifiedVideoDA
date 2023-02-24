@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'ViperSeqDataset'
-data_root = '/srv/share4/datasets/VIPER/'
+data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -150,43 +150,43 @@ data = dict(
         type='UDADataset',
         source=dict(
             type='ViperSeqDataset',
-            data_root='/srv/share4/datasets/VIPER/',
+            data_root='/coc/testnvme/datasets/VideoDA/VIPER/',
             img_dir='train/img',
             ann_dir='train/cls',
             split='splits/train.txt',
             pipeline=gta_train_pipeline,
             frame_offset=1,
-            flow_dir="/srv/share4/datasets/VIPER_Flowv3/train/flow"
+            flow_dir="/coc/testnvme/datasets/VideoDA/VIPER_Flowv3/train/flow"
         ),
         target=dict(
             type='CityscapesSeqDataset',
-            data_root='/srv/share4/datasets/cityscapes-seq',
+            data_root='/coc/testnvme/datasets/VideoDA/cityscapes-seq',
             img_dir='leftImg8bit_sequence/train',
             ann_dir='gtFine/train',
             split='splits/train.txt',
             pipeline=cityscapes_train_pipeline,
             frame_offset=1,
-            flow_dir="/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/train"
+            flow_dir="/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
         )
     ),
     val=dict(
         type='CityscapesSeqDataset',
-        data_root='/srv/share4/datasets/cityscapes-seq',
+        data_root='/coc/testnvme/datasets/VideoDA/cityscapes-seq',
         img_dir='leftImg8bit_sequence/val',
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=1,
-        flow_dir="/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/val"
+        flow_dir="/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
     ),
     test=dict(
         type='CityscapesSeqDataset',
-        data_root='/srv/share4/datasets/cityscapes-seq',
+        data_root='/coc/testnvme/datasets/VideoDA/cityscapes-seq',
         img_dir='leftImg8bit_sequence/val',
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=1,
-        flow_dir="/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/val"
+        flow_dir="/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
     )
 )

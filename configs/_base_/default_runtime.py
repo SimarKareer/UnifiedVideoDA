@@ -12,7 +12,8 @@ log_config = dict(
             type='MMSegWandbHook',
             init_kwargs={
                 'entity': "video-da",
-                'project': "Lwarp"
+                'project': "Lwarp",
+                'resume': 'allow'
             },
             interval=50,
             log_checkpoint=True,

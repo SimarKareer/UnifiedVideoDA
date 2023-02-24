@@ -5,10 +5,33 @@ import numpy as np
 import torch
 from mmcv.parallel import DataContainer
 from .builder import DATASETS
+import os
 
 @DATASETS.register_module()
 class SeqUtils():
-      
+    def cofilter_img_infos(self, infos1, infos2, infos3, img_dir, flow_dir, mandate_flow=True):
+        """
+        filter infos1 and infos2 such that for each info1, info2 pair, both exist on the file system
+        """
+        filtered_infos1 = []
+        filtered_infos2 = []
+        filtered_infos3 = []
+        missing_img_count = 0
+        for info1, info2, info3 in zip(infos1, infos2, infos3):
+            path1 = os.path.join(img_dir, info1['filename'])
+            path2 = os.path.join(img_dir, info2['filename'])
+            path3 = os.path.join(flow_dir, info3['filename'])
+            if (mandate_flow and os.path.exists(path1) and os.path.exists(path2) and os.path.exists(path3)) or (not mandate_flow and os.path.exists(path1) and os.path.exists(path2)):
+                filtered_infos1.append(info1)
+                filtered_infos2.append(info2)
+                filtered_infos3.append(info3)
+            else:
+                missing_img_count += 1
+                # print("WARNING: {path1} or {path2} or {path3} does not exist")
+        print(f"WARNING: {missing_img_count} images were missing from the dataset {img_dir} or {flow_dir}")
+        return filtered_infos1, filtered_infos2, filtered_infos3
+
+
     def load_annotations_seq(self, img_dir, img_suffix, ann_dir, seg_map_suffix, split, frame_offset=0):
         """Load annotation from directory.
 

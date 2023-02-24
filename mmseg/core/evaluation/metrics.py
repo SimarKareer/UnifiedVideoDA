@@ -10,6 +10,8 @@ import linecache
 import os
 from tools.aggregate_flows.flow.my_utils import palette_to_id
 from tools.aggregate_flows.flow.my_utils import imshow, visFlow, loadVisFlow, loadFlow, mergeFlow, backpropFlow, imageMap, labelMapToIm, backpropFlowNoDup, palette_to_id
+import matplotlib.pyplot as plt
+
 
 def f_score(precision, recall, beta=1):
     """calculate the f-score value.
@@ -188,6 +190,7 @@ def intersect_and_union(pred_label,
                         reduce_zero_label=False,
                         indices=None,
                         return_mask=False,
+                        return_confusion_matrix=False,
                         custom_mask=None):
     """Calculate intersection and Union.
 
@@ -222,6 +225,9 @@ def intersect_and_union(pred_label,
         pred_label = torch.from_numpy(np.load(pred_label))
     else:
         pred_label = torch.from_numpy((pred_label))
+    
+    if isinstance(ignore_index, int):
+        ignore_index = [ignore_index]
 
     if isinstance(label, str):
         label = torch.from_numpy(
@@ -253,17 +259,16 @@ def intersect_and_union(pred_label,
     def ignore_indices(mask):
         if not isinstance(mask, torch.Tensor):
             mask = torch.from_numpy(mask)
-        mask = torch.logical_and(mask, pred_label != ignore_index)
-        mask = torch.logical_and(mask, label != ignore_index)
-        mask = torch.logical_and(mask, label != 201)
-        mask = torch.logical_and(mask, pred_label != 201)
+        for idx in ignore_index:
+            mask = torch.logical_and(mask, pred_label != idx)
+            mask = torch.logical_and(mask, label != idx)
         return mask
 
     if custom_mask is not None:
         mask = custom_mask
         mask = ignore_indices(mask)
     else:
-        mask = (label != ignore_index)
+        mask = torch.ones_like(label, dtype=torch.bool)
         mask = ignore_indices(mask)
 
         # mask = torch.logical_and(mask, label != 201)
@@ -289,10 +294,68 @@ def intersect_and_union(pred_label,
     area_union = area_pred_label + area_label - area_intersect
 
     # print(area_intersect / area_union)
+    to_return = [area_intersect, area_union, area_pred_label, area_label]
     if return_mask:
-        return area_intersect, area_union, area_pred_label, area_label, mask
+        to_return.append(mask)
+    
+    if return_confusion_matrix:
+        to_return.append(confusion_matrix(pred_label, label))
+    return (*to_return,)
+
+    # if return_mask:
+    #     return area_intersect, area_union, area_pred_label, area_label, mask
+    # else:
+    #     return area_intersect, area_union, area_pred_label, area_label
+
+def confusion_matrix(pred, label, num_classes):
+    """Calculate confusion matrix.
+
+    Args:
+        pred (ndarray): Prediction segmentation map (H, W).
+        label (ndarray): Ground truth segmentation map (H, W).
+
+    Returns:
+        ndarray: Confusion matrix (num_classes, num_classes).
+    """
+    # assert len(pred.shape) == 2, f"pred has wrong dimension.  Got{pred.shape}"
+    # assert len(label.shape) == 2, f"label has wrong dimension.  Got{label.shape}"
+    # num_classes = max(pred.max(), label.max()) + 1
+    mask = (label >= 0) & (label < num_classes) & (pred >= 0) & (pred < num_classes)
+    label = num_classes * label[mask].astype('int') + pred[mask]
+    count = np.bincount(label, minlength=num_classes**2)
+    confusion_matrix = count.reshape(num_classes, num_classes)
+    return confusion_matrix
+
+def plot_confusion_matrix(confusion_matrix, ax, class_names=None, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
+    """
+    confusion_matrix: (num_classes, num_classes)
+    plots a visualization of the confusion matrix on the given axis
+    """
+    if normalize:
+        confusion_matrix = confusion_matrix.astype('float') / confusion_matrix.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
     else:
-        return area_intersect, area_union, area_pred_label, area_label
+        print('Confusion matrix, without normalization')
+
+    print(confusion_matrix)
+
+    ax.imshow(confusion_matrix, interpolation='nearest', cmap=cmap)
+    ax.set_title(title)
+    ax.set_xlabel("Predicted Label")
+    ax.set_ylabel("True Label")
+    ax.set_xticks(np.arange(confusion_matrix.shape[0]))
+    ax.set_yticks(np.arange(confusion_matrix.shape[1]))
+    if class_names is not None:
+        ax.set_xticklabels(class_names)
+        ax.set_yticklabels(class_names)
+    ax.set_ylim(confusion_matrix.shape[0] - 0.5, -0.5)
+    ax.set_xlim(-0.5, confusion_matrix.shape[1] - 0.5)
+    ax.tick_params(axis='both', which='both', length=0)
+    ax.set_aspect('equal')
+    for i in range(confusion_matrix.shape[0]):
+        for j in range(confusion_matrix.shape[1]):
+            ax.text(j, i, f"{confusion_matrix[i, j]:.2f}", ha="center", va="center", color="w")
+    return ax
 
 
 def total_intersect_and_union(results,

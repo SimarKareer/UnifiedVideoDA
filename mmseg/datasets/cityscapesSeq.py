@@ -50,6 +50,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
         self.img_infos = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
         self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
 
+        # self.fut_images, self.img_infos, self.flows = self.cofilter_img_infos(self.fut_images, self.img_infos, self.flows, self.img_dir, flow_dir)
 
         self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
 

@@ -4,7 +4,7 @@ import shutil
 import sys
 import traceback
 import zipfile
-from tools.aggregate_flows.common.rvc_download_helper import download_file_with_resume
+# from tools.aggregate_flows.common.rvc_download_helper import download_file_with_resume
 
 common_rvc_subfolder = os.path.realpath(
     os.path.join(
@@ -105,11 +105,11 @@ def DownloadFileFromGDrive(gdrive_id, dest_file_path):
 # Downloads the given URL to a file in the given directory. Returns the
 # path to the downloaded file.
 # In part adapted from: https://stackoverflow.com/questions/22676
-def DownloadFile(url, dest_dir_path):
-    file_name = url.split("/")[-1]
-    dest_file_path = os.path.join(dest_dir_path, file_name)
-    download_file_with_resume(url, dest_file_path, try_resume_bytes=0)
-    return dest_file_path
+# def DownloadFile(url, dest_dir_path):
+#     file_name = url.split("/")[-1]
+#     dest_file_path = os.path.join(dest_dir_path, file_name)
+#     download_file_with_resume(url, dest_file_path, try_resume_bytes=0)
+#     return dest_file_path
 
 
 # Unzips the given zip file into the given directory.
