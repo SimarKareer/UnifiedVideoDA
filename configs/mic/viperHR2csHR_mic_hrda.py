@@ -86,6 +86,8 @@ uda = dict(
     # and a mask ratio of 0.7
     l_warp_lambda=1.0,
     l_mix_lambda=1.0,
+    consis_filter=False,
+    pl_fill=False,
     source_only2=False,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),

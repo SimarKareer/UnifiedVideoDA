@@ -82,6 +82,8 @@ class DACS(UDADecorator):
         self.fdist_lambda = cfg['imnet_feature_dist_lambda']
         self.l_warp_lambda = cfg['l_warp_lambda']
         self.l_mix_lambda = cfg['l_mix_lambda']
+        self.consis_filter = cfg['consis_filter']
+        self.pl_fill = cfg['pl_fill']
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
         self.enable_fdist = self.fdist_lambda > 0
@@ -317,6 +319,21 @@ class DACS(UDADecorator):
             pseudo_weight, valid_pseudo_mask)
         
         return pseudo_label, pseudo_weight
+    
+    def fast_iou(self, pred, label, custom_mask):
+        pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
+            pred,
+            label,
+            19,
+            [5, 3, 16, 12, 201, 255],
+            label_map=None,
+            reduce_zero_label=False,
+            custom_mask = custom_mask,
+            return_mask=True
+        )
+        iou = (pl_warp_intersect / pl_warp_union).numpy()
+        miou = np.nanmean(iou)
+        return iou, miou, mask
 
 
     def forward_train(self,
@@ -356,7 +373,7 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
         if DEBUG:
-            rows, cols = 5, 5
+            rows, cols = 6, 5
             fig, axs = plt.subplots(
                 rows,
                 cols,
@@ -472,6 +489,7 @@ class DACS(UDADecorator):
 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
+                masks = []
                 for i in range(batch_size):
                     flowi = target_img_extra["flow"][i].cpu().numpy().transpose(1, 2, 0)
                     pli = pseudo_label_fut[[i]].cpu().numpy().transpose(1, 2, 0)
@@ -479,27 +497,35 @@ class DACS(UDADecorator):
                     # So technically this was unnecessary bc the pseudo_weight is always just 1 number
                     pli_and_weight = np.concatenate((pli, pseudo_weight_fut[[i]].cpu().numpy().transpose(1, 2, 0)), axis=2)
                     warped_stack, mask = backpropFlowNoDup(flowi, pli_and_weight, return_mask=True) #TODO, will need to stack pli with weights if we want warped weights
+                    if DEBUG and i == 0:
+                        masks.append(mask.copy())
+                        subplotimg(axs[1, 2], torch.from_numpy(mask).repeat(3, 1, 1)*255, "Warping Mask")
                     pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
-
-                    # If we didn't want to revert we could ...
-                    # pltki, mask = backpropFlowNoDup(flowi, pli, return_mask=True)
-                    # pseudo_weight_warped_i = 
-
                     pseudo_weight_warped_i = torch.from_numpy(pseudo_weight_warped_i).float().to(dev)
                     pseudo_weight_warped_i[~mask] = 0
-                    if i == 0 and DEBUG:
-                        subplotimg(axs[4][2], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW Before Fill')
-                    pseudo_weight_warped_i[~mask] = pseudo_weight[i][~mask]
-                    if i == 0 and DEBUG:
-                        subplotimg(axs[4][3], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW After Fill')
-                        subplotimg(axs[4][4], pseudo_weight[i].repeat(3, 1, 1)*255, 'PW Original')
-
                     pltki = torch.from_numpy(pltki).permute((2, 0, 1)).long().to(dev)
-                    if i == 0 and DEBUG:
-                        subplotimg(axs[4][0], pltki[0], 'PL Before Fill', cmap="cityscapes")
-                    pltki[0][~mask] = pseudo_label[i][~mask]
-                    if i == 0 and DEBUG:
-                        subplotimg(axs[4][1], pltki[0], 'PL After Fill', cmap="cityscapes")
+
+                    # PL Fill in
+                    if self.pl_fill:
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[4][2], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW Before Fill')
+                            subplotimg(axs[4][0], pltki[0], 'PL Before Fill', cmap="cityscapes")
+
+                        pseudo_weight_warped_i[~mask] = pseudo_weight[i][~mask]
+                        pltki[0][~mask] = pseudo_label[i][~mask]
+
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[4][3], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW After Fill')
+                            subplotimg(axs[4][4], pseudo_weight[i].repeat(3, 1, 1)*255, 'PW Original')
+                            subplotimg(axs[4][1], pltki[0], 'PL After Fill', cmap="cityscapes")
+                    
+
+                    # Consistency masking
+                    if self.consis_filter:
+                        pseudo_weight_warped_i[pltki[0] != pseudo_label[i]] = 0
+                        pltki[0][pltki[0] != pseudo_label[i]] = 255
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[0][4], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
 
                     pseudo_weight_warped.append(pseudo_weight_warped_i)
                     pseudo_label_warped.append(pltki[0])
@@ -563,32 +589,18 @@ class DACS(UDADecorator):
                 subplotimg(axs[3][1], pseudo_label_warped[1], 'PL Warped2', cmap="cityscapes")
                 subplotimg(axs[0][2], pseudo_label[0], 'PL Plain', cmap="cityscapes")
                 subplotimg(axs[3][2], pseudo_label[1], 'PL Plain2', cmap="cityscapes")
-                subplotimg(axs[0][3], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Mask')
+                subplotimg(axs[0][3], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Warped PL Weight')
 
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
-                def fast_iou(pred, label):
-                    pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
-                        pred,
-                        label,
-                        19,
-                        [5, 3, 16, 12, 201, 255],
-                        label_map=None,
-                        reduce_zero_label=False,
-                        custom_mask = pseudo_weight_warped[0].cpu().numpy(),
-                        return_mask=True
-                    )
-                    iou = (pl_warp_intersect / pl_warp_union).numpy()
-                    miou = np.nanmean(iou)
-                    return iou, miou, mask
 
                 tolog = f"L_warp: {warped_pl_loss.item():.2f}\n"
                 tolog += f"L_mix: {mix_loss.item():.2f}\n"
 
-                warp_iou, warp_miou, warp_iou_mask = fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
+                warp_iou, warp_miou, warp_iou_mask = self.fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight_warped[0].cpu().bool().numpy())
                 tolog += f"Warp PL miou: {warp_miou:.2f}\n"
-                plain_iou, plain_miou, plain_iou_mask = fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
+                plain_iou, plain_miou, plain_iou_mask = self.fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight[0].cpu().bool().numpy())
                 tolog += f"Plain PL miou: {plain_miou:.2f}\n"
-                pl_agreement_iou, pl_agreement_miou, _ = fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy())
+                pl_agreement_iou, pl_agreement_miou, _ = self.fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy(), custom_mask=masks[0])
                 tolog += f"PL Agree miou: {pl_agreement_miou:.2f}\n"
                 # ax[3][0].bar(plain_iou, CityscapesDataset.CLASSES)
                 # ax[3][0].bar(warp_iou, CityscapesDataset.CLASSES)

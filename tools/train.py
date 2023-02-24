@@ -74,6 +74,8 @@ def parse_args(args):
     parser.add_argument('--lr', type=float, default=None)
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
+    parser.add_argument('--consis-filter', type=bool, default=False)
+    parser.add_argument('--pl-fill', type=bool, default=False)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -235,6 +237,14 @@ def main(args):
         cfg.runner.max_iters = 2
         cfg.data.val.split="splits/tinyval.txt"
     
+    if args.consis_filter:
+        cfg.uda.consis_filter = True
+    
+    if args.pl_fill:
+        cfg.uda.pl_fill = True
+    
+    if args.consis_filter and args.pl_fill:
+        raise Exception("Don't use both consis_filter and pl_fill, it's the same as just plain PL")
 
     print("FINISHED INIT DIST")
 
