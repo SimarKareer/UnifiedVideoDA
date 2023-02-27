@@ -31,7 +31,7 @@ def parse_args(args):
     parser.add_argument('config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
     parser.add_argument(
-        '--load-from', help='the checkpoint file to load weights from')
+        '--load-from', help='the checkpoint file to load weights from', type=str, default=None)
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(
@@ -175,7 +175,8 @@ def main(args):
     cfg.model.train_cfg.work_dir = cfg.work_dir
     cfg.model.train_cfg.log_config = cfg.log_config
     if args.load_from is not None:
-        assert False, "Not supported any more, use the python config to set load_from"
+        # assert False, "Not supported any more, use the python config to set load_from"
+        cfg.load_from = args.load_from
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
     if args.gpu_ids is not None:
