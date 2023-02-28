@@ -84,6 +84,7 @@ class DACS(UDADecorator):
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
         self.pl_fill = cfg['pl_fill']
+        self.oracle_mask = cfg['oracle_mask']
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
         self.enable_fdist = self.fdist_lambda > 0
@@ -373,7 +374,7 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
         if DEBUG:
-            rows, cols = 6, 5
+            rows, cols = 6, 6
             fig, axs = plt.subplots(
                 rows,
                 cols,
@@ -499,7 +500,7 @@ class DACS(UDADecorator):
                     warped_stack, mask = backpropFlowNoDup(flowi, pli_and_weight, return_mask=True) #TODO, will need to stack pli with weights if we want warped weights
                     if DEBUG and i == 0:
                         masks.append(mask.copy())
-                        subplotimg(axs[1, 2], torch.from_numpy(mask).repeat(3, 1, 1)*255, "Warping Mask")
+                        subplotimg(axs[3, 0], torch.from_numpy(mask).repeat(3, 1, 1)*255, "Warping Mask")
                     pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
                     pseudo_weight_warped_i = torch.from_numpy(pseudo_weight_warped_i).float().to(dev)
                     pseudo_weight_warped_i[~mask] = 0
@@ -525,13 +526,22 @@ class DACS(UDADecorator):
                         pseudo_weight_warped_i[pltki[0] != pseudo_label[i]] = 0
                         pltki[0][pltki[0] != pseudo_label[i]] = 255
                         if i == 0 and DEBUG:
-                            subplotimg(axs[0][4], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
+                            subplotimg(axs[3][5], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
 
                     pseudo_weight_warped.append(pseudo_weight_warped_i)
                     pseudo_label_warped.append(pltki[0])
-
+                
                 pseudo_weight_warped = torch.stack(pseudo_weight_warped)
                 pseudo_label_warped = torch.stack(pseudo_label_warped)
+
+                if self.oracle_mask:
+                    # Let's do standard warp.  No need to fill in.  And mask out the weight whereever it's wrong
+                    oracle_map = (pseudo_label_warped == target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
+                    pseudo_weight_warped[~oracle_map] = 0
+                    pseudo_label_warped[~oracle_map] = 255
+                    if DEBUG:
+                        subplotimg(axs[3][4], (oracle_map[[0]]).repeat(3, 1, 1)*255, 'Oracle Map')
+
                 B, C, H, W = target_img_extra["imtk"].shape
                 warped_pl_losses = self.get_model().forward_train(
                     target_img,
@@ -584,12 +594,13 @@ class DACS(UDADecorator):
                     transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
                 ])
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
-                subplotimg(axs[1][0], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
-                subplotimg(axs[0][1], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
-                subplotimg(axs[3][1], pseudo_label_warped[1], 'PL Warped2', cmap="cityscapes")
-                subplotimg(axs[0][2], pseudo_label[0], 'PL Plain', cmap="cityscapes")
-                subplotimg(axs[3][2], pseudo_label[1], 'PL Plain2', cmap="cityscapes")
-                subplotimg(axs[0][3], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Warped PL Weight')
+                subplotimg(axs[0][1], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
+                subplotimg(axs[1][0], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
+                # subplotimg(axs[1][1], pseudo_label_warped[1], 'PL Warped2', cmap="cityscapes")
+                subplotimg(axs[1][1], pseudo_label[0], 'PL Plain', cmap="cityscapes")
+                subplotimg(axs[1][2], pseudo_label_fut[0], 'PL Plain FUT', cmap="cityscapes")
+                # subplotimg(axs[1][2], pseudo_label[1], 'PL Plain2', cmap="cityscapes")
+                subplotimg(axs[3][1], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Warped PL Weight')
 
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
 
@@ -617,7 +628,7 @@ class DACS(UDADecorator):
                 )
 
                 subplotimg(
-                    axs[1][1],
+                    axs[1][3],
                     target_img_gt_semantic_seg.cpu().numpy(), 'GT',
                     cmap="cityscapes"
                 )
@@ -641,15 +652,15 @@ class DACS(UDADecorator):
                     cmap="cityscapes"
                 )
 
-                subplotimg(
-                    axs[1][3],
-                    plain_iou_mask.repeat(3, 1, 1) * 255, "plain iou mask"
-                )
+                # subplotimg(
+                #     axs[1][3],
+                #     plain_iou_mask.repeat(3, 1, 1) * 255, "plain iou mask"
+                # )
 
-                subplotimg(
-                    axs[1][4],
-                    warp_iou_mask.repeat(3, 1, 1) * 255, "warp iou mask"
-                )
+                # subplotimg(
+                #     axs[1][4],
+                #     warp_iou_mask.repeat(3, 1, 1) * 255, "warp iou mask"
+                # )
 
                 fig.savefig(f"work_dirs/LWarpPLAnalysis/ims{self.local_iter}.png")
                 # fig.close()

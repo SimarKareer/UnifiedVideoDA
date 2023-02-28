@@ -33,7 +33,7 @@ def _clean_exit_handler(signum, frame):
 def init_handlers():
     signal.signal(signal.SIGUSR1, _requeue_handler)
 
-    signal.signal(signal.SIGINT, _clean_exit_handler)
+    # signal.signal(signal.SIGINT, _clean_exit_handler)
     signal.signal(signal.SIGTERM, _clean_exit_handler)
     signal.signal(signal.SIGUSR2, _clean_exit_handler)
 

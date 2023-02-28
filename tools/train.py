@@ -76,6 +76,7 @@ def parse_args(args):
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
+    parser.add_argument('--oracle-mask', type=bool, default=False)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -246,6 +247,9 @@ def main(args):
     
     if args.consis_filter and args.pl_fill:
         raise Exception("Don't use both consis_filter and pl_fill, it's the same as just plain PL")
+    
+    if args.oracle_mask:
+        cfg.uda.oracle_mask = True
 
     print("FINISHED INIT DIST")
 
