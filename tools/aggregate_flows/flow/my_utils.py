@@ -326,9 +326,10 @@ def backpropFlowNoDup(flow, im_orig, return_mask_count=False, return_mask=False)
         to_return.append(mask_count)
     
     if return_mask:
-        if (output_im == 255).shape[0] != 1:
-            assert False, "return mask not implemented for images with multiple channels"
-        mask = (output_im != 255).squeeze(0)
+        # if (output_im == 255).shape[0] != 1:
+            # assert False, "return mask not implemented for images with multiple channels"
+        # mask = (output_im != 255).squeeze(0)
+        mask = (output_im!=255).all(axis=0)
         to_return.append(mask)
     
     return to_return[0] if len(to_return) == 1 else tuple(to_return)

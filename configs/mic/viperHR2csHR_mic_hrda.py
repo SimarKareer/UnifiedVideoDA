@@ -10,12 +10,13 @@ _base_ = [
     # GTA->Cityscapes High-Resolution Data Loading
     '../_base_/datasets/uda_viper_CSSeq.py',
     # DAFormer Self-Training
-    '../_base_/uda/dacs_a999_fdthings.py',
+    '../_base_/uda/dacs_a999_fdthings_viper.py',
     # AdamW Optimizer
     '../_base_/schedules/adamw.py',
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
+# load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
 # load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
@@ -104,7 +105,7 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=8)
+checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
 evaluation = dict(interval=2000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'

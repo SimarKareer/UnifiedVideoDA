@@ -66,7 +66,7 @@ class UDADataset(object):
         self.ignore_index = target.ignore_index
         self.CLASSES = target.CLASSES
         self.PALETTE = target.PALETTE
-        assert target.ignore_index == source.ignore_index
+        # assert target.ignore_index == source.ignore_index
         assert target.CLASSES == source.CLASSES
         assert target.PALETTE == source.PALETTE
 

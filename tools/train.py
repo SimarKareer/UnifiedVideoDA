@@ -65,6 +65,8 @@ def parse_args(args):
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument('--analysis', type=bool, default=False)
     parser.add_argument('--source-only2', type=bool, default=False)
+    parser.add_argument('--debug-mode', type=bool, default=False)
+    parser.add_argument('--pre-exp-check', type=bool, default=False)
     parser.add_argument('--auto-resume', type=bool, default=False)
     parser.add_argument('--nowandb', type=bool, default=False)
     parser.add_argument('--wandbid', type=str, default=None)
@@ -204,6 +206,9 @@ def main(args):
                 cfg.log_config.hooks.pop(i)
                 break
 
+    if args.debug_mode:
+        cfg.uda.debug_mode = True
+
     if args.eval:
         print("EVAL MODE")
         cfg.runner.max_iters = 1
@@ -223,6 +228,12 @@ def main(args):
             if cfg.log_config.hooks[i].type == "MMSegWandbHook":
                 cfg.log_config.hooks[i].init_kwargs.id = args.wandbid
                 break
+    
+    if args.pre_exp_check:
+        cfg.evaluation.interval = 1
+        cfg.checkpoint_config.interval = 1
+        cfg.runner.max_iters = 2
+        cfg.data.val.split="splits/tinyval.txt"
     
 
     print("FINISHED INIT DIST")

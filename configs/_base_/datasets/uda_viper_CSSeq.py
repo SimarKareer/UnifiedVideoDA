@@ -159,7 +159,7 @@ data = dict(
             split='splits/train.txt',
             pipeline=gta_train_pipeline,
             frame_offset=1,
-            flow_dir="/srv/share4/datasets/VIPER_Flowv3/train/flow"
+            flow_dir="/coc/testnvme/datasets/VideoDA/VIPER_Flowv3/train/flow"
         ),
         target=dict(
             type='CityscapesSeqDataset',

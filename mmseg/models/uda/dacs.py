@@ -468,25 +468,44 @@ class DACS(UDADecorator):
             # save_image(im_t_tk, "work_dirs/debugViperCS/im_t_tk.png")
             
             log_vars["L_warp"] = 0
-            # breakpoint()
-            if DEBUG or self.local_iter > 1500 and self.l_warp_lambda != 0:
+            if DEBUG or self.local_iter > 1500 and self.l_warp_lambda >= 0:
 
-                pseudo_label_warped = pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
+                pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
                 for i in range(batch_size):
                     flowi = target_img_extra["flow"][i].cpu().numpy().transpose(1, 2, 0)
                     pli = pseudo_label_fut[[i]].cpu().numpy().transpose(1, 2, 0)
-                    
-                    pltki, pseudo_weight_i = backpropFlowNoDup(flowi, pli, return_mask=True) #TODO, will need to stack pli with weights if we want warped weights
-                    pltki = torch.from_numpy(pltki).permute((2, 0, 1))
 
-                    pseudo_weight_warped.append(torch.from_numpy(pseudo_weight_i).to(dev))
-                    pseudo_label_warped[i] = pltki[0]
+                    # So technically this was unnecessary bc the pseudo_weight is always just 1 number
+                    pli_and_weight = np.concatenate((pli, pseudo_weight_fut[[i]].cpu().numpy().transpose(1, 2, 0)), axis=2)
+                    warped_stack, mask = backpropFlowNoDup(flowi, pli_and_weight, return_mask=True) #TODO, will need to stack pli with weights if we want warped weights
+                    pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
+
+                    # If we didn't want to revert we could ...
+                    # pltki, mask = backpropFlowNoDup(flowi, pli, return_mask=True)
+                    # pseudo_weight_warped_i = 
+
+                    pseudo_weight_warped_i = torch.from_numpy(pseudo_weight_warped_i).float().to(dev)
+                    pseudo_weight_warped_i[~mask] = 0
+                    if i == 0 and DEBUG:
+                        subplotimg(axs[4][2], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW Before Fill')
+                    pseudo_weight_warped_i[~mask] = pseudo_weight[i][~mask]
+                    if i == 0 and DEBUG:
+                        subplotimg(axs[4][3], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW After Fill')
+                        subplotimg(axs[4][4], pseudo_weight[i].repeat(3, 1, 1)*255, 'PW Original')
+
+                    pltki = torch.from_numpy(pltki).permute((2, 0, 1)).long().to(dev)
+                    if i == 0 and DEBUG:
+                        subplotimg(axs[4][0], pltki[0], 'PL Before Fill', cmap="cityscapes")
+                    pltki[0][~mask] = pseudo_label[i][~mask]
+                    if i == 0 and DEBUG:
+                        subplotimg(axs[4][1], pltki[0], 'PL After Fill', cmap="cityscapes")
+
+                    pseudo_weight_warped.append(pseudo_weight_warped_i)
+                    pseudo_label_warped.append(pltki[0])
+
                 pseudo_weight_warped = torch.stack(pseudo_weight_warped)
-                
-                
-                # breakpoint()
-
+                pseudo_label_warped = torch.stack(pseudo_label_warped)
                 B, C, H, W = target_img_extra["imtk"].shape
                 warped_pl_losses = self.get_model().forward_train(
                     target_img,
@@ -541,32 +560,35 @@ class DACS(UDADecorator):
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
                 subplotimg(axs[1][0], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
                 subplotimg(axs[0][1], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
+                subplotimg(axs[3][1], pseudo_label_warped[1], 'PL Warped2', cmap="cityscapes")
                 subplotimg(axs[0][2], pseudo_label[0], 'PL Plain', cmap="cityscapes")
+                subplotimg(axs[3][2], pseudo_label[1], 'PL Plain2', cmap="cityscapes")
                 subplotimg(axs[0][3], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Mask')
 
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
                 def fast_iou(pred, label):
-                    pl_warp_intersect, pl_warp_union, _, _ = intersect_and_union(
+                    pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
                         pred,
                         label,
                         19,
-                        255,
+                        [5, 3, 16, 12, 201, 255],
                         label_map=None,
                         reduce_zero_label=False,
-                        custom_mask = pseudo_weight_warped[0].cpu().numpy()
+                        custom_mask = pseudo_weight_warped[0].cpu().numpy(),
+                        return_mask=True
                     )
                     iou = (pl_warp_intersect / pl_warp_union).numpy()
                     miou = np.nanmean(iou)
-                    return iou, miou
+                    return iou, miou, mask
 
                 tolog = f"L_warp: {warped_pl_loss.item():.2f}\n"
                 tolog += f"L_mix: {mix_loss.item():.2f}\n"
 
-                warp_iou, warp_miou = fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
+                warp_iou, warp_miou, warp_iou_mask = fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
                 tolog += f"Warp PL miou: {warp_miou:.2f}\n"
-                plain_iou, plain_miou = fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
+                plain_iou, plain_miou, plain_iou_mask = fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy())
                 tolog += f"Plain PL miou: {plain_miou:.2f}\n"
-                pl_agreement_iou, pl_agreement_miou = fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy())
+                pl_agreement_iou, pl_agreement_miou, _ = fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy())
                 tolog += f"PL Agree miou: {pl_agreement_miou:.2f}\n"
                 # ax[3][0].bar(plain_iou, CityscapesDataset.CLASSES)
                 # ax[3][0].bar(warp_iou, CityscapesDataset.CLASSES)
@@ -607,9 +629,19 @@ class DACS(UDADecorator):
                     cmap="cityscapes"
                 )
 
-                fig.savefig(f"work_dirs/PLQualAnalysis/ims{self.local_iter}.png")
+                subplotimg(
+                    axs[1][3],
+                    plain_iou_mask.repeat(3, 1, 1) * 255, "plain iou mask"
+                )
+
+                subplotimg(
+                    axs[1][4],
+                    warp_iou_mask.repeat(3, 1, 1) * 255, "warp iou mask"
+                )
+
+                fig.savefig(f"work_dirs/LWarpPLAnalysis/ims{self.local_iter}.png")
                 # fig.close()
-                large_fig.savefig(f"work_dirs/PLQualAnalysis/graphs{self.local_iter}.png")
+                large_fig.savefig(f"work_dirs/LWarpPLAnalysis/graphs{self.local_iter}.png")
                 # large_fig.close()
 
         # Masked Training
