@@ -55,7 +55,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Convert SYNTHIA annotations to TrainIds')
     parser.add_argument('synthia_path', help='gta data path')
-    parser.add_argument('--gt-dir', default='GT/LABELS', type=str)
+    parser.add_argument('--gt-dir', default='GT/LABELS/Stereo_Left/Omni_F', type=str)
     parser.add_argument('-o', '--out-dir', help='output path')
     parser.add_argument(
         '--nproc', default=4, type=int, help='number of process')
@@ -102,7 +102,9 @@ def main():
     poly_files = sorted(poly_files)
 
     only_postprocessing = False
-    if not only_postprocessing:
+
+    print(len(poly_files))
+    if not only_postprocessing :
         if args.nproc > 1:
             sample_class_stats = mmcv.track_parallel_progress(
                 convert_to_train_id, poly_files, args.nproc)

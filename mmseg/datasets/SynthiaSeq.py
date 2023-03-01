@@ -16,7 +16,7 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
     """Synthia Seq dataset with options for loading flow and neightboring frames.
     """
 
-    def __init__(self, split, img_suffix='.jpg', seg_map_suffix='_labelTrainIds.png', frame_offset=1, flow_dir=None, **kwargs):
+    def __init__(self, split, img_suffix='.png', seg_map_suffix='_labelTrainIds.png', frame_offset=1, flow_dir=None, **kwargs):
         SynthiaDataset.__init__(
             self, #must explicitly pass self
             split=split,
@@ -38,18 +38,19 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
 
         self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
 
-        # synthiaSeqClasses = #fill in
+        #pedestrian = person
+        synthiaSeqClasses = ('void', 'sky', 'building', 'road', 'sidewalk', 'fence', 'vegetation', 'pole', 'car', 'traffic sign', 'person', 'bicycle', 'lanemarking', 'reserved', 'reserved', 'traffic light')
 
         CSClasses = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle')
 
-        synthiaSeq_to_cs = {k: 201 for k in range(255)}
+        cs_to_synthiaSeq = {k: 201 for k in range(255)}
         for i, k in enumerate(CSClasses):
             if k in synthiaSeqClasses:
-                cs_to_sythiaSeq[i] = synthiaSeqClasses.index(k)
+                cs_to_synthiaSeq[i] = synthiaSeqClasses.index(k)
         
         synthiaSeq_to_cs = {k: 201 for k in range(255)}
         for i, k in enumerate(synthiaSeqClasses):
             if k in CSClasses:
                 synthiaSeq_to_cs[i] = CSClasses.index(k)
-        self.convert_map = {"cityscapes_synthiaSeq": synthiaSeq_to_cs, "synthiaSeq_cityscapes": synthiaSeq_to_cs}
+        self.convert_map = {"cityscapes_synthiaSeq": cs_to_synthiaSeq, "synthiaSeq_cityscapes": synthiaSeq_to_cs}
         self.label_space = "synthiaSeq"

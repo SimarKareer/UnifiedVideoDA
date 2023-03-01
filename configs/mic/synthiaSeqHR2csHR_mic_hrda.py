@@ -17,7 +17,7 @@ _base_ = [
     '../_base_/schedules/poly10warm.py'
 ]
 # load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-# resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+resume_from = "./work_dirs/synthia_baseline/synthia_mic_base_short_2gpu02-26-19-05-24/iter_16000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -83,7 +83,7 @@ uda = dict(
     mask_lambda=1,
     # Use random patch masking with a patch size of 64x64
     # and a mask ratio of 0.7
-    l_warp_lambda=1.0,
+    l_warp_lambda=0,
     l_mix_lambda=1.0,
     source_only2=False,
     mask_generator=dict(
@@ -104,7 +104,7 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=10)
+checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
 evaluation = dict(interval=2000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
 # Meta Information for Result Analysis
 name = 'synthiaSeqHR2csHR_mic_hrda_s2'

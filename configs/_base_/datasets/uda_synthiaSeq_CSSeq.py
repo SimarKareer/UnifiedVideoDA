@@ -2,10 +2,10 @@
 dataset_type = 'SynthiaSeqDataset'
 synthia_data_root = '/srv/share4/datasets/SynthiaSeq/SYNTHIA-SEQS-04-DAWN'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-cs_train_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/frame_dist_1/forward/train'
+cs_train_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/train'
 
 synthia_train_flow_dir = '/srv/share4/datasets/SynthiaSeq_Flow/frame_dist_1/forward/train/RGB/Stereo_Left/Omni_F'
-cs_val_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/frame_dist_1/forward/val'
+cs_val_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/val'
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -147,8 +147,8 @@ data = dict(
             data_root=synthia_data_root,
             img_dir='RGB/Stereo_Left/Omni_F',
             ann_dir='GT/LABELS/Stereo_Left/Omni_F',
-            split='splits/forward/train.txt',
-            pipeline=gta_train_pipeline,
+            split='splits/flow/forward/train.txt',
+            pipeline=synthia_train_pipeline,
             frame_offset=1,
             flow_dir=synthia_train_flow_dir, 
         ),
