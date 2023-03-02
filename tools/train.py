@@ -78,6 +78,7 @@ def parse_args(args):
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--oracle-mask', type=bool, default=False)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
+    parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
@@ -255,9 +256,12 @@ def main(args):
     
     if args.warp_cutmix:
         cfg.uda.warp_cutmix = True
-    
-    if args.l_warp_begin:
+
+    if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin
+    
+    if args.no_masking:
+        cfg.uda.mask_mode = None
 
     print("FINISHED INIT DIST")
 
