@@ -593,13 +593,21 @@ class DACS(UDADecorator):
                         subplotimg(axs[1, 5], mixed_lbl_warp[0], "Warped Label with CutMix", cmap="cityscapes")
                         subplotimg(axs[1, 6], mixed_seg_weight_warp[0].repeat(3, 1, 1)*255)
 
-                B, C, H, W = target_img_extra["imtk"].shape
-                warped_pl_losses = self.get_model().forward_train(
-                    target_img,
-                    target_img_metas,
-                    pseudo_label_warped.view(B, 1, H, W),
-                    seg_weight=pseudo_weight_warped
-                )
+                    B, C, H, W = target_img_extra["imtk"].shape
+                    warped_pl_losses = self.get_model().forward_train(
+                        mixed_im_warp,
+                        target_img_metas, #NOTE: is this the correct metas to pass
+                        mixed_lbl_warp.view(B, 1, H, W),
+                        seg_weight=mixed_seg_weight_warp
+                    )
+                else:
+                    B, C, H, W = target_img_extra["imtk"].shape
+                    warped_pl_losses = self.get_model().forward_train(
+                        target_img,
+                        target_img_metas,
+                        pseudo_label_warped.view(B, 1, H, W),
+                        seg_weight=pseudo_weight_warped
+                    )
                 warped_pl_loss, warped_pl_log_vars = self._parse_losses(warped_pl_losses)
                 warped_pl_loss = warped_pl_loss * self.l_warp_lambda
                 log_vars["L_warp"] = warped_pl_log_vars["loss"]
