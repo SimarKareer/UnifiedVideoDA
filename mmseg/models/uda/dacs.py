@@ -85,6 +85,7 @@ class DACS(UDADecorator):
         self.consis_filter = cfg['consis_filter']
         self.pl_fill = cfg['pl_fill']
         self.oracle_mask = cfg['oracle_mask']
+        self.warp_cutmix = cfg['warp_cutmix']
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
         self.enable_fdist = self.fdist_lambda > 0
@@ -336,6 +337,39 @@ class DACS(UDADecorator):
         miou = np.nanmean(iou)
         return iou, miou, mask
 
+    def get_mixed_im(self, pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds):
+        strong_parameters = {
+            'mix': None,
+            'color_jitter': random.uniform(0, 1),
+            'color_jitter_s': self.color_jitter_s,
+            'color_jitter_p': self.color_jitter_p,
+            'blur': random.uniform(0, 1) if self.blur else 0,
+            'mean': means[0].unsqueeze(0),  # assume same normalization
+            'std': stds[0].unsqueeze(0)
+        }
+        assert img.shape[0] == pseudo_weight.shape[0] == pseudo_label.shape[0]
+        batch_size = img.shape[0]
+        gt_pixel_weight = torch.ones((pseudo_weight.shape), device=img.device)
+
+        mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
+        mixed_seg_weight = pseudo_weight.clone()
+        mix_masks = get_class_masks(gt_semantic_seg)
+
+        for i in range(batch_size):
+            strong_parameters['mix'] = mix_masks[i]
+            mixed_img[i], mixed_lbl[i] = strong_transform(
+                strong_parameters,
+                data=torch.stack((img[i], target_img[i])),
+                target=torch.stack(
+                    (gt_semantic_seg[i][0], pseudo_label[i])))
+            _, mixed_seg_weight[i] = strong_transform(
+                strong_parameters,
+                target=torch.stack((gt_pixel_weight[i], pseudo_weight[i])))
+        del gt_pixel_weight
+        mixed_img = torch.cat(mixed_img)
+        mixed_lbl = torch.cat(mixed_lbl)
+
+        return mixed_img, mixed_lbl, mixed_seg_weight, mix_masks
 
     def forward_train(self,
                       img,
@@ -374,7 +408,11 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
         if DEBUG:
-            rows, cols = 6, 6
+            invNorm = transforms.Compose([
+                transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
+                transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
+            ])
+            rows, cols = 6, 7
             fig, axs = plt.subplots(
                 rows,
                 cols,
@@ -386,6 +424,8 @@ class DACS(UDADecorator):
                 2,
                 figsize=(8 * cols, 8 * rows),
             )
+            subplotimg(axs[0, 2], invNorm(img[0]), "Source IM 0")
+            subplotimg(axs[0, 3], invNorm(img[1]), "Source IM 1")
 
         # if self.local_iter % 5 == 0:
         #     for i in range(torch.cuda.device_count()):
@@ -535,12 +575,23 @@ class DACS(UDADecorator):
                 pseudo_label_warped = torch.stack(pseudo_label_warped)
 
                 if self.oracle_mask:
+                    if DEBUG:
+                        subplotimg(axs[2][4], pseudo_label_warped[0], 'PL before warp', cmap="cityscapes")
                     # Let's do standard warp.  No need to fill in.  And mask out the weight whereever it's wrong
                     oracle_map = (pseudo_label_warped == target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
                     pseudo_weight_warped[~oracle_map] = 0
                     pseudo_label_warped[~oracle_map] = 255
                     if DEBUG:
                         subplotimg(axs[3][4], (oracle_map[[0]]).repeat(3, 1, 1)*255, 'Oracle Map')
+
+                if self.warp_cutmix:
+                    mixed_im_warp, mixed_lbl_warp, mixed_seg_weight_warp, _ = self.get_mixed_im(pseudo_weight_warped, pseudo_label_warped, img, target_img, gt_semantic_seg, means, stds)
+
+                    if DEBUG:
+                        subplotimg(axs[1, 4], invNorm(mixed_im_warp[0]), "Warped Im with CutMix")
+                        # subplotimg(axs[1, 5], mixed_im[0])
+                        subplotimg(axs[1, 5], mixed_lbl_warp[0], "Warped Label with CutMix", cmap="cityscapes")
+                        subplotimg(axs[1, 6], mixed_seg_weight_warp[0].repeat(3, 1, 1)*255)
 
                 B, C, H, W = target_img_extra["imtk"].shape
                 warped_pl_losses = self.get_model().forward_train(
@@ -556,23 +607,11 @@ class DACS(UDADecorator):
                 warped_pl_loss.backward() #NOTE: do we need to retain graph?
             
             # Apply mixing
-            mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
-            mixed_seg_weight = pseudo_weight.clone()
-            mix_masks = get_class_masks(gt_semantic_seg)
-
-            for i in range(batch_size):
-                strong_parameters['mix'] = mix_masks[i]
-                mixed_img[i], mixed_lbl[i] = strong_transform(
-                    strong_parameters,
-                    data=torch.stack((img[i], target_img[i])),
-                    target=torch.stack(
-                        (gt_semantic_seg[i][0], pseudo_label[i])))
-                _, mixed_seg_weight[i] = strong_transform(
-                    strong_parameters,
-                    target=torch.stack((gt_pixel_weight[i], pseudo_weight[i])))
-            del gt_pixel_weight
-            mixed_img = torch.cat(mixed_img)
-            mixed_lbl = torch.cat(mixed_lbl)
+            mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
+            if DEBUG:
+                subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
+                subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
+                subplotimg(axs[0, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
 
             # Train on mixed images
             mix_losses = self.get_model().forward_train(
@@ -589,10 +628,6 @@ class DACS(UDADecorator):
             (mix_loss * self.l_mix_lambda).backward()
 
             if DEBUG:
-                invNorm = transforms.Compose([
-                    transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
-                    transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
-                ])
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
                 subplotimg(axs[0][1], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
                 subplotimg(axs[1][0], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
