@@ -86,6 +86,7 @@ class DACS(UDADecorator):
         self.pl_fill = cfg['pl_fill']
         self.oracle_mask = cfg['oracle_mask']
         self.warp_cutmix = cfg['warp_cutmix']
+        self.l_warp_begin = cfg['l_warp_begin']
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
         self.enable_fdist = self.fdist_lambda > 0
@@ -526,7 +527,7 @@ class DACS(UDADecorator):
             # save_image(im_t_tk, "work_dirs/debugViperCS/im_t_tk.png")
             
             log_vars["L_warp"] = 0
-            if DEBUG or self.local_iter > 1500 and self.l_warp_lambda >= 0:
+            if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
@@ -614,26 +615,26 @@ class DACS(UDADecorator):
 
                 warped_pl_loss.backward() #NOTE: do we need to retain graph?
             
-            # Apply mixing
-            mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
-            if DEBUG:
-                subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
-                subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
-                subplotimg(axs[0, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
-
-            # Train on mixed images
-            mix_losses = self.get_model().forward_train(
-                mixed_img,
-                img_metas,
-                mixed_lbl,
-                seg_weight=mixed_seg_weight,
-                return_feat=False,
-            )
-            seg_debug['Mix'] = self.get_model().debug_output
-            mix_losses = add_prefix(mix_losses, 'mix')
-            mix_loss, mix_log_vars = self._parse_losses(mix_losses)
-            log_vars.update(mix_log_vars)
-            (mix_loss * self.l_mix_lambda).backward()
+            if self.l_mix_lambda > 0:
+                # Apply mixing
+                mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
+                if DEBUG:
+                    subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
+                    subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
+                    subplotimg(axs[0, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
+                # Train on mixed images
+                mix_losses = self.get_model().forward_train(
+                    mixed_img,
+                    img_metas,
+                    mixed_lbl,
+                    seg_weight=mixed_seg_weight,
+                    return_feat=False,
+                )
+                seg_debug['Mix'] = self.get_model().debug_output
+                mix_losses = add_prefix(mix_losses, 'mix')
+                mix_loss, mix_log_vars = self._parse_losses(mix_losses)
+                log_vars.update(mix_log_vars)
+                (mix_loss * self.l_mix_lambda).backward()
 
             if DEBUG:
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
@@ -728,7 +729,8 @@ class DACS(UDADecorator):
             os.makedirs(out_dir, exist_ok=True)
             vis_img = torch.clamp(denorm(img, means, stds), 0, 1)
             vis_trg_img = torch.clamp(denorm(target_img, means, stds), 0, 1)
-            vis_mixed_img = torch.clamp(denorm(mixed_img, means, stds), 0, 1)
+            if self.l_mix_lambda > 0:
+                vis_mixed_img = torch.clamp(denorm(mixed_img, means, stds), 0, 1)
             for j in range(batch_size):
                 rows, cols = 2, 5
                 fig, axs = plt.subplots(
@@ -756,20 +758,21 @@ class DACS(UDADecorator):
                     pseudo_label[j],
                     'Target Seg (Pseudo) GT',
                     cmap='cityscapes')
-                subplotimg(axs[0][2], vis_mixed_img[j], 'Mixed Image')
-                subplotimg(
-                    axs[1][2], mix_masks[j][0], 'Domain Mask', cmap='gray')
+                if self.l_mix_lambda > 0:
+                    subplotimg(axs[0][2], vis_mixed_img[j], 'Mixed Image')
+                    subplotimg(
+                        axs[1][2], mix_masks[j][0], 'Domain Mask', cmap='gray')
                 # subplotimg(axs[0][3], pred_u_s[j], "Seg Pred",
                 #            cmap="cityscapes")
-                if mixed_lbl is not None:
+                    if mixed_lbl is not None:
+                        subplotimg(
+                            axs[1][3], mixed_lbl[j], 'Seg Targ', cmap='cityscapes')
                     subplotimg(
-                        axs[1][3], mixed_lbl[j], 'Seg Targ', cmap='cityscapes')
-                subplotimg(
-                    axs[0][3],
-                    mixed_seg_weight[j],
-                    'Pseudo W.',
-                    vmin=0,
-                    vmax=1)
+                        axs[0][3],
+                        mixed_seg_weight[j],
+                        'Pseudo W.',
+                        vmin=0,
+                        vmax=1)
                 if self.debug_fdist_mask is not None:
                     subplotimg(
                         axs[0][4],
@@ -793,7 +796,7 @@ class DACS(UDADecorator):
             out_dir = os.path.join(self.train_cfg['work_dir'], 'debug')
             os.makedirs(out_dir, exist_ok=True)
             if seg_debug['Source'] is not None and seg_debug:
-                if 'Target' in seg_debug:
+                if 'Target' in seg_debug and self.l_mix_lambda > 0:
                     seg_debug['Target']['Pseudo W.'] = mixed_seg_weight.cpu(
                     ).numpy()
                 for j in range(batch_size):
