@@ -22,7 +22,6 @@ from .builder import DATASETS
 from .pipelines import Compose, LoadAnnotations
 
 from mmseg.core.evaluation.metrics import flow_prop_iou, correctness_confusion
-from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 
 from torch.nn.modules.dropout import _DropoutNd
 from timm.models.layers import DropPath

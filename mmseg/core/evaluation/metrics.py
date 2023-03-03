@@ -87,14 +87,14 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=Fals
         assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
         assert len(flow_tk_t.shape) == 3 and flow_tk_t.shape[2] < 10, f"flow_tk_t appears to be the wrong shape.  Got {flow_tk_t.shape}"
 
-        gt_t = gt_t.numpy() if isinstance(gt_t, torch.Tensor) else gt_t
-        gt_tk = gt_tk.numpy() if isinstance(gt_tk, torch.Tensor) else gt_tk
-        flow_tk_t = flow_tk_t.numpy() if isinstance(flow_tk_t, torch.Tensor) else flow_tk_t
+        assert isinstance(gt_t, torch.Tensor), f"gt_t is not a torch tensor.  Got {type(gt_t)}"
+        assert isinstance(gt_tk, torch.Tensor), f"gt_tk is not a torch tensor.  Got {type(gt_tk)}"
+        assert isinstance(flow_tk_t, torch.Tensor), f"flow_tk_t is not a torch tensor.  Got {type(flow_tk_t)}"
 
         if return_mask_count:
-            mlabel2_1, mask_count = backpropFlowNoDup(flow_tk_t, gt_t, return_mask_count=return_mask_count)
+            mlabel2_1, mask_count = backpropFlow(flow_tk_t, gt_t, return_mask_count=return_mask_count)
         else:
-            mlabel2_1 = backpropFlowNoDup(flow_tk_t, gt_t)
+            mlabel2_1 = backpropFlow(flow_tk_t, gt_t)
     else:
         assert len(gt_tk.shape) == 3 and gt_tk.shape[2] < 10, f"gt_tk appears to be the wrong shape.  Got {gt_tk.shape}"
         assert gt_t is None, "Got a value for gt_t but preds_t_tk is not None.  This is not supported."
@@ -158,7 +158,7 @@ def correctness_confusion(gt_tk, pred_t, pred_tk, flow_tk_t, label_map, preds_t_
     incorrect = gt_tk != pred_tk
     # of these pixels, find the ones which are consistent vs inconsistent between frames via flow
     if preds_t_tk is None:
-        mlabel2_1 = backpropFlowNoDup(flow_tk_t, pred_t)
+        mlabel2_1 = backpropFlow(flow_tk_t, pred_t)
     else:
         mlabel2_1 = preds_t_tk
 
@@ -223,7 +223,7 @@ def intersect_and_union(pred_label,
     
     if isinstance(pred_label, str):
         pred_label = torch.from_numpy(np.load(pred_label))
-    else:
+    elif isinstance(pred_label, np.ndarray):
         pred_label = torch.from_numpy((pred_label))
     
     if isinstance(ignore_index, int):
@@ -337,7 +337,7 @@ def plot_confusion_matrix(confusion_matrix, ax, class_names=None, normalize=Fals
     else:
         print('Confusion matrix, without normalization')
 
-    print(confusion_matrix)
+    # print(confusion_matrix)
 
     ax.imshow(confusion_matrix, interpolation='nearest', cmap=cmap)
     ax.set_title(title)

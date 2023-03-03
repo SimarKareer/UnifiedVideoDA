@@ -39,7 +39,7 @@ from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.datasets.cityscapes import CityscapesDataset
-from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup, errorVizClasses, multiBarChart
+from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow
 import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
@@ -533,19 +533,19 @@ class DACS(UDADecorator):
                 pseudo_weight_warped = []
                 masks = []
                 for i in range(batch_size):
-                    flowi = target_img_extra["flow"][i].cpu().numpy().transpose(1, 2, 0)
-                    pli = pseudo_label_fut[[i]].cpu().numpy().transpose(1, 2, 0)
+                    flowi = target_img_extra["flow"][i].permute(1, 2, 0)
+                    pli = pseudo_label_fut[[i]].permute(1, 2, 0)
 
                     # So technically this was unnecessary bc the pseudo_weight is always just 1 number
-                    pli_and_weight = np.concatenate((pli, pseudo_weight_fut[[i]].cpu().numpy().transpose(1, 2, 0)), axis=2)
-                    warped_stack, mask = backpropFlowNoDup(flowi, pli_and_weight, return_mask=True) #TODO, will need to stack pli with weights if we want warped weights
+                    pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
+                    warped_stack, mask = backpropFlow(flowi, pli_and_weight, return_mask=True) #TODO, will need to stack pli with weights if we want warped weights
                     if DEBUG and i == 0:
-                        masks.append(mask.copy())
-                        subplotimg(axs[3, 0], torch.from_numpy(mask).repeat(3, 1, 1)*255, "Warping Mask")
+                        masks.append(mask.cpu().numpy())
+                        subplotimg(axs[3, 0], mask.repeat(3, 1, 1)*255, "Warping Mask")
                     pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
-                    pseudo_weight_warped_i = torch.from_numpy(pseudo_weight_warped_i).float().to(dev)
+                    pseudo_weight_warped_i = pseudo_weight_warped_i.float()
                     pseudo_weight_warped_i[~mask] = 0
-                    pltki = torch.from_numpy(pltki).permute((2, 0, 1)).long().to(dev)
+                    pltki = pltki.permute((2, 0, 1)).long()
 
                     # PL Fill in
                     if self.pl_fill:
@@ -649,7 +649,8 @@ class DACS(UDADecorator):
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
 
                 tolog = f"L_warp: {warped_pl_loss.item():.2f}\n"
-                tolog += f"L_mix: {mix_loss.item():.2f}\n"
+                if self.l_mix_lambda > 0:
+                    tolog += f"L_mix: {mix_loss.item():.2f}\n"
 
                 warp_iou, warp_miou, warp_iou_mask = self.fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight_warped[0].cpu().bool().numpy())
                 tolog += f"Warp PL miou: {warp_miou:.2f}\n"

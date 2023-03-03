@@ -334,10 +334,12 @@ def multi_gpu_test(model,
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
             result = model(return_loss=False, logits=False, **refined_data)
+            result[0] = torch.from_numpy(result[0])
 
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=False, **refined_data)
+                result_tk[0] = torch.from_numpy(result_tk[0])
 
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
