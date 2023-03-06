@@ -28,13 +28,13 @@ def convert_to_train_id(file):
         41: 9,  # terrain NOT in synthia
         1: 10, #sky
         10: 11, # person
-        42: 12, # rider NOT in synthia
+        11: 12, # map bike --> rider 
         8: 13, # car
         43: 14,  # truck NOT in synthia
         44: 15, # bus NOT in synthia
         45: 16,  # train NOT  in synthia
         46: 17, #  motorcycle NOT in synthia
-        11: 18 # bicycle
+        47: 18 # bicycle (not used in conversion)
     }
     label_copy = 255 * np.ones(label.shape, dtype=np.uint8)
     sample_class_stats = {}
@@ -44,7 +44,7 @@ def convert_to_train_id(file):
         n = int(np.sum(k_mask))
         if n > 0:
             sample_class_stats[v] = n
-    new_file = file.replace('.png', '_labelTrainIds.png')
+    new_file = file.replace('.png', '_labelTrainIds_updated.png')
     assert file != new_file
     sample_class_stats['file'] = new_file
     Image.fromarray(label_copy, mode='L').save(new_file)

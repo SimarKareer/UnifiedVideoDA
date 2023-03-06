@@ -16,7 +16,7 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
     """Synthia Seq dataset with options for loading flow and neightboring frames.
     """
 
-    def __init__(self, split, img_suffix='.png', seg_map_suffix='_labelTrainIds.png', frame_offset=1, flow_dir=None, **kwargs):
+    def __init__(self, split, img_suffix='.png', seg_map_suffix='_labelTrainIds_updated.png', frame_offset=1, flow_dir=None, **kwargs):
         SynthiaDataset.__init__(
             self, #must explicitly pass self
             split=split,
