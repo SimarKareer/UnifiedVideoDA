@@ -38,19 +38,3 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
 
         self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
 
-        #pedestrian = person
-        synthiaSeqClasses = ('void', 'sky', 'building', 'road', 'sidewalk', 'fence', 'vegetation', 'pole', 'car', 'traffic sign', 'person', 'bicycle', 'lanemarking', 'reserved', 'reserved', 'traffic light')
-
-        CSClasses = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle')
-
-        cs_to_synthiaSeq = {k: 201 for k in range(255)}
-        for i, k in enumerate(CSClasses):
-            if k in synthiaSeqClasses:
-                cs_to_synthiaSeq[i] = synthiaSeqClasses.index(k)
-        
-        synthiaSeq_to_cs = {k: 201 for k in range(255)}
-        for i, k in enumerate(synthiaSeqClasses):
-            if k in CSClasses:
-                synthiaSeq_to_cs[i] = CSClasses.index(k)
-        self.convert_map = {"cityscapes_synthiaSeq": cs_to_synthiaSeq, "synthiaSeq_cityscapes": synthiaSeq_to_cs}
-        self.label_space = "synthiaSeq"

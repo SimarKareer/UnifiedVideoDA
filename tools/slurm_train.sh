@@ -21,4 +21,4 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     --exclude="clippy,xaea-12" \
-    python -u tools/train.py ${CONFIG} --launcher="slurm" --l-warp-lambda=0 --work-dir="./work_dirs/$2" --nowandb True
+    python -u tools/train.py ${CONFIG} --launcher="slurm" --l-warp-lambda=1 --work-dir="./work_dirs/lwarp/$2" --nowandb True
