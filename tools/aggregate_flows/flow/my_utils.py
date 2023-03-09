@@ -225,7 +225,6 @@ def backpropFlow(flow, im, return_mask_count=False, return_mask=False):
     """
     assert flow.device == im.device, "flow and im must be on the same device"
     dev = flow.device
-    assert not return_mask_count, "return mask count not implemented on new backprop flow"
     assert(flow.shape[:2] == im.shape[:2]) #2048 x 1024
     H, W, _ = flow.shape
     flow = flow.permute(2, 0, 1)
@@ -248,10 +247,20 @@ def backpropFlow(flow, im, return_mask_count=False, return_mask=False):
     output_im = im[:, indices[0], indices[1]].reshape(-1, H, W)
 
     output_im[:, torch.all(flow==0, dim=0)] = 255
+
+    to_return = [output_im.permute((1, 2, 0))]
+    
+    mask = (output_im!=255).all(dim=0)
     if return_mask:
-        return output_im.permute((1, 2, 0)), (output_im!=255).all(dim=0)
-    else:
-        return output_im.permute((1, 2, 0))
+        to_return.append(mask)
+    
+    if return_mask_count:
+        unique, counts = np.unique(im[:, ~mask], return_counts=True)
+        total_unique, total_counts = np.unique(im, return_counts=True)
+        mask_count = [unique, counts, total_unique, total_counts]
+        to_return.append(mask_count)
+    
+    return to_return
 
 def backpropFlowNoDup(flow, im_orig, return_mask_count=False, return_mask=False):
     """

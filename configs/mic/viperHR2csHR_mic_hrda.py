@@ -112,7 +112,10 @@ gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
-evaluation = dict(interval=2000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
+evaluation = dict(interval=2000, eval_settings={
+    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"],
+    "sub_metrics": ["mask_count"]
+})
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
 exp = 'basic'

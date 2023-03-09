@@ -319,7 +319,7 @@ class CustomDataset(Dataset):
                 out_str += "     "
 
                 out_str += f", {str(self.cml_intersect[metric][i].item()):15s}, {str(self.cml_union[metric][i].item()):15s}"
-                if "mask_count" in sub_metrics and "mIoU" not in metric:
+                if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5":
                     # breakpoint()
                     mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
 
@@ -391,7 +391,7 @@ class CustomDataset(Dataset):
             curr_seg_map = curr_seg_map.squeeze(0)
 
         flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
-        return_mask_count = False # Stubbed for now
+        return_mask_count = "mask_count" in sub_metrics
         # breakpoint()
         
         if "pred_pred" in metrics:

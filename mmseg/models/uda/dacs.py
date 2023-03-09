@@ -538,7 +538,7 @@ class DACS(UDADecorator):
 
                     # So technically this was unnecessary bc the pseudo_weight is always just 1 number
                     pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
-                    warped_stack, mask = backpropFlow(flowi, pli_and_weight, return_mask=True) #TODO, will need to stack pli with weights if we want warped weights
+                    warped_stack, mask = backpropFlow(flowi, pli_and_weight, return_mask=True, return_mask_count=False) #TODO, will need to stack pli with weights if we want warped weights
                     if DEBUG and i == 0:
                         masks.append(mask.cpu().numpy())
                         subplotimg(axs[3, 0], mask.repeat(3, 1, 1)*255, "Warping Mask")

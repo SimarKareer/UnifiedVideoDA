@@ -286,14 +286,12 @@ def single_gpu_test(model,
 
 def multi_gpu_test(model,
                    data_loader,
+                   eval_settings,
                    tmpdir=None,
                    gpu_collect=False,
                    efficient_test=False,
                    pre_eval=False,
-                   format_only=False,
-                   format_args={},
-                   metrics=["mIoU"],
-                   sub_metrics=[]):
+                   format_only=False):
     """Updated multi_gpu_test for multiframe / flow loaders"""
 
     if efficient_test:
@@ -306,6 +304,7 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
+    metrics, sub_metrics = eval_settings["metrics"], eval_settings["sub_metrics"]
     print("TESTING METRICS: ", metrics)
 
     model.eval()
