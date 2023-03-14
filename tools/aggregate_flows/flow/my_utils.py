@@ -217,12 +217,15 @@ def errorVizClasses(prediction, gt):
 
 
 
-def backpropFlow(flow, im, return_mask_count=False, return_mask=False):
+def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False):
     """
     returns im backpropped as if it was im1
-    flow: H, W, 2
-    im: H, W, 3
+    flow: torch.Tensor H, W, 2
+    im: torch.Tensor H, W, 3
     """
+    flow = flow_orig.clone()
+    im = im_orig.clone()
+
     assert flow.device == im.device, "flow and im must be on the same device"
     dev = flow.device
     assert(flow.shape[:2] == im.shape[:2]) #2048 x 1024
@@ -235,7 +238,7 @@ def backpropFlow(flow, im, return_mask_count=False, return_mask=False):
     indices[0] = (torch.arange(flow.shape[1])[:, None]).to(dev) + flow[1]
     indices[1] = (torch.arange(flow.shape[2])[None, :]).to(dev) + flow[0]
 
-    flow[:, indices[0] >= 900] = 0
+    flow[:, indices[0] >= 800] = 0
     flow[:, indices[0] < 0] = 0
     flow[:, indices[1] >= W] = 0
     flow[:, indices[1] < 0] = 0
@@ -244,8 +247,13 @@ def backpropFlow(flow, im, return_mask_count=False, return_mask=False):
     indices[1] = (torch.arange(flow.shape[2])[None, :]).to(dev) + flow[0]
     
     indices = indices.reshape(2, -1).long()
+    indices_t = indices.permute((1, 0))
+    unique, counts = torch.unique(indices_t, dim=0, return_counts=True)
+    mask_indices = unique[counts > 1].permute((1, 0))
+
     output_im = im[:, indices[0], indices[1]].reshape(-1, H, W)
 
+    output_im[:, mask_indices[0], mask_indices[1]] = 255
     output_im[:, torch.all(flow==0, dim=0)] = 255
 
     to_return = [output_im.permute((1, 2, 0))]
@@ -255,9 +263,9 @@ def backpropFlow(flow, im, return_mask_count=False, return_mask=False):
         to_return.append(mask)
     
     if return_mask_count:
-        unique, counts = np.unique(im[:, ~mask], return_counts=True)
-        total_unique, total_counts = np.unique(im, return_counts=True)
-        mask_count = [unique, counts, total_unique, total_counts]
+        unique, counts = torch.unique(im[:, ~mask], return_counts=True)
+        total_unique, total_counts = torch.unique(im, return_counts=True)
+        mask_count = [unique.cpu(), counts.cpu(), total_unique.cpu(), total_counts.cpu()]
         to_return.append(mask_count)
     
     return to_return

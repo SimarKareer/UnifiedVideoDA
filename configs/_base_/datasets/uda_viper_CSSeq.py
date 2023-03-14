@@ -2,8 +2,11 @@
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-cs_train_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/frame_dist_1/backward/train'
-cs_val_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/frame_dist_1/backward/val'
+FRAME_OFFSET = 1
+cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
+cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
+# cs_train_flow_dir = f'/srv/share4/datasets/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/train'
+# cs_val_flow_dir = f'/srv/share4/datasets/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/val'
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -105,8 +108,6 @@ test_pipeline = {
 
 
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=4,
     train=dict(
         type='UDADataset',
         source=dict(
@@ -126,7 +127,7 @@ data = dict(
             ann_dir='gtFine/train',
             split='splits/train.txt',
             pipeline=cityscapes_train_pipeline,
-            frame_offset=1,
+            frame_offset=FRAME_OFFSET,
             flow_dir=cs_train_flow_dir,
         )
     ),
@@ -137,7 +138,7 @@ data = dict(
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
-        frame_offset=1,
+        frame_offset=FRAME_OFFSET,
         flow_dir=cs_val_flow_dir
     ),
     test=dict(
@@ -147,7 +148,7 @@ data = dict(
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
-        frame_offset=1,
+        frame_offset=FRAME_OFFSET,
         flow_dir=cs_val_flow_dir
     )
 )

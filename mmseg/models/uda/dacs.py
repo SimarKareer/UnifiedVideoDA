@@ -39,7 +39,7 @@ from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.datasets.cityscapes import CityscapesDataset
-from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow
+from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow
 import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
@@ -696,6 +696,10 @@ class DACS(UDADecorator):
                     get_segmentation_error_vis(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy()), 'PL Agreement Error',
                     cmap="cityscapes"
                 )
+                
+                subplotimg(axs[4, 0],
+                    visFlow(target_img_extra["flow"][0].permute(1, 2, 0).cpu().numpy(), image=invNorm(target_img_extra["img"][0]).permute(1, 2, 0).cpu().numpy(), skip_amount=200)
+                )
 
                 # subplotimg(
                 #     axs[1][3],
@@ -707,10 +711,11 @@ class DACS(UDADecorator):
                 #     warp_iou_mask.repeat(3, 1, 1) * 255, "warp iou mask"
                 # )
 
-                fig.savefig(f"work_dirs/LWarpPLAnalysis/ims{self.local_iter}.png")
+                fig.savefig(f"work_dirs/LWarpPLAnalysis/ims{self.local_iter}.png", dpi=200)
                 # fig.close()
-                large_fig.savefig(f"work_dirs/LWarpPLAnalysis/graphs{self.local_iter}.png")
+                large_fig.savefig(f"work_dirs/LWarpPLAnalysis/graphs{self.local_iter}.png", dpi=200)
                 # large_fig.close()
+                # breakpoint()
 
         # Masked Training
         if self.enable_masking and self.mask_mode.startswith('separate'):

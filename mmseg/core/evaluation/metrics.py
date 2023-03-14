@@ -294,7 +294,7 @@ def intersect_and_union(pred_label,
     area_union = area_pred_label + area_label - area_intersect
 
     # print(area_intersect / area_union)
-    to_return = [area_intersect, area_union, area_pred_label, area_label]
+    to_return = [area_intersect.cpu(), area_union.cpu(), area_pred_label.cpu(), area_label.cpu()]
     if return_mask:
         to_return.append(mask)
     
