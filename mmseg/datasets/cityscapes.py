@@ -46,7 +46,13 @@ class CityscapesDataset(CustomDataset):
         if crop_pseudo_margins:
             self.pseudo_margins = crop_pseudo_margins
         self.valid_mask_size = [1024, 2048]
+        #for viper ignore indices:
         self.ignore_index = [self.CLASSES.index(ignore) for ignore in ["pole", "wall", "train", "rider"]] + [201, 255]
+        # print("For Cityscapes, ignore_index is: ", self.ignore_index)
+
+        #for synthia ignore indices:
+        # keep bicycle or rider (bike --> rider)
+        # self.ignore_index = [self.CLASSES.index(ignore) for ignore in ["wall", "fence", "terrain", "truck", "bus", "train", "motorcycle", "bicycle"]] + [201, 255]
         print("For Cityscapes, ignore_index is: ", self.ignore_index)
 
     def pre_pipeline(self, results):

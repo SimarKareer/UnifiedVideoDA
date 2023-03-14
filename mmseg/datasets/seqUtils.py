@@ -60,7 +60,11 @@ class SeqUtils():
                     name_split = img_name.split('_')
                     num = int(name_split[-1]) - frame_offset
                     prefix = "_".join(name_split[:-1])
-                    img_name = f"{prefix}_{'{num:0{number_length}}'.format(num=num, number_length=number_length)}"
+                    #deals with reading split files with no '_' in img names
+                    if prefix == '':
+                        img_name = f"{'{num:0{number_length}}'.format(num=num, number_length=number_length)}"
+                    else:
+                        img_name = f"{prefix}_{'{num:0{number_length}}'.format(num=num, number_length=number_length)}"
                     img_info = dict(filename=img_name + img_suffix)
                     if ann_dir is not None:
                         seg_map = img_name + seg_map_suffix
