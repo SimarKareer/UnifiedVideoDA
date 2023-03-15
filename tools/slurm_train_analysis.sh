@@ -21,4 +21,4 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     --exclude="deebot" \
-    python -u tools/train.py ${CONFIG} --launcher="slurm" --l-warp-lambda=1 --work-dir="./work_dirs/lwarp/$2" --nowandb True --eval True
+    python -u tools/train.py ${CONFIG} --launcher="slurm" --no-masking True --l-warp-lambda=-1 --l-mix-lambda=-1 --nowandb True --eval True
