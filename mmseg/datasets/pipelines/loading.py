@@ -169,7 +169,6 @@ class LoadFlowFromFile(object):
         flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
         flow = loadFlowVec(flow_path).astype(np.float32)
         results["flow"] = flow
-        # print("Flow path given: ", flow_path, flow.shape)
 
         return dict(flow=flow)
 
@@ -191,6 +190,8 @@ class LoadFlowFromFileStub(object):
             flow = torch.zeros(1080, 1920, 2)
         elif "cityscapes-seq" in flow_path:
             flow = torch.zeros(1024, 2048, 2)
+        elif "SynthiaSeq" in flow_path:
+            flow = torch.zeros(760, 1280, 2)
         # flow = torch.zeros(2, 1024, 1024)
         # results["flow"] = flow
 
