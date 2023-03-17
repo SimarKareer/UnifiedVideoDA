@@ -86,6 +86,7 @@ class DACS(UDADecorator):
         self.pl_fill = cfg['pl_fill']
         self.oracle_mask = cfg['oracle_mask']
         self.warp_cutmix = cfg['warp_cutmix']
+        self.stub_training = cfg['stub_training']
         self.l_warp_begin = cfg['l_warp_begin']
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
@@ -403,6 +404,8 @@ class DACS(UDADecorator):
             dict[str, Tensor]: a dictionary of loss components
         """
         log_vars = {}
+        if self.stub_training:
+            return log_vars
         batch_size = img.shape[0]
         dev = img.device
 
@@ -614,6 +617,12 @@ class DACS(UDADecorator):
                 log_vars["L_warp"] = warped_pl_log_vars["loss"]
 
                 warped_pl_loss.backward() #NOTE: do we need to retain graph?
+
+                log_vars["Warp PL IoU"] = self.fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_extra["gt_semantic_seg"][0, 0].cpu().numpy(), custom_mask=pseudo_weight_warped[0].cpu().bool().numpy())[1]
+
+                log_vars["Plain PL IoU"] = self.fast_iou(pseudo_label[0].cpu().numpy(), target_img_extra["gt_semantic_seg"][0, 0].cpu().numpy(), custom_mask=pseudo_weight[0].cpu().bool().numpy())[1]
+
+                log_vars["PL diff"] = log_vars["Warp PL IoU"] - log_vars["Plain PL IoU"]
             
             if self.l_mix_lambda > 0:
                 # Apply mixing

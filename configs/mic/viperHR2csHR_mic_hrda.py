@@ -92,6 +92,7 @@ uda = dict(
     source_only2=False,
     oracle_mask=False,
     warp_cutmix=False,
+    stub_training=False,
     l_warp_begin=1500,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
@@ -113,7 +114,7 @@ runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
 evaluation = dict(interval=2000, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"],
+    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
     "sub_metrics": ["mask_count"]
 })
 # Meta Information for Result Analysis

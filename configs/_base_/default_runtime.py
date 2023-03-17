@@ -15,7 +15,7 @@ log_config = dict(
                 'project': "Lwarp",
                 'resume': 'allow'
             },
-            interval=50,
+            interval=5,
             log_checkpoint=True,
             log_checkpoint_metadata=True,
             num_eval_images=0,

@@ -268,7 +268,10 @@ def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False)
         mask_count = [unique.cpu(), counts.cpu(), total_unique.cpu(), total_counts.cpu()]
         to_return.append(mask_count)
     
-    return to_return
+    if len(to_return) == 1:
+        return to_return[0]
+    else:
+        return to_return
 
 def backpropFlowNoDup(flow, im_orig, return_mask_count=False, return_mask=False):
     """

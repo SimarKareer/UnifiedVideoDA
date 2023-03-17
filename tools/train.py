@@ -220,6 +220,7 @@ def main(args):
         print("EVAL MODE")
         cfg.runner.max_iters = 1
         cfg.evaluation.interval = 1
+        cfg.uda.stub_training = True
     
     if args.source_only2:
         cfg.uda.source_only2=True
