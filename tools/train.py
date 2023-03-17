@@ -80,6 +80,7 @@ def parse_args(args):
     parser.add_argument('--warp-cutmix', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
+    parser.add_argument("--total-iters", type=int, default=None)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -263,6 +264,9 @@ def main(args):
     
     if args.no_masking:
         cfg.uda.mask_mode = None
+    
+    if args.total_iters:
+        cfg.runner.max_iters = args.total_iters
 
     print("FINISHED INIT DIST")
 
