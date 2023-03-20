@@ -191,6 +191,7 @@ def intersect_and_union(pred_label,
                         indices=None,
                         return_mask=False,
                         return_confusion_matrix=False,
+                        return_pixelwise_acc=False,
                         custom_mask=None):
     """Calculate intersection and Union.
 
@@ -298,8 +299,18 @@ def intersect_and_union(pred_label,
     if return_mask:
         to_return.append(mask)
     
+
+    # other metrics
+    other_metrics = {}
     if return_confusion_matrix:
-        to_return.append(confusion_matrix(pred_label, label))
+        other_metrics["confusion matrix"] = confusion_matrix(pred_label.cpu(), label.cpu(), num_classes)
+    if return_pixelwise_acc:
+        other_metrics["pixelwise accuracy"] = pixelwise_accuracy(pred_label.cpu(), label.cpu(), num_classes)
+    
+    if return_confusion_matrix or return_pixelwise_acc:
+        to_return.append(other_metrics)
+
+
     return (*to_return,)
 
     # if return_mask:
@@ -307,12 +318,35 @@ def intersect_and_union(pred_label,
     # else:
     #     return area_intersect, area_union, area_pred_label, area_label
 
+def pixelwise_accuracy(pred, label, num_classes):
+    """Calculate pixel wise accuracy.
+
+    Args:
+        pred (tensor): Prediction segmentation map (H, W).
+        label (tensor): Ground truth segmentation map (H, W).
+
+    Returns:
+        torch.Tensor: correct_count
+        torch.Tensor:  class_count
+    """
+    mask = (label >= 0) & (label < num_classes) & (pred >= 0) & (pred < num_classes)
+    pred = pred[mask].flatten()
+    label = label[mask].flatten()
+    correct_pred = pred[pred == label]
+
+    class_count = torch.bincount(label.flatten(), minlength=num_classes)
+
+    # calculate number of correctly classified pixels for each class
+    correct_count = torch.bincount(correct_pred, minlength=num_classes)
+
+    return correct_count, class_count
+
 def confusion_matrix(pred, label, num_classes):
     """Calculate confusion matrix.
 
     Args:
-        pred (ndarray): Prediction segmentation map (H, W).
-        label (ndarray): Ground truth segmentation map (H, W).
+        pred (tensor): Prediction segmentation map (H, W).
+        label (tensor): Ground truth segmentation map (H, W).
 
     Returns:
         ndarray: Confusion matrix (num_classes, num_classes).
@@ -321,9 +355,12 @@ def confusion_matrix(pred, label, num_classes):
     # assert len(label.shape) == 2, f"label has wrong dimension.  Got{label.shape}"
     # num_classes = max(pred.max(), label.max()) + 1
     mask = (label >= 0) & (label < num_classes) & (pred >= 0) & (pred < num_classes)
-    label = num_classes * label[mask].astype('int') + pred[mask]
-    count = np.bincount(label, minlength=num_classes**2)
-    confusion_matrix = count.reshape(num_classes, num_classes)
+    pred = pred[mask].flatten()
+    label = label[mask].flatten()
+
+    label = num_classes * label + pred
+    count = torch.bincount(label, minlength=num_classes**2)
+    confusion_matrix = torch.reshape(count, (num_classes, num_classes))
     return confusion_matrix
 
 def plot_confusion_matrix(confusion_matrix, ax, class_names=None, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):

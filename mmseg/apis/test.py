@@ -304,7 +304,7 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
-    metrics, sub_metrics = eval_settings["metrics"], eval_settings["sub_metrics"]
+    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"]
 
     device = model.module.model.device
     print("TESTING METRICS: ", metrics)
@@ -345,7 +345,7 @@ def multi_gpu_test(model,
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            result = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics)
+            result = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
             
 
         results.extend(result)
@@ -364,6 +364,18 @@ def multi_gpu_test(model,
 
         dist.all_reduce(dataset.cml_intersect[met], op=dist.ReduceOp.SUM)
         dist.all_reduce(dataset.cml_union[met], op=dist.ReduceOp.SUM)
+        
+        #for pixel wise accuracy
+        dataset.pixelwise_correct[met] = dataset.pixelwise_correct[met].cuda()
+        dataset.pixelwise_total[met] = dataset.pixelwise_total[met].cuda()
+
+        dist.all_reduce(dataset.pixelwise_correct[met], op=dist.ReduceOp.SUM)
+        dist.all_reduce(dataset.pixelwise_total[met], op=dist.ReduceOp.SUM)
+
+        #for confusion matrix
+        dataset.confusion_matrix[met] = dataset.confusion_matrix[met].cuda()
+        dist.all_reduce(dataset.confusion_matrix[met], op=dist.ReduceOp.SUM)
+
     if rank == 0:
         dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
     dataset.init_cml_metrics()

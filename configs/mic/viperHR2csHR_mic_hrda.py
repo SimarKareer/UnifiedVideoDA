@@ -115,7 +115,9 @@ runner = dict(type='IterBasedRunner', max_iters=40000)
 checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
 evaluation = dict(interval=2000, eval_settings={
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
-    "sub_metrics": ["mask_count"]
+    "sub_metrics": ["mask_count"],
+    "pixelwise accuracy": True,
+    "confusion matrix": True,
 })
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
