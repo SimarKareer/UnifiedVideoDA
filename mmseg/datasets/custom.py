@@ -309,9 +309,9 @@ class CustomDataset(Dataset):
         for metric in metrics:
             print(f"\nEVAL SETTING: {metric}")
             if "mask_count" in sub_metrics and metric != "mIoU":
-                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}, {'Pixel Accuracy':10s}, {'Correct Pixels':15s}, {'Total Pixels':15s}, {'Mask Ratio':15s}")
+                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}, {'Pixel Accuracy':15s}, {'Correct Pixels':15s}, {'Total Pixels':15s}, {'Mask Ratio':15s}")
             else:
-                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}, {'Pixel Accuracy':10s}, {'Correct Pixels':15s}, {'Total Pixels':15s}")
+                print(f"{'Class':15s}, {'IoU':10s}, {'Intersect':15s}, {'Union':15s}, {'Pixel Accuracy':15s}, {'Correct Pixels':15s}, {'Total Pixels':15s}")
             # breakpoint()
             ious = self.cml_intersect[metric] / self.cml_union[metric]
             pixel_acc = self.pixelwise_correct[metric] / self.pixelwise_total[metric]
@@ -326,10 +326,10 @@ class CustomDataset(Dataset):
                 out_str += f", {str(self.cml_intersect[metric][i].item()):15s}, {str(self.cml_union[metric][i].item()):15s}"
 
                 if not np.isnan(pixel_acc[i].item()):
-                    out_str += f"{pixel_acc[i].item() * 100:05.2f}"
+                    out_str += f", {pixel_acc[i].item() * 100:05.2f}"
                 else:
                     out_str += f"{'nan':5s}"
-                out_str += "     "
+                out_str += "          "
                 out_str += f", {str(self.pixelwise_correct[metric][i].item()):15s}, {str(self.pixelwise_total[metric][i].item()):15s}"
 
                 if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5" and metric != "M5Fixed":
@@ -341,7 +341,10 @@ class CustomDataset(Dataset):
             
             #print out confusion matrix
             print(f"\nCONFUSION MATRIX FOR EVAL SETTING: {metric}")
-            confusion_matrix_norm = self.confusion_matrix[metric] / torch.sum(self.confusion_matrix[metric], 1)
+
+            norm = torch.sum(self.confusion_matrix[metric], 1)
+            norm = norm.reshape(len(self.CLASSES), 1)
+            confusion_matrix_norm = self.confusion_matrix[metric] / norm
             confusion_matrix_norm *= 100
             column_headers = f"{'Classes':15s}"
             for cl in self.CLASSES:
