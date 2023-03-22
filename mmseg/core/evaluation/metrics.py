@@ -307,7 +307,40 @@ def intersect_and_union(pred_label,
     # else:
     #     return area_intersect, area_union, area_pred_label, area_label
 
-def confusion_matrix(pred, label, num_classes):
+def ignore_indices(image, ignore_index):
+    """
+    Given image: (H, W) and indices: (N), returns a mask of shape (H, W) which is True wherever image is not in indices
+    """
+    mask = torch.ones_like(image, dtype=torch.bool)
+
+    for idx in ignore_index:
+        mask = torch.logical_and(mask, image != idx)
+    return mask
+
+def per_class_pixel_accuracy(pred, label, return_raw=False, ignore_index=None, mask=None):
+    """Calculate per class pixel accuracy.
+
+    Args:
+        pred (ndarray): Prediction segmentation map (H, W).
+        label (ndarray): Ground truth segmentation map (H, W).
+
+    Returns:
+        ndarray: Per class pixel accuracy (num_classes,).
+    """
+    # from sklearn.metrics import confusion_matrix
+    # matrix = confusion_matrix(pred, label)
+    # return matrix.diagonal()/matrix.sum(axis=1)
+    if ignore_index:
+        index_mask = torch.logical_and(ignore_indices(label, ignore_index), ignore_indices(pred, ignore_index))
+        if mask is not None:
+            mask = torch.logical_and(mask, index_mask)
+        else:
+            mask = index_mask
+
+    matrix = confusion_matrix(pred, label, 19, is_torch=(isinstance(pred, torch.Tensor)), mask=mask)
+    return matrix if return_raw else matrix.diagonal()/matrix.sum(axis=1)
+
+def confusion_matrix(pred, label, num_classes, is_torch=False, mask=None):
     """Calculate confusion matrix.
 
     Args:
@@ -320,9 +353,14 @@ def confusion_matrix(pred, label, num_classes):
     # assert len(pred.shape) == 2, f"pred has wrong dimension.  Got{pred.shape}"
     # assert len(label.shape) == 2, f"label has wrong dimension.  Got{label.shape}"
     # num_classes = max(pred.max(), label.max()) + 1
-    mask = (label >= 0) & (label < num_classes) & (pred >= 0) & (pred < num_classes)
-    label = num_classes * label[mask].astype('int') + pred[mask]
-    count = np.bincount(label, minlength=num_classes**2)
+    if mask is None:
+        mask = (label >= 0) & (label < num_classes) & (pred >= 0) & (pred < num_classes)
+    if is_torch:
+        label = num_classes * label[mask].long() + pred[mask].long()
+        count = torch.bincount(label, minlength=num_classes**2)
+    else:
+        label = num_classes * label[mask].astype('int') + pred[mask]
+        count = np.bincount(label, minlength=num_classes**2)
     confusion_matrix = count.reshape(num_classes, num_classes)
     return confusion_matrix
 

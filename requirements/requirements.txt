@@ -24,3 +24,5 @@ wcwidth==0.2.5
 yapf==0.31.0
 wandb
 ifcfg
+ninja
+psutil

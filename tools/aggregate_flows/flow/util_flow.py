@@ -88,7 +88,7 @@ def loadFlowVec(path):
     im = cv2.imread(path, -1)
     mask = im[:, :, 0]
 
-    mask = np.logical_not(mask.astype(np.bool))
+    mask = np.logical_not(mask.astype(bool))
     im = im[:, :, [2, 1]].astype(np.float64)
     im = (im- 2**15)/64.0
     im[mask] = 0

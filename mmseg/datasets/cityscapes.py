@@ -30,6 +30,10 @@ class CityscapesDataset(CustomDataset):
                [255, 0, 0], [0, 0, 142], [0, 0, 70], [0, 60, 100],
                [0, 80, 100], [0, 0, 230], [119, 11, 32]]
 
+    # ignore_index = [CLASSES.index(ignore) for ignore in ["pole", "wall", "train", "rider"]] + [201, 255]
+    ignore_index = [5, 3, 16, 12, 201, 255] # for some reason the above line doesn't work, but I want this to be a class variable so I hard coded it
+
+
     def __init__(self,
                  split,
                  img_suffix='_leftImg8bit.png',
@@ -47,7 +51,6 @@ class CityscapesDataset(CustomDataset):
             self.pseudo_margins = crop_pseudo_margins
         self.valid_mask_size = [1024, 2048]
         #for viper ignore indices:
-        self.ignore_index = [self.CLASSES.index(ignore) for ignore in ["pole", "wall", "train", "rider"]] + [201, 255]
         # print("For Cityscapes, ignore_index is: ", self.ignore_index)
 
         #for synthia ignore indices:
