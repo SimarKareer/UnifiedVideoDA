@@ -56,6 +56,7 @@ class CityscapesDataset(CustomDataset):
         #for synthia ignore indices:
         # keep bicycle or rider (bike --> rider)
         # self.ignore_index = [self.CLASSES.index(ignore) for ignore in ["wall", "fence", "terrain", "truck", "bus", "train", "motorcycle", "bicycle"]] + [201, 255]
+        self.ignore_index = CityscapesDataset.ignore_index #I don't love this, I'm setting it twice bc sometimes it's accessed from the class and soemtimes the instance
         print("For Cityscapes, ignore_index is: ", self.ignore_index)
 
     def pre_pipeline(self, results):
