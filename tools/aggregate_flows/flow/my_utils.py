@@ -217,58 +217,61 @@ def errorVizClasses(prediction, gt):
 
 
 
-def backpropFlow(flow, im):
+def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False):
     """
     returns im backpropped as if it was im1
-    flow: H, W, 2
-    im: H, W, 3
+    flow: torch.Tensor H, W, 2
+    im: torch.Tensor H, W, 3
     """
-    assert(flow.shape[:2] == im.shape[:2])
+    flow = flow_orig.clone()
+    im = im_orig.clone()
+
+    assert flow.device == im.device, "flow and im must be on the same device"
+    dev = flow.device
+    assert(flow.shape[:2] == im.shape[:2]) #2048 x 1024
     H, W, _ = flow.shape
-    flow[920:, :, :] = 0
-    flow = np.transpose(flow, (2, 0, 1))
-    im = np.transpose(im, (2, 0, 1))
+    flow = flow.permute(2, 0, 1)
+    im = im.permute(2, 0, 1)
 
-    indices = np.zeros_like(flow)
-    # out_im = np.zeros_like(im)
-    
-    # print(flow1[1])
-    # indices[0] = np.clip(
-    #     np.arange(flow.shape[1])[:, None] + flow[1], 0, H-1
-    # )
-    # indices[1] = np.clip(
-    #     np.arange(flow.shape[2])[None, :] + flow[0], 0, W-1
-    # )
-    indices[0] = np.arange(flow.shape[1])[:, None] + flow[1]
-    indices[1] = np.arange(flow.shape[2])[None, :] + flow[0]
 
-    flow[:, indices[0] > 920] = 0
+    indices = torch.zeros_like(flow).to(dev)
+    indices[0] = (torch.arange(flow.shape[1])[:, None]).to(dev) + flow[1]
+    indices[1] = (torch.arange(flow.shape[2])[None, :]).to(dev) + flow[0]
+
+    flow[:, indices[0] >= 800] = 0
     flow[:, indices[0] < 0] = 0
-    flow[:, indices[1] >= 1920] = 0
+    flow[:, indices[1] >= W] = 0
     flow[:, indices[1] < 0] = 0
-    # indices[0] = np.clip(
-    #     np.arange(flow.shape[1])[:, None] + flow[1], 0, H-1
-    # )
-    # indices[1] = np.clip(
-    #     np.arange(flow.shape[2])[None, :] + flow[0], 0, W-1
-    # )
-    indices[0] = np.arange(flow.shape[1])[:, None] + flow[1]
-    indices[1] = np.arange(flow.shape[2])[None, :] + flow[0]
+
+    indices[0] = (torch.arange(flow.shape[1])[:, None]).to(dev) + flow[1]
+    indices[1] = (torch.arange(flow.shape[2])[None, :]).to(dev) + flow[0]
     
-    # print(indices[0])
-    # print(indices[1])
-    # print("flow1: ", flow1)
-    # print("flow2: ", flow2)
-    # print("indices: ", indices)
-    indices = indices.reshape(2, -1).astype(np.int64)
+    indices = indices.reshape(2, -1).long()
+    indices_t = indices.permute((1, 0))
+    unique, counts = torch.unique(indices_t, dim=0, return_counts=True)
+    mask_indices = unique[counts > 1].permute((1, 0))
+
     output_im = im[:, indices[0], indices[1]].reshape(-1, H, W)
 
-    # print("mask: ", np.all(flow1==0, axis=0))
-    output_im[:, np.all(flow==0, axis=0)] = 0
-    # print(output_flow)
-    # print("indices: ", indices)
-    # print("output flow: ", output_flow)
-    return np.transpose(output_im, (1, 2, 0))
+    output_im[:, mask_indices[0], mask_indices[1]] = 255
+    output_im[:, torch.all(flow==0, dim=0)] = 255
+
+    to_return = [output_im.permute((1, 2, 0))]
+    
+    mask = (output_im!=255).all(dim=0)
+    if return_mask:
+        to_return.append(mask)
+    
+    if return_mask_count:
+        unique, counts = torch.unique(im[:, ~mask], return_counts=True)
+        total_unique, total_counts = torch.unique(im, return_counts=True)
+        mask_count = [unique.cpu(), counts.cpu(), total_unique.cpu(), total_counts.cpu()]
+        to_return.append(mask_count)
+    
+    if len(to_return) == 1:
+        return to_return[0]
+    else:
+        return to_return
 
 def backpropFlowNoDup(flow, im_orig, return_mask_count=False, return_mask=False):
     """

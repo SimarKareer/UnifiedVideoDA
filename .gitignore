@@ -130,6 +130,7 @@ visualization/*.png
 #exports
 .format_cityscapes/
 wandb/
+wandb_dir/
 artifacts/
 *.out
 *.err

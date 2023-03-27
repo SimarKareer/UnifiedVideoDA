@@ -286,14 +286,12 @@ def single_gpu_test(model,
 
 def multi_gpu_test(model,
                    data_loader,
+                   eval_settings,
                    tmpdir=None,
                    gpu_collect=False,
                    efficient_test=False,
                    pre_eval=False,
-                   format_only=False,
-                   format_args={},
-                   metrics=["mIoU"],
-                   sub_metrics=[]):
+                   format_only=False):
     """Updated multi_gpu_test for multiframe / flow loaders"""
 
     if efficient_test:
@@ -306,6 +304,9 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
+    metrics, sub_metrics = eval_settings["metrics"], eval_settings["sub_metrics"]
+
+    device = model.module.model.device
     print("TESTING METRICS: ", metrics)
 
     model.eval()
@@ -334,10 +335,12 @@ def multi_gpu_test(model,
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
             result = model(return_loss=False, logits=False, **refined_data)
+            result[0] = torch.from_numpy(result[0]).to(device)
 
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=False, **refined_data)
+                result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
 
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"

@@ -11,11 +11,12 @@ log_config = dict(
         dict(
             type='MMSegWandbHook',
             init_kwargs={
+                'dir': "wandb_dir",
                 'entity': "video-da",
                 'project': "Lwarp",
                 'resume': 'allow'
             },
-            interval=50,
+            interval=5,
             log_checkpoint=True,
             log_checkpoint_metadata=True,
             num_eval_images=0,

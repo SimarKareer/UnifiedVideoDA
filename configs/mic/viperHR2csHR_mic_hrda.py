@@ -18,6 +18,7 @@ _base_ = [
 ]
 # load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
 # load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
 # resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
@@ -86,7 +87,13 @@ uda = dict(
     # and a mask ratio of 0.7
     l_warp_lambda=1.0,
     l_mix_lambda=1.0,
+    consis_filter=False,
+    pl_fill=False,
     source_only2=False,
+    oracle_mask=False,
+    warp_cutmix=False,
+    stub_training=False,
+    l_warp_begin=1500,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
     debug_mode=False,
@@ -100,13 +107,17 @@ optimizer = dict(
             head=dict(lr_mult=10.0),
             pos_block=dict(decay_mult=0.0),
             norm=dict(decay_mult=0.0))))
+# lr_config=None turns off LR schedule
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
-evaluation = dict(interval=2000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
+checkpoint_config = dict(by_epoch=False, interval=250, max_keep_ckpts=2)
+evaluation = dict(interval=250, eval_settings={
+    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
+    "sub_metrics": ["mask_count"]
+})
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
 exp = 'basic'

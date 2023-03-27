@@ -31,7 +31,7 @@ def parse_args(args):
     parser.add_argument('config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
     parser.add_argument(
-        '--load-from', help='the checkpoint file to load weights from')
+        '--load-from', help='the checkpoint file to load weights from', type=str, default=None)
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(
@@ -74,6 +74,13 @@ def parse_args(args):
     parser.add_argument('--lr', type=float, default=None)
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
+    parser.add_argument('--consis-filter', type=bool, default=False)
+    parser.add_argument('--pl-fill', type=bool, default=False)
+    parser.add_argument('--oracle-mask', type=bool, default=False)
+    parser.add_argument('--warp-cutmix', type=bool, default=False)
+    parser.add_argument('--no-masking', type=bool, default=False)
+    parser.add_argument('--l-warp-begin', type=int, default=None)
+    parser.add_argument("--total-iters", type=int, default=None)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -173,7 +180,8 @@ def main(args):
     cfg.model.train_cfg.work_dir = cfg.work_dir
     cfg.model.train_cfg.log_config = cfg.log_config
     if args.load_from is not None:
-        assert False, "Not supported any more, use the python config to set load_from"
+        # assert False, "Not supported any more, use the python config to set load_from"
+        cfg.load_from = args.load_from
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
     if args.gpu_ids is not None:
@@ -213,6 +221,7 @@ def main(args):
         print("EVAL MODE")
         cfg.runner.max_iters = 1
         cfg.evaluation.interval = 1
+        cfg.uda.stub_training = True
     
     if args.source_only2:
         cfg.uda.source_only2=True
@@ -235,6 +244,29 @@ def main(args):
         cfg.runner.max_iters = 2
         cfg.data.val.split="splits/tinyval.txt"
     
+    if args.consis_filter:
+        cfg.uda.consis_filter = True
+    
+    if args.pl_fill:
+        cfg.uda.pl_fill = True
+    
+    if args.consis_filter and args.pl_fill:
+        raise Exception("Don't use both consis_filter and pl_fill, it's the same as just plain PL")
+    
+    if args.oracle_mask:
+        cfg.uda.oracle_mask = True
+    
+    if args.warp_cutmix:
+        cfg.uda.warp_cutmix = True
+
+    if args.l_warp_begin is not None:
+        cfg.uda.l_warp_begin = args.l_warp_begin
+    
+    if args.no_masking:
+        cfg.uda.mask_mode = None
+    
+    if args.total_iters:
+        cfg.runner.max_iters = args.total_iters
 
     print("FINISHED INIT DIST")
 

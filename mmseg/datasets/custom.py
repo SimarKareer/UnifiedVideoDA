@@ -22,10 +22,10 @@ from .builder import DATASETS
 from .pipelines import Compose, LoadAnnotations
 
 from mmseg.core.evaluation.metrics import flow_prop_iou, correctness_confusion
-from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 
 from torch.nn.modules.dropout import _DropoutNd
 from timm.models.layers import DropPath
+from tools.aggregate_flows.flow.my_utils import backpropFlow
 
 import pdb
 @DATASETS.register_module()
@@ -156,11 +156,11 @@ class CustomDataset(Dataset):
         self.init_cml_metrics()
 
     def init_cml_metrics(self):
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]}
-        self.mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
-        self.total_mask_counts = {k: np.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
-        self.cml_correct_consis = {k: np.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]}
+        self.mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
+        self.total_mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
+        self.cml_correct_consis = {k: torch.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
 
 
     def __len__(self):
@@ -320,7 +320,7 @@ class CustomDataset(Dataset):
                 out_str += "     "
 
                 out_str += f", {str(self.cml_intersect[metric][i].item()):15s}, {str(self.cml_union[metric][i].item()):15s}"
-                if "mask_count" in sub_metrics and "mIoU" not in metric:
+                if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5" and metric != "M5Fixed":
                     # breakpoint()
                     mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
 
@@ -386,15 +386,14 @@ class CustomDataset(Dataset):
         # if future_seg_map.shape[0] == 1 and len(future_seg_map) == 4 or curr_seg_map.shape[0] == 1 and len(curr_seg_map) == 4:
         #     assert False, "check this out"
         if future_seg_map.shape[0] == 1 and len(future_seg_map.shape) == 4:
-            future_seg_map = future_seg_map.squeeze(0)
+            future_seg_map = future_seg_map.squeeze(0).to(future_pred.device)
         
         if curr_seg_map.shape[0] == 1 and len(curr_seg_map.shape) == 4:
-            curr_seg_map = curr_seg_map.squeeze(0)
+            curr_seg_map = curr_seg_map.squeeze(0).to(future_pred.device)
 
-        flow = data["flow"][0].squeeze(0).permute((1, 2, 0))
-        return_mask_count = False # Stubbed for now
+        flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(future_pred.device)
+        return_mask_count = "mask_count" in sub_metrics
         # breakpoint()
-        
         if "pred_pred" in metrics:
             iau_pred_pred = flow_prop_iou(
                 future_pred,
@@ -460,6 +459,25 @@ class CustomDataset(Dataset):
             intersection, union, _, _ = iau
             self.cml_intersect["M5"] += intersection
             self.cml_union["M5"] += union
+        
+        if "M5Fixed" in metrics:
+            consis = (curr_pred == backpropFlow(flow, future_pred)).squeeze(-1) #where past frame pred matches future frame
+            # breakpoint()
+
+            iau = intersect_and_union(
+                curr_pred.squeeze(-1), #past frame
+                curr_seg_map.squeeze(0), #past GT
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                # indices=indices,
+                return_mask=False,
+                custom_mask=consis #where past and future agree
+            )
+
+            intersection, union, _, _ = iau
+            self.cml_intersect["M5Fixed"] += intersection
+            self.cml_union["M5Fixed"] += union
 
         if "mIoU_gt_pred" in metrics:
             iau_miou = intersect_and_union(

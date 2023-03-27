@@ -265,6 +265,9 @@ class SeqUtils():
         # print(ImsAndFlows.keys())
         ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
         im, imtk, flows = self.unmerge(ImsAndFlows) # separate out the ims and flows again
+
+        if ImsAndFlows["flip"]:
+            flows["img"][:, :, 0] = -flows["img"][:, :, 0]
         finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
         finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
         # breakpoint()
