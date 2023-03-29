@@ -328,7 +328,7 @@ class CustomDataset(Dataset):
                 if not np.isnan(pixel_acc[i].item()):
                     out_str += f", {pixel_acc[i].item() * 100:05.2f}"
                 else:
-                    out_str += f"{', nan':5s}"
+                    out_str += f"{', nan  ':5s}"
                 out_str += "          "
                 out_str += f", {str(self.pixelwise_correct[metric][i].item()):15s}, {str(self.pixelwise_total[metric][i].item()):15s}"
 
