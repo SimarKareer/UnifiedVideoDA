@@ -11,6 +11,7 @@ log_config = dict(
         dict(
             type='MMSegWandbHook',
             init_kwargs={
+                'dir': "wandb_dir",
                 'entity': "video-da",
                 'project': "Lwarp",
                 'resume': 'allow'

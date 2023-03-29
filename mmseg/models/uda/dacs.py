@@ -28,7 +28,7 @@ from timm.models.layers import DropPath
 from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
 
-from mmseg.core import add_prefix, intersect_and_union, confusion_matrix, plot_confusion_matrix
+from mmseg.core import add_prefix, intersect_and_union, confusion_matrix, plot_confusion_matrix, per_class_pixel_accuracy
 from mmseg.models import UDA, HRDAEncoderDecoder, build_segmentor
 from mmseg.models.segmentors.hrda_encoder_decoder import crop
 from mmseg.models.uda.masking_consistency_module import \
@@ -103,6 +103,7 @@ class DACS(UDADecorator):
         self.debug_fdist_mask = None
         self.debug_gt_rescale = None
 
+        self.init_cml_debug_metrics()
         self.class_probs = {}
         ema_cfg = deepcopy(cfg['model'])
         if not self.source_only:
@@ -114,6 +115,18 @@ class DACS(UDADecorator):
             self.imnet_model = build_segmentor(deepcopy(cfg['model']))
         else:
             self.imnet_model = None
+
+    def init_cml_debug_metrics(self):
+        
+        self.cml_debug_metrics = {k: torch.zeros(19) for k in [
+            "warp_cml_intersect", "plain_cml_intersect", "plain_mask_cml_intersect", 
+            "warp_cml_pixel_hit", "plain_cml_pixel_hit", "plain_mask_cml_pixel_hit", 
+            "warp_cml_union", "plain_cml_union", "plain_mask_cml_union", 
+            "warp_cml_pixel_total", "plain_cml_pixel_total", "plain_mask_cml_pixel_total",
+            "warp_cml_mask_hit", 
+            "warp_cml_mask_total"]}
+        
+        
 
     def get_ema_model(self):
         return get_module(self.ema_model)
@@ -324,12 +337,13 @@ class DACS(UDADecorator):
         
         return pseudo_label, pseudo_weight
     
-    def fast_iou(self, pred, label, custom_mask):
+    def fast_iou(self, pred, label, custom_mask=None, return_raw=False):
         pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
             pred,
             label,
             19,
-            [5, 3, 16, 12, 201, 255],
+            # [5, 3, 16, 12, 201, 255],
+            CityscapesDataset.ignore_index,
             label_map=None,
             reduce_zero_label=False,
             custom_mask = custom_mask,
@@ -337,7 +351,10 @@ class DACS(UDADecorator):
         )
         iou = (pl_warp_intersect / pl_warp_union).numpy()
         miou = np.nanmean(iou)
-        return iou, miou, mask
+        if return_raw:
+            return pl_warp_intersect, pl_warp_union, mask
+        else:
+            return iou, miou, mask
 
     def get_mixed_im(self, pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds):
         strong_parameters = {
@@ -372,6 +389,69 @@ class DACS(UDADecorator):
         mixed_lbl = torch.cat(mixed_lbl)
 
         return mixed_img, mixed_lbl, mixed_seg_weight, mix_masks
+    
+    def add_training_debug_metrics(self, pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars):
+        pl_warp = pseudo_label_warped[0]
+        pw_warp = pseudo_weight_warped[0]
+        gt_sem_seg = target_img_extra["gt_semantic_seg"][0, 0]
+
+        # All IoU Metrics
+        warp_iou = self.fast_iou(pl_warp.cpu().numpy(), gt_sem_seg.cpu().numpy(), custom_mask=pw_warp.cpu().bool().numpy(), return_raw=True)
+        self.cml_debug_metrics["warp_cml_intersect"] += warp_iou[0]
+        self.cml_debug_metrics["warp_cml_union"] += warp_iou[1]
+
+        plain_iou_mask = self.fast_iou(pseudo_label[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), custom_mask=pw_warp.cpu().bool().numpy(), return_raw=True)
+        self.cml_debug_metrics["plain_mask_cml_intersect"] += plain_iou_mask[0]
+        self.cml_debug_metrics["plain_mask_cml_union"] += plain_iou_mask[1]
+
+        plain_iou = self.fast_iou(pseudo_label[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), return_raw=True)
+        self.cml_debug_metrics["plain_cml_intersect"] += plain_iou[0]
+        self.cml_debug_metrics["plain_cml_union"] += plain_iou[1]
+
+        # All Pixel Accuracy Metrics
+        warp_pixel_acc = per_class_pixel_accuracy(pl_warp, gt_sem_seg, ignore_index=CityscapesDataset.ignore_index, return_raw=True).cpu()
+        self.cml_debug_metrics["warp_cml_pixel_hit"] += warp_pixel_acc.diagonal()
+        self.cml_debug_metrics["warp_cml_pixel_total"] += warp_pixel_acc.sum(axis=1)
+
+        plain_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index, return_raw=True).cpu()
+        self.cml_debug_metrics["plain_cml_pixel_hit"] += plain_pixel_acc.diagonal()
+        self.cml_debug_metrics["plain_cml_pixel_total"] += plain_pixel_acc.sum(axis=1)
+
+        plain_mask_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index, return_raw=True, mask=pw_warp.bool()).cpu()
+        self.cml_debug_metrics["plain_mask_cml_pixel_hit"] += plain_mask_pixel_acc.diagonal()
+        self.cml_debug_metrics["plain_mask_cml_pixel_total"] += plain_mask_pixel_acc.sum(axis=1)
+
+        # Mask Counts Per Class
+        # breakpoint()
+        total_counts = pseudo_label[0][pseudo_label[0] != 255].unique(return_counts=True)
+        mask_counts = pseudo_label[0][(pseudo_label[0] != 255) & ~pw_warp.bool()].unique(return_counts=True)
+        self.cml_debug_metrics["warp_cml_mask_total"][total_counts[0].cpu()] += total_counts[1].cpu()
+        self.cml_debug_metrics["warp_cml_mask_hit"][mask_counts[0].cpu()] += mask_counts[1].cpu()
+
+        for i, class_name in enumerate(CityscapesDataset.CLASSES):
+            log_vars[f"Warp PL IoU {class_name}"] = self.cml_debug_metrics["warp_cml_intersect"][i] / self.cml_debug_metrics["warp_cml_union"][i]
+            log_vars[f"Plain PL IoU {class_name}"] = self.cml_debug_metrics["plain_cml_intersect"][i] / self.cml_debug_metrics["plain_cml_union"][i]
+            # log_vars[f"Plain PL Mask IoU {class_name}"] = self.cml_debug_metrics["plain_mask_cml_intersect"][i] / self.cml_debug_metrics["plain_mask_cml_union"][i]
+
+            log_vars["Warp PL mIoU"] = np.nanmean((self.cml_debug_metrics["warp_cml_intersect"] / self.cml_debug_metrics["warp_cml_union"]).numpy())
+            log_vars["Plain PL mIoU"] = np.nanmean((self.cml_debug_metrics["plain_cml_intersect"] / self.cml_debug_metrics["plain_cml_union"]).numpy())
+            # log_vars["Plain PL Mask mIoU"] = np.nanmean((self.cml_debug_metrics["plain_mask_cml_intersect"] / self.cml_debug_metrics["plain_mask_cml_union"]).numpy())
+
+            log_vars[f"Warp PL Pixel Acc {class_name}"] = self.cml_debug_metrics["warp_cml_pixel_hit"][i] / self.cml_debug_metrics["warp_cml_pixel_total"][i]
+            log_vars[f"Plain PL Pixel Acc {class_name}"] = self.cml_debug_metrics["plain_cml_pixel_hit"][i] / self.cml_debug_metrics["plain_cml_pixel_total"][i]
+            # log_vars[f"Plain PL Mask Pixel Acc {class_name}"] = self.cml_debug_metrics["plain_mask_cml_pixel_hit"][i] / self.cml_debug_metrics["plain_mask_cml_pixel_total"][i]
+
+            log_vars[f"Diff Pixel Acc {class_name}"] = log_vars[f"Warp PL Pixel Acc {class_name}"] - log_vars[f"Plain PL Pixel Acc {class_name}"]
+            # log_vars[f"Diff Mask Pixel Acc {class_name}"] = log_vars[f"Warp PL Pixel Acc {class_name}"] - log_vars[f"Plain PL Mask Pixel Acc {class_name}"]
+            log_vars[f"Diff IoU {class_name}"] = log_vars[f"Warp PL IoU {class_name}"] - log_vars[f"Plain PL IoU {class_name}"]
+            # log_vars[f"Diff Mask IoU {class_name}"] = log_vars[f"Warp PL IoU {class_name}"] - log_vars[f"Plain PL Mask IoU {class_name}"]
+            log_vars["Diff mIoU"] = log_vars["Warp PL mIoU"] - log_vars["Plain PL mIoU"]
+            # log_vars["Diff Mask mIoU"] = log_vars["Warp PL mIoU"] - log_vars["Plain PL Mask mIoU"]
+
+            log_vars[f"Mask Percentage {class_name}"] = self.cml_debug_metrics["warp_cml_mask_hit"][i] / self.cml_debug_metrics["warp_cml_mask_total"][i]
+
+
+
 
     def forward_train(self,
                       img,
@@ -500,12 +580,6 @@ class DACS(UDADecorator):
 
         pseudo_label, pseudo_weight = None, None
         if not self.source_only:
-            # Generate pseudo-label
-
-            # already have target_img, target_img_metas
-            # issue: we're generating PL on t, for mixing, but we need to generate PL on t+k for Lwarp
-            # So we can either slow down training and generate on both, or just generate on t+k, and use the same PL for both
-
             target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
 
             for m in self.get_ema_model().modules():
@@ -518,17 +592,6 @@ class DACS(UDADecorator):
             pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
-            # TODO: forward train on imt-k, same PL -> t-k
-            # should look at im t-k, and imt -> t-k
-            # save_image(target_img_extra["imtk"][0], "work_dirs/debugViperCS/imtk.png")
-            # futureim = target_img[0]
-            # save_image(futureim, "work_dirs/debugViperCS/futureim.png")
-            # futureim = futureim.cpu().numpy().transpose(1, 2, 0)
-            # flow = target_img_extra["flow"][0].cpu().numpy().transpose(1, 2, 0)
-            # im_t_tk, mask = backpropFlowNoDup(flow, futureim, return_mask=True)
-            # im_t_tk = torch.from_numpy(im_t_tk).permute(2, 0, 1)
-            # save_image(im_t_tk, "work_dirs/debugViperCS/im_t_tk.png")
-            
             log_vars["L_warp"] = 0
             if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
 
@@ -618,12 +681,10 @@ class DACS(UDADecorator):
 
                 warped_pl_loss.backward() #NOTE: do we need to retain graph?
 
-                log_vars["Warp PL IoU"] = self.fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_extra["gt_semantic_seg"][0, 0].cpu().numpy(), custom_mask=pseudo_weight_warped[0].cpu().bool().numpy())[1]
+                if self.local_iter == 100:
+                    self.init_cml_debug_metrics()
+                self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
 
-                log_vars["Plain PL IoU"] = self.fast_iou(pseudo_label[0].cpu().numpy(), target_img_extra["gt_semantic_seg"][0, 0].cpu().numpy(), custom_mask=pseudo_weight[0].cpu().bool().numpy())[1]
-
-                log_vars["PL diff"] = log_vars["Warp PL IoU"] - log_vars["Plain PL IoU"]
-            
             if self.l_mix_lambda > 0:
                 # Apply mixing
                 mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
