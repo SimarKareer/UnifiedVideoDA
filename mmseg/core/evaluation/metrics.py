@@ -302,10 +302,6 @@ def intersect_and_union(pred_label,
 
     # other metrics
     other_metrics = {}
-    # if return_confusion_matrix:
-    #     other_metrics["confusion matrix"] = confusion_matrix(pred_label.cpu(), label.cpu(), num_classes)
-    # if return_pixelwise_acc:
-    #     other_metrics["pixelwise accuracy"] = pixelwise_accuracy(pred_label.cpu(), label.cpu(), num_classes)
 
     if return_confusion_matrix or return_pixelwise_acc:
         matrix = per_class_pixel_accuracy(pred_label.cpu(), label.cpu(),ignore_index=ignore_index,return_raw=True)
@@ -329,30 +325,6 @@ def intersect_and_union(pred_label,
     #     return area_intersect, area_union, area_pred_label, area_label, mask
     # else:
     #     return area_intersect, area_union, area_pred_label, area_label
-
-#used for eval metrics 
-# def pixelwise_accuracy(pred, label, num_classes):
-#     """Calculate pixel wise accuracy.
-
-#     Args:
-#         pred (tensor): Prediction segmentation map (H, W).
-#         label (tensor): Ground truth segmentation map (H, W).
-
-#     Returns:
-#         torch.Tensor: correct_count
-#         torch.Tensor:  class_count
-#     """
-#     mask = (label >= 0) & (label < num_classes) & (pred >= 0) & (pred < num_classes)
-#     pred = pred[mask].flatten()
-#     label = label[mask].flatten()
-#     correct_pred = pred[pred == label]
-
-#     class_count = torch.bincount(label.flatten(), minlength=num_classes)
-
-#     # calculate number of correctly classified pixels for each class
-#     correct_count = torch.bincount(correct_pred, minlength=num_classes)
-
-#     return correct_count, class_count
 
 def ignore_indices(image, ignore_index):
     """
@@ -410,16 +382,6 @@ def confusion_matrix(pred, label, num_classes, is_torch=False, mask=None):
         label = num_classes * label[mask].astype('int') + pred[mask]
         count = np.bincount(label, minlength=num_classes**2)
     confusion_matrix = count.reshape(num_classes, num_classes)
-
-    #OLD CODE
-    # mask = (label >= 0) & (label < num_classes) & (pred >= 0) & (pred < num_classes)
-    # pred = pred[mask].flatten()
-    # label = label[mask].flatten()
-
-    # label = num_classes * label + pred
-    # count = torch.bincount(label, minlength=num_classes**2)
-    # confusion_matrix = torch.reshape(count, (num_classes, num_classes))
-    # return confusion_matrix
     return confusion_matrix
 
 def plot_confusion_matrix(confusion_matrix, ax, class_names=None, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
