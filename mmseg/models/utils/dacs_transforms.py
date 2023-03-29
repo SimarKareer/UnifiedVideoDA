@@ -87,10 +87,13 @@ def gaussian_blur(blur, data=None, target=None):
     return data, target
 
 
-def get_class_masks(labels):
+def get_class_masks(labels, class_filter=None):
     class_masks = []
     for label in labels:
         classes = torch.unique(labels)
+        if class_filter:
+            for cls in class_filter:
+                classes = classes[classes != cls]
         nclasses = classes.shape[0]
         class_choice = np.random.choice(
             nclasses, int((nclasses + nclasses % 2) / 2), replace=False)

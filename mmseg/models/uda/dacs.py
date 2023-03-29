@@ -88,6 +88,8 @@ class DACS(UDADecorator):
         self.warp_cutmix = cfg['warp_cutmix']
         self.stub_training = cfg['stub_training']
         self.l_warp_begin = cfg['l_warp_begin']
+        self.class_mask_warp = cfg["class_mask_warp"]
+        self.class_mask_cutmix = cfg["class_mask_cutmix"]
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
         self.enable_fdist = self.fdist_lambda > 0
@@ -102,6 +104,16 @@ class DACS(UDADecorator):
 
         self.debug_fdist_mask = None
         self.debug_gt_rescale = None
+
+        if self.class_mask_warp == "thing":
+            self.relevant_classes_warp = list(CityscapesDataset.THINGS_IDX)
+            self.masked_classes_warp = list(CityscapesDataset.STUFF_IDX)
+        elif self.class_mask_warp == "stuff":
+            self.relevant_classes_warp = list(CityscapesDataset.STUFF_IDX)
+            self.masked_classes_warp = list(CityscapesDataset.THINGS_IDX)
+        else:
+            self.relevant_classes_warp = list(CityscapesDataset.ALL_IDX)
+            self.masked_classes_warp = []
 
         self.init_cml_debug_metrics()
         self.class_probs = {}
@@ -343,7 +355,7 @@ class DACS(UDADecorator):
             label,
             19,
             # [5, 3, 16, 12, 201, 255],
-            CityscapesDataset.ignore_index,
+            CityscapesDataset.ignore_index + self.masked_classes_warp,
             label_map=None,
             reduce_zero_label=False,
             custom_mask = custom_mask,
@@ -372,7 +384,8 @@ class DACS(UDADecorator):
 
         mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
         mixed_seg_weight = pseudo_weight.clone()
-        mix_masks = get_class_masks(gt_semantic_seg)
+        class_filter = self.masked_classes_warp
+        mix_masks = get_class_masks(gt_semantic_seg, class_filter=class_filter)
 
         for i in range(batch_size):
             strong_parameters['mix'] = mix_masks[i]
@@ -409,15 +422,15 @@ class DACS(UDADecorator):
         self.cml_debug_metrics["plain_cml_union"] += plain_iou[1]
 
         # All Pixel Accuracy Metrics
-        warp_pixel_acc = per_class_pixel_accuracy(pl_warp, gt_sem_seg, ignore_index=CityscapesDataset.ignore_index, return_raw=True).cpu()
+        warp_pixel_acc = per_class_pixel_accuracy(pl_warp, gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
         self.cml_debug_metrics["warp_cml_pixel_hit"] += warp_pixel_acc.diagonal()
         self.cml_debug_metrics["warp_cml_pixel_total"] += warp_pixel_acc.sum(axis=1)
 
-        plain_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index, return_raw=True).cpu()
+        plain_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
         self.cml_debug_metrics["plain_cml_pixel_hit"] += plain_pixel_acc.diagonal()
         self.cml_debug_metrics["plain_cml_pixel_total"] += plain_pixel_acc.sum(axis=1)
 
-        plain_mask_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index, return_raw=True, mask=pw_warp.bool()).cpu()
+        plain_mask_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True, mask=pw_warp.bool()).cpu()
         self.cml_debug_metrics["plain_mask_cml_pixel_hit"] += plain_mask_pixel_acc.diagonal()
         self.cml_debug_metrics["plain_mask_cml_pixel_total"] += plain_mask_pixel_acc.sum(axis=1)
 
@@ -650,6 +663,17 @@ class DACS(UDADecorator):
                     pseudo_label_warped[~oracle_map] = 255
                     if DEBUG:
                         subplotimg(axs[3][4], (oracle_map[[0]]).repeat(3, 1, 1)*255, 'Oracle Map')
+
+                if self.class_mask_warp is not None:
+                    # Flipping thing and stuff here so that the variable name is more intuitive
+                    if self.class_mask_warp == "thing":
+                        to_mask = CityscapesDataset.STUFF_IDX
+                    elif self.class_mask_warp == "stuff":
+                        to_mask = CityscapesDataset.THINGS_IDX
+
+                    for thing_class in to_mask:
+                        pseudo_label_warped[pseudo_label_warped == thing_class] = 255
+                        pseudo_weight_warped[pseudo_label_warped == thing_class] = 0
 
                 if self.warp_cutmix:
                     mixed_im_warp, mixed_lbl_warp, mixed_seg_weight_warp, _ = self.get_mixed_im(pseudo_weight_warped, pseudo_label_warped, img, target_img, gt_semantic_seg, means, stds)
