@@ -76,6 +76,7 @@ def parse_args(args):
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
+    parser.add_argument('--bottom-pl-fill', type=bool, default=False)
     parser.add_argument('--oracle-mask', type=bool, default=False)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
@@ -252,6 +253,9 @@ def main(args):
     
     if args.pl_fill:
         cfg.uda.pl_fill = True
+    
+    if args.bottom_pl_fill:
+        cfg.uda.bottom_pl_fill = True
     
     if args.consis_filter and args.pl_fill:
         raise Exception("Don't use both consis_filter and pl_fill, it's the same as just plain PL")

@@ -84,6 +84,7 @@ class DACS(UDADecorator):
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
         self.pl_fill = cfg['pl_fill']
+        self.bottom_pl_fill = cfg['bottom_pl_fill']
         self.oracle_mask = cfg['oracle_mask']
         self.warp_cutmix = cfg['warp_cutmix']
         self.exclusive_warp_cutmix = cfg['exclusive_warp_cutmix']
@@ -638,18 +639,25 @@ class DACS(UDADecorator):
                     pltki = pltki.permute((2, 0, 1)).long()
 
                     # PL Fill in
-                    if self.pl_fill:
+                    if self.pl_fill or self.bottom_pl_fill:
                         if i == 0 and DEBUG:
-                            subplotimg(axs[4][2], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW Before Fill')
-                            subplotimg(axs[4][0], pltki[0], 'PL Before Fill', cmap="cityscapes")
+                            subplotimg(axs[5][2], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW Before Fill')
+                            subplotimg(axs[5][0], pltki[0], 'PL Before Fill', cmap="cityscapes")
 
-                        pseudo_weight_warped_i[~mask] = pseudo_weight[i][~mask]
-                        pltki[0][~mask] = pseudo_label[i][~mask]
+                        if self.pl_fill:
+                            pseudo_weight_warped_i[~mask] = pseudo_weight[i][~mask]
+                            pltki[0][~mask] = pseudo_label[i][~mask]
+                        
+                        if self.bottom_pl_fill:
+                            # only set the bottom of the pseudo_weight_warped_i to the pseudo_weight
+                            bottom_mask = torch.ones_like(mask) & (torch.arange(mask.shape[0])[:, None].cuda() >= 800)
+                            pseudo_weight_warped_i[bottom_mask] = pseudo_weight[i][bottom_mask]
+                            pltki[0][bottom_mask] = pseudo_label[i][bottom_mask]
 
                         if i == 0 and DEBUG:
-                            subplotimg(axs[4][3], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW After Fill')
-                            subplotimg(axs[4][4], pseudo_weight[i].repeat(3, 1, 1)*255, 'PW Original')
-                            subplotimg(axs[4][1], pltki[0], 'PL After Fill', cmap="cityscapes")
+                            subplotimg(axs[5][3], pseudo_weight_warped_i.repeat(3, 1, 1)*255, 'PW After Fill')
+                            subplotimg(axs[5][4], pseudo_weight[i].repeat(3, 1, 1)*255, 'PW Original')
+                            subplotimg(axs[5][1], pltki[0], 'PL After Fill', cmap="cityscapes")
                     
 
                     # Consistency masking

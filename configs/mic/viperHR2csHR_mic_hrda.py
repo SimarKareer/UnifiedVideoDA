@@ -89,6 +89,7 @@ uda = dict(
     l_mix_lambda=0.0,
     consis_filter=False,
     pl_fill=False,
+    bottom_pl_fill=False,
     source_only2=False,
     oracle_mask=False,
     warp_cutmix=False,
