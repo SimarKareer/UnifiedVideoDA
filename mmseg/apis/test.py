@@ -19,6 +19,8 @@ from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import torch.distributed as dist
+import matplotlib.pyplot as plt
+from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -311,6 +313,12 @@ def multi_gpu_test(model,
     device = model.module.model.device
     print("TESTING METRICS: ", metrics)
 
+    fig, axs = plt.subplots(
+        5,
+        2,
+        figsize=(10, 10),
+    )
+
     model.eval()
     results = []
     dataset = data_loader.dataset
@@ -337,7 +345,12 @@ def multi_gpu_test(model,
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
             result = model(return_loss=False, logits=False, **refined_data)
+            breakpoint()
             result[0] = torch.from_numpy(result[0]).to(device)
+            subplotimg(axs[0, 0], result[0], cmap="cityscapes")
+            subplotimg(axs[1, 0], data["gt_semantic_seg"][0][0, 0], cmap="cityscapes")
+            subplotimg(axs[2, 0], data["img"][0][0].permute(1, 2, 0))
+            plt.savefig(os.path.join("./work_dirs/debugCarIssue", f'debug.png'), dpi=300)
 
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
