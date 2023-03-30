@@ -78,6 +78,7 @@ def parse_args(args):
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--oracle-mask', type=bool, default=False)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
+    parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
     parser.add_argument("--total-iters", type=int, default=None)
@@ -260,6 +261,9 @@ def main(args):
     
     if args.warp_cutmix:
         cfg.uda.warp_cutmix = True
+
+    if args.exclusive_warp_cutmix:
+        cfg.uda.exclusive_warp_cutmix = True
 
     if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin

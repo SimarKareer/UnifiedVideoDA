@@ -98,7 +98,8 @@ uda = dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
     debug_mode=False,
     class_mask_warp=None,
-    class_mask_cutmix=None
+    class_mask_cutmix=None,
+    exclusive_warp_cutmix=False,
 )
 # Optimizer Hyperparameters
 optimizer_config = None

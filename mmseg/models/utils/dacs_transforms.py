@@ -6,6 +6,7 @@ import kornia
 import numpy as np
 import torch
 import torch.nn as nn
+from mmseg.datasets.cityscapes import CityscapesDataset
 
 
 def strong_transform(param, data=None, target=None):
@@ -92,7 +93,8 @@ def get_class_masks(labels, class_filter=None):
     for label in labels:
         classes = torch.unique(labels)
         if class_filter:
-            for cls in class_filter:
+            # Note: I decided to not cutmix any of the ignored indices (like poles)
+            for cls in np.unique(class_filter + CityscapesDataset.ignore_index):
                 classes = classes[classes != cls]
         nclasses = classes.shape[0]
         class_choice = np.random.choice(
