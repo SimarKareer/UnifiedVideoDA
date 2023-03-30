@@ -291,7 +291,9 @@ def multi_gpu_test(model,
                    gpu_collect=False,
                    efficient_test=False,
                    pre_eval=False,
-                   format_only=False):
+                   format_only=False,
+                   out_dir=None,
+                   show=False):
     """Updated multi_gpu_test for multiframe / flow loaders"""
 
     if efficient_test:
@@ -342,11 +344,35 @@ def multi_gpu_test(model,
                 result_tk = model(return_loss=False, logits=False, **refined_data)
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
 
+        #output predictions
+        if out_dir:
+            img_tensor = data['img'][0]
+            img_metas = data['img_metas'][0].data[0]
+            imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
+            assert len(imgs) == len(img_metas)
+
+            for img, img_meta in zip(imgs, img_metas):
+                h, w, _ = img_meta['img_shape']
+                img_show = img[:h, :w, :]
+
+                ori_h, ori_w = img_meta['ori_shape'][:-1]
+                img_show = mmcv.imresize(img_show, (ori_w, ori_h))
+
+                out_file = osp.join(out_dir, img_meta['ori_filename'])
+                print(out_file)
+                val = [result[0].cpu().numpy()]
+                model.module.show_result(
+                    img_show,
+                    val,
+                    palette=dataset.PALETTE,
+                    show=show,
+                    out_file=out_file,
+                    opacity=0.5) 
+        
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
             result = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
-            
 
         results.extend(result)
 
@@ -356,6 +382,7 @@ def multi_gpu_test(model,
                 prog_bar.update()
 
         it += 1
+
 
     
     for met in metrics:

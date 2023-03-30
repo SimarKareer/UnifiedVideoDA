@@ -18,8 +18,8 @@ _base_ = [
 ]
 # load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
 # load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-# load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth"
-load_from="/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/trainDebug/cutmix-mask03-23-15-53-46/latest.pth"
+load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# load_from="/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/trainDebug/cutmix-mask03-23-15-53-46/latest.pth"
 # resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
 # resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
@@ -116,11 +116,13 @@ runner = dict(type='IterBasedRunner', max_iters=1)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
 evaluation = dict(interval=1, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed", "mIoU_gt_pred"],
-    "sub_metrics": ["mask_count"],
-    "pixelwise accuracy": True,
-    "confusion matrix": True,
-})
+        "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed", "mIoU_gt_pred"],
+        "sub_metrics": ["mask_count"],
+        "pixelwise accuracy": True,
+        "confusion matrix": True,
+    },
+    out_dir='predictions/base',  #change based on model checkpoint or set as None
+)
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
 exp = 'basic'
