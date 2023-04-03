@@ -10,13 +10,18 @@ _base_ = [
     # GTA->Cityscapes High-Resolution Data Loading
     '../_base_/datasets/uda_viper_CSSeq.py',
     # DAFormer Self-Training
-    '../_base_/uda/dacs_a999_fdthings.py',
+    '../_base_/uda/dacs_a999_fdthings_viper.py',
     # AdamW Optimizer
     '../_base_/schedules/adamw.py',
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
+# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth" # base 
+# load_from="/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/trainDebug/cutmix-mask03-23-15-53-46/latest.pth" # cutmix + mask 
+load_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv7/bottomFill03-30-18-51-19/latest.pth" # cutmix + mask + car hood PL fill
+# resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
 # resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
@@ -85,7 +90,13 @@ uda = dict(
     # and a mask ratio of 0.7
     l_warp_lambda=1.0,
     l_mix_lambda=1.0,
+    consis_filter=False,
+    pl_fill=False,
     source_only2=False,
+    oracle_mask=False,
+    warp_cutmix=False,
+    stub_training=False,
+    l_warp_begin=1500,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
     debug_mode=False,
@@ -104,10 +115,17 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=1)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=8)
-evaluation = dict(interval=1, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
+checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
+evaluation = dict(interval=1, eval_settings={
+        "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed", "mIoU_gt_pred"],
+        "sub_metrics": ["mask_count"],
+        "pixelwise accuracy": True,
+        "confusion matrix": True,
+    },
+    out_dir='predictions/cutmix_mask_PL_fill_car_viz',  #change based on model checkpoint or set as None 'cutmix_mask_lwarp'
+)
 # Meta Information for Result Analysis
-name = 'viperHR2csHR_mic_hrda_s2_backward_flow_eval'
+name = 'viperHR2csHR_mic_hrda_s2'
 exp = 'basic'
 name_dataset = 'viperHR2cityscapesHR_1024x1024'
 name_architecture = 'hrda1-512-0.1_daformer_sepaspp_sl_mitb5'
