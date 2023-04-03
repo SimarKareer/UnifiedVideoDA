@@ -21,6 +21,7 @@ from tqdm import tqdm
 import torch.distributed as dist
 import matplotlib.pyplot as plt
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
+import torchvision.transforms as transforms
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -345,52 +346,42 @@ def multi_gpu_test(model,
         with torch.no_grad():
             refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
             result = model(return_loss=False, logits=False, **refined_data)
-            breakpoint()
             result[0] = torch.from_numpy(result[0]).to(device)
-            subplotimg(axs[0, 0], result[0], cmap="cityscapes")
-            subplotimg(axs[1, 0], data["gt_semantic_seg"][0][0, 0], cmap="cityscapes")
-            subplotimg(axs[2, 0], data["img"][0][0].permute(1, 2, 0))
-            plt.savefig(os.path.join("./work_dirs/debugCarIssue", f'debug.png'), dpi=300)
 
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=False, **refined_data)
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
-
-        #output predictions
-        if out_dir:
-            img_tensor = data['img'][0]
-            img_metas = data['img_metas'][0].data[0]
-            imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
-            assert len(imgs) == len(img_metas)
-
-            for img, img_meta in zip(imgs, img_metas):
-                h, w, _ = img_meta['img_shape']
-                img_show = img[:h, :w, :]
-
-                ori_h, ori_w = img_meta['ori_shape'][:-1]
-                img_show = mmcv.imresize(img_show, (ori_w, ori_h))
-
-                out_file = osp.join(out_dir, img_meta['ori_filename'])
-                print(out_file)
-                val = [result[0].cpu().numpy()]
-                model.module.show_result(
-                    img_show,
-                    val,
-                    palette=dataset.PALETTE,
-                    show=show,
-                    out_file=out_file,
-                    opacity=0.5) 
         
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            result = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
+            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
 
-        results.extend(result)
+            if out_dir:
+                intersection, union, _,_  = eval_vals[0]
+                iou = intersection / union
+                car_iou = iou[13]
+                label = (data["gt_semantic_seg"][0][0, 0]).cpu()
+                pred_for_diff = torch.where(label == 255, 255, result[0].cpu()) 
+                diff = torch.where(pred_for_diff == label, 255 , pred_for_diff) #creates a diff image for visualization 
+                img_metas = data['img_metas'][0].data[0]
+                subplotimg(axs[0, 0], result[0], cmap="cityscapes",title=("Car Miou: " + str(car_iou)))
+                subplotimg(axs[1, 0], data["gt_semantic_seg"][0][0, 0], cmap="cityscapes")
+                subplotimg(axs[2, 0], data["img"][0][0].permute(1, 2, 0))
+                subplotimg(axs[3, 0], diff,cmap="cityscapes")
+
+
+                out_file = os.path.join(out_dir,img_metas[0]['ori_filename'])
+                directory = "/".join(out_file.split('/')[:-1])
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
+                plt.savefig(out_file, dpi=300)
+
+        results.extend(eval_vals)
 
         if rank == 0:
-            batch_size = len(result) * world_size
+            batch_size = len(eval_vals) * world_size
             for _ in range(batch_size):
                 prog_bar.update()
 
