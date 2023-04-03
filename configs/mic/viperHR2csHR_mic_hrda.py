@@ -104,18 +104,18 @@ uda = dict(
 )
 # Optimizer Hyperparameters
 optimizer_config = None
-optimizer = dict(
-    lr=6e-05,
-    paramwise_cfg=dict(
-        custom_keys=dict(
-            head=dict(lr_mult=10.0),
-            pos_block=dict(decay_mult=0.0),
-            norm=dict(decay_mult=0.0))))
+# optimizer = dict(
+#     lr=6e-05,
+#     paramwise_cfg=dict(
+#         custom_keys=dict(
+#             head=dict(lr_mult=10.0),
+#             pos_block=dict(decay_mult=0.0),
+#             norm=dict(decay_mult=0.0))))
 # lr_config=None turns off LR schedule
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
-runner = dict(type='IterBasedRunner', max_iters=40000)
+runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=250, max_keep_ckpts=2)
 evaluation = dict(interval=250, eval_settings={

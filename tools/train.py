@@ -24,6 +24,10 @@ from mmseg.datasets import build_dataset, build_dataloader
 from mmseg.models.builder import build_train_model
 from mmseg.utils import collect_env, get_root_logger
 from mmseg.utils.collect_env import gen_code_archive
+import configs._base_.schedules.poly10warm as poly10warm
+import configs._base_.schedules.poly10 as poly10
+import configs._base_.schedules.adamw as adamw
+import configs._base_.schedules.sgd as sgd
 
 
 def parse_args(args):
@@ -63,15 +67,21 @@ def parse_args(args):
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
+
+    parser.add_argument("--total-iters", type=int, default=None)
+    parser.add_argument('--lr', type=float, default=None)
+    parser.add_argument('--lr-schedule', type=str, default=None, choices=["poly_10_warm", "poly_10", "constant"])
+    parser.add_argument('--optimizer', type=str, default=None, choices=["adamw", "sgd"])
+
     parser.add_argument('--analysis', type=bool, default=False)
+    parser.add_argument('--eval', type=bool, default=False)
     parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--debug-mode', type=bool, default=False)
     parser.add_argument('--pre-exp-check', type=bool, default=False)
     parser.add_argument('--auto-resume', type=bool, default=False)
     parser.add_argument('--nowandb', type=bool, default=False)
     parser.add_argument('--wandbid', type=str, default=None)
-    parser.add_argument('--eval', type=bool, default=False)
-    parser.add_argument('--lr', type=float, default=None)
+
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
@@ -82,7 +92,7 @@ def parse_args(args):
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
-    parser.add_argument("--total-iters", type=int, default=None)
+
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
     args = parser.parse_args(args)
@@ -200,10 +210,6 @@ def main(args):
         distributed = True
         init_dist(cfg.launcher, **cfg.dist_params)
     
-    if args.lr is not None:
-        print("Overwriting LR to ", args.lr)
-        cfg.optimizer.lr = args.lr
-
     if args.l_warp_lambda is not None:
         print("Overwriting l_warp_lambda to ", args.l_warp_lambda)
         cfg.uda.l_warp_lambda = args.l_warp_lambda
@@ -283,6 +289,24 @@ def main(args):
 
     if args.class_mask_cutmix:
         cfg.uda.class_mask_cutmix = args.class_mask_cutmix
+    
+    if args.lr_schedule == "poly_10_warm":
+        cfg.lr_config = poly10warm.lr_config
+    elif args.lr_schedule == "poly_10":
+        cfg.lr_config = poly10.lr_config
+    elif args.lr_schedule == "constant":
+        cfg.lr_config = None
+
+    if args.optimizer == "adamw":
+        cfg.optimizer = adamw.optimizer
+        cfg.optimizer_config = adamw.optimizer_config
+    elif args.optimizer == "sgd":
+        cfg.optimizer = sgd.optimizer
+        cfg.optimizer_config = sgd.optimizer_config
+    
+    if args.lr is not None:
+        print("Overwriting LR to ", args.lr)
+        cfg.optimizer.lr = args.lr    
 
     print("FINISHED INIT DIST")
 
