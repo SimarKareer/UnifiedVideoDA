@@ -39,7 +39,7 @@ from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.datasets.cityscapes import CityscapesDataset
-from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow
+from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map
 import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
@@ -63,6 +63,44 @@ def calc_grad_magnitude(grads, norm_type=2.0):
             torch.stack([torch.norm(p, norm_type) for p in grads]), norm_type)
 
     return norm
+
+
+def rare_class_or_filter(pl1, pl2):
+    """
+    pl1: (B, H, W)
+    pl2: (B, H, W)
+    returns a pseudolabel which keeps consistent pixels, and masks out inconsistent pixels except when the pixel is rare.  In the case that both pl1 and pl2 are rare take the more rare pixel
+    """
+    # most to least rare
+    # pl1[pl1 == 255]
+    #                                                     | 
+    rarity_order = [3, 5, 12, 16, 18, 17, 7, 6, 15, 4, 11, 14, 9, 8, 1, 2, 10, 13, 0]
+    # rarity_index = torch.tensor([rarity_order.index(i) for i in range(19)])
+    rarity_thresh = 11 #rarity_order[:11] is rare, past that not rare
+
+    inconsis_pixels = pl1 != pl2
+    consistent_pixels = pl1 == pl2
+    # pl1_rarity = rarity_index[]
+    pl1_rarity = tensor_map(pl1, {i: rarity_order.index(i) for i in range(19)}) # {0: 19, 1:15} ie 0 is the 19th rarest class, 1 is the 15th rarest class
+    pl2_rarity = tensor_map(pl2, {i: rarity_order.index(i) for i in range(19)})
+    output = torch.ones_like(pl1)*255
+    # print("pl1 rarity", pl1_rarity)
+    # print("pl2 rarity", pl2_rarity)
+
+    # print("output1", output)
+    output[consistent_pixels] = pl1[consistent_pixels]
+    # print("output2", output)
+
+
+    pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl1_rarity < pl2_rarity)
+    output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
+
+    pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl2_rarity < pl1_rarity)
+    output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
+    # breakpoint()
+
+    return output
+
 
 
 @UDA.register_module()

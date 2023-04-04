@@ -369,6 +369,17 @@ def backpropFlowFilter(flow, im2, im1, thresh=300):
 
     return im2_1
 
+def tensor_map(tensor, label_map):
+    """
+    tensor: any shape tensor
+    label_map: {old: new}
+    """
+    tensor_copy = tensor.clone()
+    for old_id, new_id in label_map.items():
+        tensor_copy[tensor == old_id] = new_id
+    
+    return tensor_copy
+
 def imageMap2(label, label_map):
     """
     label: (H, W, C) numpy array
