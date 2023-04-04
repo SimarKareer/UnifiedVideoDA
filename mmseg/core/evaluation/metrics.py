@@ -191,6 +191,7 @@ def intersect_and_union(pred_label,
                         indices=None,
                         return_mask=False,
                         return_confusion_matrix=False,
+                        return_pixelwise_acc=False,
                         custom_mask=None):
     """Calculate intersection and Union.
 
@@ -298,8 +299,26 @@ def intersect_and_union(pred_label,
     if return_mask:
         to_return.append(mask)
     
-    if return_confusion_matrix:
-        to_return.append(confusion_matrix(pred_label, label))
+
+    # other metrics
+    other_metrics = {}
+
+    if return_confusion_matrix or return_pixelwise_acc:
+        matrix = per_class_pixel_accuracy(pred_label.cpu(), label.cpu(),ignore_index=ignore_index,return_raw=True)
+
+        if return_confusion_matrix:
+            other_metrics["confusion matrix"] = matrix
+        if return_pixelwise_acc:
+            pixel_acc_hit = matrix.diagonal()
+            pixel_acc_total = matrix.sum(axis=1)
+            other_metrics["pixelwise accuracy"] = (pixel_acc_hit, pixel_acc_total)
+
+
+    
+    if return_confusion_matrix or return_pixelwise_acc:
+        to_return.append(other_metrics)
+
+
     return (*to_return,)
 
     # if return_mask:
@@ -317,6 +336,7 @@ def ignore_indices(image, ignore_index):
         mask = torch.logical_and(mask, image != idx)
     return mask
 
+# used for training metrics 
 def per_class_pixel_accuracy(pred, label, return_raw=False, ignore_index=None, mask=None):
     """Calculate per class pixel accuracy.
 
@@ -344,8 +364,8 @@ def confusion_matrix(pred, label, num_classes, is_torch=False, mask=None):
     """Calculate confusion matrix.
 
     Args:
-        pred (ndarray): Prediction segmentation map (H, W).
-        label (ndarray): Ground truth segmentation map (H, W).
+        pred (tensor): Prediction segmentation map (H, W).
+        label (tensor): Ground truth segmentation map (H, W).
 
     Returns:
         ndarray: Confusion matrix (num_classes, num_classes).
