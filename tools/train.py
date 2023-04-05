@@ -85,6 +85,7 @@ def parse_args(args):
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
+    parser.add_argument('--consis-filter-rare-class', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--bottom-pl-fill', type=bool, default=False)
     parser.add_argument('--oracle-mask', type=bool, default=False)
@@ -256,6 +257,9 @@ def main(args):
     
     if args.consis_filter:
         cfg.uda.consis_filter = True
+    
+    if args.consis_filter_rare_class:
+        cfg.uda.consis_filter_rare_class = True
     
     if args.pl_fill:
         cfg.uda.pl_fill = True

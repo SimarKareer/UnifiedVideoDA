@@ -39,7 +39,7 @@ from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.datasets.cityscapes import CityscapesDataset
-from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map
+from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter
 import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
@@ -83,6 +83,8 @@ class DACS(UDADecorator):
         self.l_warp_lambda = cfg['l_warp_lambda']
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
+        self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
+
         self.pl_fill = cfg['pl_fill']
         self.bottom_pl_fill = cfg['bottom_pl_fill']
         self.oracle_mask = cfg['oracle_mask']
@@ -672,6 +674,12 @@ class DACS(UDADecorator):
                 
                 pseudo_weight_warped = torch.stack(pseudo_weight_warped)
                 pseudo_label_warped = torch.stack(pseudo_label_warped)
+                if DEBUG:
+                    subplotimg(axs[1][6], pseudo_label_warped[0], 'Original PL Warped', cmap="cityscapes")
+
+                if self.consis_filter_rare_class:
+                    pseudo_label_warped = rare_class_or_filter(pseudo_label, pseudo_label_warped)
+                    pseudo_weight_warped[pseudo_label_warped == 255] = 0
 
                 if self.oracle_mask:
                     if DEBUG:
