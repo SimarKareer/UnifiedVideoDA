@@ -652,7 +652,16 @@ class DACS(UDADecorator):
                         
                         if self.bottom_pl_fill:
                             # only set the bottom of the pseudo_weight_warped_i to the pseudo_weight
-                            bottom_mask = torch.ones_like(mask) & (torch.arange(mask.shape[0])[:, None].cuda() >= 800)
+                            # breakpoint()
+                            H, W = pseudo_weight_warped_i.shape
+                            bottom_mask = torch.zeros_like(mask)
+                            bottom_mask[800:, :] = 1
+                            bottom_mask[:, :100] = 1
+                            bottom_mask[:, W-100:] = 1
+                            if DEBUG:
+                                subplotimg(axs[2, 4], bottom_mask.repeat(3, 1, 1)*255, "corners mask")
+                            bottom_mask = bottom_mask & (pseudo_weight_warped_i == 0)
+                            # bottom_mask = (torch.ones_like(mask) & torch.arange(mask.shape[0])[:, None].cuda() >= 800) | (torch.arange(mask.shape[0])[None, :].cuda() <= 100 | torch.arange(mask.shape[0])[None, :].cuda() >= W-100) & (pseudo_weight_warped_i != 0) # fills in bottom and sides
                             pseudo_weight_warped_i[bottom_mask] = pseudo_weight[i][bottom_mask]
                             pltki[0][bottom_mask] = pseudo_label[i][bottom_mask]
 
