@@ -332,7 +332,7 @@ class CustomDataset(Dataset):
                 out_str += "          "
                 out_str += f", {str(self.pixelwise_correct[metric][i].item()):15s}, {str(self.pixelwise_total[metric][i].item()):15s}"
 
-                if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5" and metric != "M5Fixed":
+                if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5" and metric != "M5Fixed" and metric != "OR_Filter":
                     # breakpoint()
                     mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
 
@@ -630,8 +630,6 @@ class CustomDataset(Dataset):
 
             self.cml_intersect["OR_Filter"] += intersection
             self.cml_union["OR_Filter"] += union
-            pre_eval_results.append(iau_miou)
-
         
         if "mIoU" in metrics:
             iau_miou = intersect_and_union(
