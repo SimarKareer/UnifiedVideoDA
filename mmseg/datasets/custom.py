@@ -25,7 +25,7 @@ from mmseg.core.evaluation.metrics import flow_prop_iou, correctness_confusion
 
 from torch.nn.modules.dropout import _DropoutNd
 from timm.models.layers import DropPath
-from tools.aggregate_flows.flow.my_utils import backpropFlow
+from tools.aggregate_flows.flow.my_utils import backpropFlow, rare_class_or_filter
 
 import pdb
 @DATASETS.register_module()
@@ -156,16 +156,16 @@ class CustomDataset(Dataset):
         self.init_cml_metrics()
 
     def init_cml_metrics(self):
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]}
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter"]}
         self.mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.cml_correct_consis = {k: torch.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
 
-        self.pixelwise_correct = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.pixelwise_total = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]}
+        self.pixelwise_correct = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.pixelwise_total = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter"]}
 
-        self.confusion_matrix = {k: torch.zeros(len(self.CLASSES), len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.confusion_matrix = {k: torch.zeros(len(self.CLASSES), len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
     def __len__(self):
         """Total number of samples of data."""
         return len(self.img_infos)
@@ -411,7 +411,7 @@ class CustomDataset(Dataset):
         
         # print("HI: ", cml_sum)
         print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
-
+    
     def pre_eval_dataloader_consis(self, curr_preds, data, future_preds, metrics=["mIoU"], sub_metrics=[], return_pixelwise_acc=False, return_confusion_matrix=False,out_dir=None):
         assert(curr_preds) is not None
 
@@ -595,6 +595,43 @@ class CustomDataset(Dataset):
             intersection, union, _, _ = iau_miou
             self.cml_intersect["mIoU_gt_pred"] += intersection
             self.cml_union["mIoU_gt_pred"] += union
+        
+        if "OR_Filter" in metrics:
+            PL1 = curr_pred
+            PL2 = backpropFlow(flow, future_pred)
+
+            PL_OR_Filter = rare_class_or_filter(PL1, PL2)
+            iau_miou = intersect_and_union(
+                PL_OR_Filter.squeeze(-1),
+                curr_seg_map.squeeze(0),
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                reduce_zero_label=self.reduce_zero_label,
+                return_pixelwise_acc=return_pixelwise_acc,
+                return_confusion_matrix=return_confusion_matrix,
+            )
+
+            #NOW INSERT METRICS FOR PIXEL WISE AND CONFUSION
+            if return_pixelwise_acc or return_confusion_matrix:
+                other_metrics = iau_miou[-1]
+                iau_miou = iau_miou[:-1]
+                
+                if 'pixelwise accuracy' in other_metrics:
+                    pixel_correct, pixel_total = other_metrics['pixelwise accuracy']
+                    self.pixelwise_correct["OR_Filter"] += pixel_correct
+                    self.pixelwise_total["OR_Filter"] += pixel_total
+                
+                if 'confusion matrix' in other_metrics:
+                    confusion_matrix = other_metrics['confusion matrix']
+                    self.confusion_matrix["OR_Filter"] += confusion_matrix
+
+            intersection, union, _, _ = iau_miou
+
+            self.cml_intersect["OR_Filter"] += intersection
+            self.cml_union["OR_Filter"] += union
+            pre_eval_results.append(iau_miou)
+
         
         if "mIoU" in metrics:
             iau_miou = intersect_and_union(
