@@ -19,4 +19,4 @@ cd /coc/scratch/vvijaykumar6/mmseg
 
 set -x
 
-srun -u python -u tools/train.py ./configs/mic/viperHR2csHR_mic_hrda_eval.py --launcher="slurm" --work-dir="./work_dirs/flow_test_bed/viper_cs-seq_baseline/$1$T" --auto-resume True --nowandb True
+srun -u python -u tools/train.py ./configs/mic/viperHR2csHR_mic_hrda_eval.py --launcher="slurm" --work-dir="./work_dirs/flow_test_bed/viper_cs-seq_baseline/$1$T" --auto-resume True --nowandb True --eval True
