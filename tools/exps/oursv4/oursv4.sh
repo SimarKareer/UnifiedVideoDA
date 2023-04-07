@@ -18,6 +18,8 @@ PORT=$((40000 + $RANDOM % 1000))
 export MASTER_PORT=$PORT
 echo "MASTER_PORT: ${PORT}"
 
+cp ${0##*/} $FULL_JOB_NAME.sh
+
 cd /coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/
 conda activate micExp
 PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
@@ -33,4 +35,4 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     --exclude="clippy,xaea-12,omgwth" \
-    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1.0 --l-warp-begin=0 --l-mix-lambda=0.0 --oracle-mask True --warp-cutmix True --bottom-pl-fill True --optimizer adamw --lr-schedule poly_10_warm --lr=6e-5 --total-iters=40000 --work-dir="./work_dirs/oursv3/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME}
+    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1.0 --l-warp-begin=1500 --l-mix-lambda=0.0 --consis-filter True --no-masking True --warp-cutmix True --bottom-pl-fill True --optimizer adamw --lr-schedule poly_10_warm --lr=6e-5 --total-iters=40000 --work-dir="./work_dirs/oursv3/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME}
