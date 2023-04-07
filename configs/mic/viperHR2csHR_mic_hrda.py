@@ -67,7 +67,7 @@ data = dict(
         target=dict(crop_pseudo_margins=[30, 240, 30, 30]),
     ),
     # Use one separate thread/worker for data loading.
-    workers_per_gpu=2,
+    workers_per_gpu=3,
     # Batch size
     samples_per_gpu=2,
 )
