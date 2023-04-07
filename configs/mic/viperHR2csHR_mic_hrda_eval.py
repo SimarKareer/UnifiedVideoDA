@@ -18,9 +18,9 @@ _base_ = [
 ]
 # load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
 # load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-# load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth" # base 
+load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth" # base 
 # load_from="/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/trainDebug/cutmix-mask03-23-15-53-46/latest.pth" # cutmix + mask 
-load_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv7/bottomFill03-30-18-51-19/latest.pth" # cutmix + mask + car hood PL fill
+# load_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv7/bottomFill03-30-18-51-19/latest.pth" # cutmix + mask + car hood PL fill
 # resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
 # resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
@@ -89,9 +89,11 @@ uda = dict(
     # Use random patch masking with a patch size of 64x64
     # and a mask ratio of 0.7
     l_warp_lambda=1.0,
-    l_mix_lambda=1.0,
+    l_mix_lambda=0.0,
     consis_filter=False,
+    consis_filter_rare_class=False,
     pl_fill=False,
+    bottom_pl_fill=False,
     source_only2=False,
     oracle_mask=False,
     warp_cutmix=False,
@@ -100,6 +102,9 @@ uda = dict(
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
     debug_mode=False,
+    class_mask_warp=None,
+    class_mask_cutmix=None,
+    exclusive_warp_cutmix=False,
 )
 # Optimizer Hyperparameters
 optimizer_config = None
@@ -117,12 +122,12 @@ runner = dict(type='IterBasedRunner', max_iters=1)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
 evaluation = dict(interval=1, eval_settings={
-        "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed", "mIoU_gt_pred"],
+        "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed", "mIoU_gt_pred", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"],
         "sub_metrics": ["mask_count"],
         "pixelwise accuracy": True,
         "confusion matrix": True,
     },
-    out_dir='predictions/cutmix_mask_PL_fill_car_viz',  #change based on model checkpoint or set as None 'cutmix_mask_lwarp'
+    # out_dir='predictions/cutmix_mask_PL_fill_car_viz',  #change based on model checkpoint or set as None 'cutmix_mask_lwarp'
 )
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
