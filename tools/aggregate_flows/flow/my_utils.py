@@ -462,10 +462,11 @@ palette_to_id = [
     ([50,0,90], 31)
 ]
 
-def rare_class_or_filter(pl1, pl2):
+def rare_class_or_filter(pl1, pl2, rare_common_compare=False):
         """
         pl1: (B, H, W)
         pl2: (B, H, W)
+        rare_common_compare: boolean that determines whether to do priority of rarity between classes, or just abs if it belongs to "rare" or "common" group
         returns a pseudolabel which keeps consistent pixels, and masks out inconsistent pixels except when the pixel is rare.  In the case that both pl1 and pl2 are rare take the more rare pixel
         """
         # most to least rare
@@ -487,13 +488,21 @@ def rare_class_or_filter(pl1, pl2):
         # print("output1", output)
         output[consistent_pixels] = pl1[consistent_pixels]
         # print("output2", output)
+        
+        if rare_common_compare:
+            #only take prediction if one is rare and other is common
+            pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl2_rarity >= rarity_thresh)
+            output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
 
+            pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl1_rarity >= rarity_thresh)
+            output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
 
-        pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl1_rarity < pl2_rarity)
-        output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
+        else:
+            pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl1_rarity < pl2_rarity)
+            output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
 
-        pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl2_rarity < pl1_rarity)
-        output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
+            pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl2_rarity < pl1_rarity)
+            output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
         # breakpoint()
 
         return output
