@@ -93,6 +93,7 @@ def parse_args(args):
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
+    parser.add_argument('--max_confidence', type=bool, default=False)
 
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
@@ -281,6 +282,9 @@ def main(args):
 
     if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin
+    
+    if args.max_confidence:
+        cfg.uda.max_confidence = True
     
     if args.no_masking:
         cfg.uda.mask_mode = None

@@ -96,6 +96,7 @@ uda = dict(
     oracle_mask=False,
     warp_cutmix=False,
     stub_training=False,
+    max_confidence=False,
     l_warp_begin=1500,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
