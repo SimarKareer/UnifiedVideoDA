@@ -182,12 +182,9 @@ class UDADataset(object):
         """
         Generate output, make sure s1 and s2 have already been synchronize cropped!
         """
-        out = {k: v for k, v in s1.items()}
-        for k, v in s2.items():
-            out["target_" + k] = v
         out = {
-            **s1, 'target_img_metas': s2['img_metas'],
-            'target_img': s2['img'], "target_img_extra": s2
+            "img": s1["img"], "img_metas": s1["img_metas"], "img_extra": s1, 
+            'target_img': s2['img'], 'target_img_metas': s2['img_metas'], "target_img_extra": s2,
         }
 
         return out

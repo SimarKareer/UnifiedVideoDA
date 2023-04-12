@@ -105,7 +105,8 @@ class CustomDataset(Dataset):
                  classes=None,
                  palette=None,
                  gt_seg_map_loader_cfg=None,
-                 load_annotations=True
+                 load_annotations=True,
+                 no_crash_dataset=False
                 #  file_client_args=dict(backend='disk')
                  ):
         if isinstance(pipeline, dict) or isinstance(pipeline, mmcv.utils.config.ConfigDict):
@@ -132,6 +133,8 @@ class CustomDataset(Dataset):
         self.gt_seg_map_loader = LoadAnnotations(
         ) if gt_seg_map_loader_cfg is None else LoadAnnotations(
             **gt_seg_map_loader_cfg)
+
+        self.no_crash_dataset = no_crash_dataset
 
         # self.file_client_args = file_client_args
         # self.file_client = mmcv.FileClient.infer_client(self.file_client_args)

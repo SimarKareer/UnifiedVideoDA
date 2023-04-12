@@ -7,6 +7,33 @@ import matplotlib.pyplot as plt
 # from benchmark_viper import VIPER
 from tools.aggregate_flows.flow.util_flow import ReadKittiPngFile
 import torch
+from torchvision import transforms
+
+def flow_to_grayscale(flow_uv, clip_flow=None, convert_to_bgr=False):
+    """
+    Expects a two dimensional flow image of shape.
+    Args:
+        flow_uv (np.ndarray): Flow UV image of shape [H,W,2]
+        clip_flow (float, optional): Clip maximum of flow values. Defaults to None.
+        convert_to_bgr (bool, optional): Convert output image to BGR. Defaults to False.
+    Returns:
+        np.ndarray: Flow visualization image of shape [H,W,3]
+    """
+    assert flow_uv.ndim == 3, 'input flow must have three dimensions'
+    assert flow_uv.shape[2] == 2, 'input flow must have shape [H,W,2]'
+    if clip_flow is not None:
+        flow_uv = torch.clip(flow_uv, 0, clip_flow)
+    u = flow_uv[:,:,0]
+    v = flow_uv[:,:,1]
+    rad = torch.sqrt(torch.square(u) + torch.square(v))
+    rad_max = torch.max(rad)
+    epsilon = 1e-5
+    u = u / (rad_max + epsilon)
+    v = v / (rad_max + epsilon)
+
+    # print(u.shape, v.shape)
+    return torch.stack([u, v])
+    # print('hi')
 
 def multiBarChart(data, labels, title="title", xlabel="xlabel", ylabel="ylabel", ax=None, colors=None, figsize=(10, 5), save_path=None):
     """
@@ -497,3 +524,8 @@ def rare_class_or_filter(pl1, pl2):
         # breakpoint()
 
         return output
+
+invNorm = transforms.Compose([
+    transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
+    transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
+])

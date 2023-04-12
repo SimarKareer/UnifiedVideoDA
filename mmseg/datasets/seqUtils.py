@@ -6,6 +6,9 @@ import torch
 from mmcv.parallel import DataContainer
 from .builder import DATASETS
 import os
+import flow_vis
+from torchvision import transforms
+from tools.aggregate_flows.flow.my_utils import flow_to_grayscale
 
 @DATASETS.register_module()
 class SeqUtils():
@@ -117,7 +120,14 @@ class SeqUtils():
                 imt_imtk_flow = self.prepare_train_img_no_flow(self.img_infos, idx, im_tk_infos=self.fut_images)
             else:
                 # print("flow on")
-                imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
+                try:
+                    imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
+                except FileNotFoundError as e:
+                    if self.no_crash_dataset:
+                        print("Skipping image due to error: ", e)
+                        imt_imtk_flow = dict(failed=True)
+                    else:
+                        raise e
 
             # im_tk = self.prepare_train_img(self.past_images, idx)
             # for k, v in im_tk.items():
@@ -226,29 +236,18 @@ class SeqUtils():
                 gt_semantic_seg: [Tensor(B, C, H, W)]
         """
 
-        # img_info = infos[idx]
-        # ann_info = self.get_ann_info(infos, idx)
         results = dict(img_info=infos[idx], ann_info=self.get_ann_info(infos, idx))
-        # print("results: ", results)
-        # print("im_tk_infos: ", im_tk_infos)
-        # print("flow_infos: ", flow_infos)
         if im_tk_infos is not None: #Bc we don't want to overwrite the image loading pipeline, we'll separately load im, imtk, flow
-            # resultsImtk = results.copy()
             resultsImtk = dict(img_info = im_tk_infos[idx], ann_info=self.get_ann_info(im_tk_infos, idx))
         if flow_infos is not None:
-            # resultsFlow = results.copy()
-            # resultsFlow["flow_info"] = flow_infos
             resultsFlow = dict(flow_info = flow_infos[idx])
-        # print(resultsFlow["flow_info"])
+
         self.pre_pipeline(results)
         self.pre_pipeline(resultsImtk)
         self.pre_pipeline_flow(resultsFlow)
 
-        # print("BEFORE IM LOAD PIPELINE", results, resultsImtk)
-
         ims = self.pipeline["im_load_pipeline"](results)
 
-        # print("AFTER IM LOAD PIPELINE")
         if load_tk_gt:
             imtk = self.pipeline["im_load_pipeline"](resultsImtk)
             imtk_gt = DataContainer(torch.from_numpy(imtk["gt_semantic_seg"][None, None, :, :]))
@@ -256,13 +255,8 @@ class SeqUtils():
             imtk = self.pipeline["load_no_ann_pipeline"](resultsImtk)
             imtk_gt = None
         
-        # print("AFTER IMTK LOAD PIPELINE")
-        
         flows = self.pipeline["load_flow_pipeline"](resultsFlow)
-        # print("flows after load: ", flows["flow"], type(flows["flow"]))
-        # print("ims after load: ", ims["img"], type(ims["img"]))
         ImsAndFlows = self.merge(ims, imtk, flows) #TODO: concat the ims and flows
-        # print(ImsAndFlows.keys())
         ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
         im, imtk, flows = self.unmerge(ImsAndFlows) # separate out the ims and flows again
 
@@ -270,62 +264,37 @@ class SeqUtils():
             flows["img"][:, :, 0] = -flows["img"][:, :, 0]
         finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
         finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
-        # breakpoint()
+
         finalFlows = self.pipeline["flow_pipeline"](flows) #add the rest of the flow augs
 
         finalIms["flow"] = finalFlows["img"]
-        # breakpoint()
         finalIms["imtk"] = finalImtk["img"]
         finalIms["imtk_gt_semantic_seg"] = imtk_gt
 
-        # print("finalIms1", finalIms)
-        # print("final Ims before: ", finalIms)
         for k, v in finalIms.items():
-            # print(f"{k}: {type(v)}")
             if isinstance(v, DataContainer):
-                # print(f"{k} is a datacontainer")
                 finalIms[k] = v.data
-            # else:
-                # print(f"{k} is NOT a datacontainer")
 
         for k, v in finalIms.items():
             if isinstance(v, torch.Tensor):
-                # print(f"{k} is a tensor")
                 finalIms[k] = [v]
-            # else:
-                # print(f"{k} is NOT a tensor")
+
         for k, v in finalIms.items():
             if isinstance(v, np.ndarray):
-                # print(f"{k} is a tensor")
                 finalIms[k] = [torch.from_numpy(v)]
-            # else:
-                # print(f"{k} is NOT a tensor")
-        # print("final Ims after: ", finalIms)
 
-        # for k, v in ims.items():
-        #     print("viper seq: ", k)
-        #     finalIms[k] = v
-        # print("im's after load: ", ims)
-        # print("im's after load: ", type(ims))
-        # print("im's after load: ", type(ims["img_info"]))
         def get_metas(loaded_images):
             img_metas = {}
             for k, v in loaded_images.items():
                 if k not in ["img", "gt_semantic_seg", "img_info", "ann_info", "seg_prefix", "img_prefix", "seg_fields"]:
                     img_metas[k] = v
-            # print(img_metas["img_shape"])
-            # assert(img_metas["img_shape"] == (1080, 1920, 8))
 
             img_metas["img_shape"] = (1080, 1920, 3)
             img_metas["pad_shape"] = (1080, 1920, 3)
-            # del img_metas["scale_idx"]
-            # del img_metas["keep_ratio"]
             return img_metas
         finalIms["img_metas"] = [DataContainer(get_metas(ims), cpu_only=True)]
         finalIms["imtk_metas"] = [DataContainer(get_metas(imtk), cpu_only=True)]
 
-        # print("2gt sem seg no wrapping: ", finalIms["gt_semantic_seg"][0].shape)
-        # print("2gttk sem seg no wrapping: ", finalIms["imtk_gt_semantic_seg"][0].shape)
         if load_tk_gt:
             finalIms["imtk_gt_semantic_seg"][0] = finalIms["imtk_gt_semantic_seg"][0].squeeze(0).long() #TODO, I shouldn't have to do this manually
         else:
@@ -334,34 +303,38 @@ class SeqUtils():
         finalIms["gt_semantic_seg"][0] = finalIms["gt_semantic_seg"][0].unsqueeze(0).long() #TODO, I shouldn't have to do this manually
 
         # Get rid of list dim for all tensors
-        # print(finalIms)
-        if self.unpack_list:
+        if self.unpack_list: #NOTE: eventually we should just always unpack the list and account for the difference in the test function.
             for k, v in finalIms.items():
-                # print(k, len(k))
                 if isinstance(v, list) and isinstance(v[0], torch.Tensor):
                     finalIms[k] = v[0]
                 if k == "img_metas" or k == "imtk_metas":
-                    # print("img_metas", len(v))
                     finalIms[k] = v[0]
-        # finalIms["img_metas"] = [DataContainer([[{}]])]
-        
-        # print("finalIms2", finalIms)
 
-        # return self.pipeline(results)
-        # breakpoint()
-        # print("finalIms", finalIms.keys())
-        # assert len(finalIms.keys()) in [7, 8], "FinalIms seems to have been changed, make sure to fix the remapping"
-        # remapped_finalIms = { #This before img was past and imtk was future, now img is future and imtk is past.  Meaning imtk has the label.  THis is an issue
-        #     "img_metas": finalIms["imtk_metas"],
-        #     "imtk_metas": finalIms["img_metas"],
-        #     "img": finalIms["imtk"],
-        #     "imtk": finalIms["img"],
-        #     "gt_semantic_seg": finalIms["imtk_gt_semantic_seg"],
-        #     "imtk_gt_semantic_seg": finalIms["gt_semantic_seg"],
-        #     "flow": finalIms["flow"],
-        # }
-        # if "valid_pseudo_mask" in finalIms:
-        #     remapped_finalIms["valid_pseudo_mask"] = finalIms["valid_pseudo_mask"]
+        def simple_norm(x, mu, std):
+            return (x - mu) / std
+
+        def get_vis_flow(flow):
+            # two other options are flowvis.flow_to_color, flow_to_grayscale
+            is_list = isinstance(flow, list)
+            if is_list:
+                flow = flow[0]
+
+            visflow = flow.norm(dim=0, keepdim=True)
+            mu_of = visflow.float().mean(dim=[1, 2])
+            std_of = visflow.float().std(dim=[1, 2])
+            visflow = simple_norm(visflow.float(), mu_of, std_of)
+
+            return [visflow] if is_list else visflow
+
+        if self.data_type == "flow":
+            visflow = get_vis_flow(finalIms["flow"])
+            finalIms["img"] = visflow
+        elif self.data_type == "rgb+flow":
+            visflow = get_vis_flow(finalIms["flow"])
+            finalIms["flowVis"] = visflow
+            # finalIms["img"] = torch.cat([finalIms["img"], visflow], dim=0)
+
+
         return finalIms
 
     def prepare_test_img(self, infos, idx):

@@ -39,7 +39,7 @@ from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.datasets.cityscapes import CityscapesDataset
-from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter
+from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter, invNorm
 import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
@@ -104,6 +104,8 @@ class DACS(UDADecorator):
         self.mask_mode = cfg['mask_mode']
         self.enable_masking = self.mask_mode is not None
         self.print_grad_magnitude = cfg['print_grad_magnitude']
+
+        self.multi_modal = cfg["multi_modal"]
         assert self.mix == 'class'
 
         self.debug_fdist_mask = None
@@ -477,24 +479,35 @@ class DACS(UDADecorator):
 
             log_vars[f"Mask Percentage {class_name}"] = self.cml_debug_metrics["warp_cml_mask_hit"][i] / self.cml_debug_metrics["warp_cml_mask_total"][i]
 
+    def forward_train_multi_modal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
+        log_vars = {}
+        batch_size = img.shape[0]
+        dev = img.device
+        DEBUG = self.debug_mode
+        self.local_iter = 0
+
+        if DEBUG:
+            fig, axs = plt.subplots(5, 5, figsize=(15, 15))
+            subplotimg(axs[0, 0], invNorm(img[0][:3]), "Source IM 0")
+            subplotimg(axs[0, 1], invNorm(img[1][:3]), "Source IM 1")
+            subplotimg(axs[0, 2], invNorm(target_img[0][:3]), "Target IM 1")
+            subplotimg(axs[0, 3], invNorm(target_img[1][:3]), "Target IM 2")
+
+            subplotimg(axs[1, 0], img_extra["flowVis"][0], "Source flow 0")
+            subplotimg(axs[1, 1], img_extra["flowVis"][1], "Source flow 1")
+            subplotimg(axs[1, 2], target_img_extra["flowVis"][0], "Target flow 1")
+            subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 2")
+            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/visFlow2/debug{self.local_iter}.png")
+
+        
+
+
+        self.local_iter += 1
+        return log_vars
 
 
 
-    def forward_train(self,
-                      img,
-                      img_metas,
-                      gt_semantic_seg,
-                      target_img,
-                      target_img_metas,
-                      rare_class=None,
-                      valid_pseudo_mask=None,
-                      flow=None,
-                      target_flow=None,
-                      imtk=None,
-                      imtk_gt_semantic_seg=None,
-                      imtk_metas=None,
-                      target_img_extra=None
-                      ):
+    def forward_train(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
         """Forward function for training.
 
         Args:
@@ -510,6 +523,10 @@ class DACS(UDADecorator):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        if self.multi_modal:
+            return self.forward_train_multi_modal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
+        gt_semantic_seg, valid_pseudo_mask, = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
+        
         log_vars = {}
         if self.stub_training:
             return log_vars
@@ -519,10 +536,6 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
         if DEBUG:
-            invNorm = transforms.Compose([
-                transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
-                transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
-            ])
             rows, cols = 6, 7
             fig, axs = plt.subplots(
                 rows,
@@ -574,9 +587,14 @@ class DACS(UDADecorator):
         clean_loss, clean_log_vars = self._parse_losses(clean_losses)
         log_vars.update(clean_log_vars)
         clean_loss.backward(retain_graph=self.enable_fdist)
+
         if self.source_only2:
             del src_feat, clean_loss
             del seg_debug
+
+            if DEBUG:
+                fig.savefig(f"work_dirs/LWarpPLAnalysis/ims{self.local_iter}.png", dpi=200)
+                large_fig.savefig(f"work_dirs/LWarpPLAnalysis/graphs{self.local_iter}.png", dpi=200)
             return log_vars
         
         if self.print_grad_magnitude:
@@ -795,6 +813,18 @@ class DACS(UDADecorator):
                 mix_loss, mix_log_vars = self._parse_losses(mix_losses)
                 log_vars.update(mix_log_vars)
                 (mix_loss * self.l_mix_lambda).backward()
+            
+            # Masked Training
+            if self.enable_masking and self.mask_mode.startswith('separate'):
+                masked_loss = self.mic(self.get_model(), img, img_metas,
+                                    gt_semantic_seg, target_img,
+                                    target_img_metas, valid_pseudo_mask,
+                                    pseudo_label, pseudo_weight)
+                seg_debug.update(self.mic.debug_output)
+                masked_loss = add_prefix(masked_loss, 'masked')
+                masked_loss, masked_log_vars = self._parse_losses(masked_loss)
+                log_vars.update(masked_log_vars)
+                masked_loss.backward()
 
             if DEBUG:
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
@@ -877,124 +907,6 @@ class DACS(UDADecorator):
                 # large_fig.close()
                 # breakpoint()
 
-        # Masked Training
-        if self.enable_masking and self.mask_mode.startswith('separate'):
-            masked_loss = self.mic(self.get_model(), img, img_metas,
-                                   gt_semantic_seg, target_img,
-                                   target_img_metas, valid_pseudo_mask,
-                                   pseudo_label, pseudo_weight)
-            seg_debug.update(self.mic.debug_output)
-            masked_loss = add_prefix(masked_loss, 'masked')
-            masked_loss, masked_log_vars = self._parse_losses(masked_loss)
-            log_vars.update(masked_log_vars)
-            masked_loss.backward()
-
-        if self.local_iter % self.debug_img_interval == 0 and \
-                not self.source_only:
-            out_dir = os.path.join(self.train_cfg['work_dir'], 'debug')
-            os.makedirs(out_dir, exist_ok=True)
-            vis_img = torch.clamp(denorm(img, means, stds), 0, 1)
-            vis_trg_img = torch.clamp(denorm(target_img, means, stds), 0, 1)
-            if self.l_mix_lambda > 0:
-                vis_mixed_img = torch.clamp(denorm(mixed_img, means, stds), 0, 1)
-            for j in range(batch_size):
-                rows, cols = 2, 5
-                fig, axs = plt.subplots(
-                    rows,
-                    cols,
-                    figsize=(3 * cols, 3 * rows),
-                    gridspec_kw={
-                        'hspace': 0.1,
-                        'wspace': 0,
-                        'top': 0.95,
-                        'bottom': 0,
-                        'right': 1,
-                        'left': 0
-                    },
-                )
-                subplotimg(axs[0][0], vis_img[j], 'Source Image')
-                subplotimg(axs[1][0], vis_trg_img[j], 'Target Image')
-                subplotimg(
-                    axs[0][1],
-                    gt_semantic_seg[j],
-                    'Source Seg GT',
-                    cmap='cityscapes')
-                subplotimg(
-                    axs[1][1],
-                    pseudo_label[j],
-                    'Target Seg (Pseudo) GT',
-                    cmap='cityscapes')
-                if self.l_mix_lambda > 0:
-                    subplotimg(axs[0][2], vis_mixed_img[j], 'Mixed Image')
-                    subplotimg(
-                        axs[1][2], mix_masks[j][0], 'Domain Mask', cmap='gray')
-                # subplotimg(axs[0][3], pred_u_s[j], "Seg Pred",
-                #            cmap="cityscapes")
-                    if mixed_lbl is not None:
-                        subplotimg(
-                            axs[1][3], mixed_lbl[j], 'Seg Targ', cmap='cityscapes')
-                    subplotimg(
-                        axs[0][3],
-                        mixed_seg_weight[j],
-                        'Pseudo W.',
-                        vmin=0,
-                        vmax=1)
-                if self.debug_fdist_mask is not None:
-                    subplotimg(
-                        axs[0][4],
-                        self.debug_fdist_mask[j][0],
-                        'FDist Mask',
-                        cmap='gray')
-                if self.debug_gt_rescale is not None:
-                    subplotimg(
-                        axs[1][4],
-                        self.debug_gt_rescale[j],
-                        'Scaled GT',
-                        cmap='cityscapes')
-                for ax in axs.flat:
-                    ax.axis('off')
-                plt.savefig(
-                    os.path.join(out_dir,
-                                 f'{(self.local_iter + 1):06d}_{j}.png'))
-                plt.close()
-
-        if self.local_iter % self.debug_img_interval == 0:
-            out_dir = os.path.join(self.train_cfg['work_dir'], 'debug')
-            os.makedirs(out_dir, exist_ok=True)
-            if seg_debug['Source'] is not None and seg_debug:
-                if 'Target' in seg_debug and self.l_mix_lambda > 0:
-                    seg_debug['Target']['Pseudo W.'] = mixed_seg_weight.cpu(
-                    ).numpy()
-                for j in range(batch_size):
-                    cols = len(seg_debug)
-                    rows = max(len(seg_debug[k]) for k in seg_debug.keys())
-                    fig, axs = plt.subplots(
-                        rows,
-                        cols,
-                        figsize=(5 * cols, 5 * rows),
-                        gridspec_kw={
-                            'hspace': 0.1,
-                            'wspace': 0,
-                            'top': 0.95,
-                            'bottom': 0,
-                            'right': 1,
-                            'left': 0
-                        },
-                        squeeze=False,
-                    )
-                    for k1, (n1, outs) in enumerate(seg_debug.items()):
-                        for k2, (n2, out) in enumerate(outs.items()):
-                            subplotimg(
-                                axs[k2][k1],
-                                **prepare_debug_out(f'{n1} {n2}', out[j],
-                                                    means, stds))
-                    for ax in axs.flat:
-                        ax.axis('off')
-                    plt.savefig(
-                        os.path.join(out_dir,
-                                     f'{(self.local_iter + 1):06d}_{j}_s.png'))
-                    plt.close()
-                del seg_debug
         self.local_iter += 1
 
         return log_vars

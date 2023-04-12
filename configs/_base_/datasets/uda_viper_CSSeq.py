@@ -1,10 +1,12 @@
 # dataset settings
+FRAME_OFFSET = 1
+DATA_TYPE = "rgb" # --multi-modal will set this to rgb+depth
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-FRAME_OFFSET = 1
 cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
 cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
+viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
 
 # cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/train"
 # cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/val"
@@ -27,7 +29,7 @@ gta_train_pipeline = {
         dict(type='LoadImageFromFile'),
     ],
     "load_flow_pipeline": [
-        dict(type='LoadFlowFromFileStub'),
+        dict(type='LoadFlowFromFile'),
     ],
     "shared_pipeline": [
         dict(type='Resize', img_scale=(2560, 1440)),
@@ -123,7 +125,8 @@ data = dict(
             split='splits/train.txt',
             pipeline=gta_train_pipeline,
             frame_offset=1,
-            flow_dir="/coc/testnvme/datasets/VideoDA/VIPER_Flowv3/train/flow"
+            flow_dir=viper_train_flow_dir,
+            data_type=DATA_TYPE
         ),
         target=dict(
             type='CityscapesSeqDataset',
@@ -134,6 +137,7 @@ data = dict(
             pipeline=cityscapes_train_pipeline,
             frame_offset=FRAME_OFFSET,
             flow_dir=cs_train_flow_dir,
+            data_type=DATA_TYPE
         )
     ),
     val=dict(
@@ -144,7 +148,8 @@ data = dict(
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
-        flow_dir=cs_val_flow_dir
+        flow_dir=cs_val_flow_dir,
+        data_type=DATA_TYPE
     ),
     test=dict(
         type='CityscapesSeqDataset',
@@ -154,6 +159,7 @@ data = dict(
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
-        flow_dir=cs_val_flow_dir
+        flow_dir=cs_val_flow_dir,
+        data_type=DATA_TYPE
     )
 )
