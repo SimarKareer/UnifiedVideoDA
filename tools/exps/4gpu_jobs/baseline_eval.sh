@@ -11,12 +11,13 @@ CPUS_PER_TASK=${CPUS_PER_TASK:-15}
 SRUN_ARGS=""
 CURR_DIR=$PWD
 DATE_STAMP=$(date +"%m-%d-%Y-%H-%M-%S")
-LR=6e-5
+LR=1.2e-4
 LR_SCHED="poly_10_warm"
-ITERS=40000
+ITERS=1
 OPTIM="adamw"
 FULL_JOB_NAME=${JOB_NAME}_${DATE_STAMP}_iters_${ITERS}_optim_${OPTIM}_lr_sched_${LR_SCHED}_lr${LR}
 echo $FULL_JOB_NAME
+LOAD_FROM="/coc/scratch/vvijaykumar6/mmseg/work_dirs/4gpu_baseline/baseline_4gpu_15k_6e-5_04-07-2023-11-52-12_iters_15000_optim_adamw_lr_sched_poly_10_warm_lr6e-5/latest.pth"
 
 PORT=$((40000 + $RANDOM % 1000))
 export MASTER_PORT=$PORT
@@ -39,4 +40,4 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     --exclude="clippy,xaea-12,omgwth" \
-    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=-1 --l-mix-lambda=1 --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/1gpu_baseline/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME}
+    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=-1 --l-mix-lambda=1 --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/4gpu_baseline/${FULL_JOB_NAME}" --load-from=$LOAD_FROM --nowandb True --eval True

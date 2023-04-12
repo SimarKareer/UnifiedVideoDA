@@ -39,4 +39,4 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     --exclude="clippy,xaea-12,omgwth" \
-    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=-1 --l-mix-lambda=1 --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/1gpu_baseline/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME}
+    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1 --l-warp-begin=1500 --l-mix-lambda=0 --warp-cutmix True --bottom-pl-fill True --consis-filter True --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/backward_flow/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME}
