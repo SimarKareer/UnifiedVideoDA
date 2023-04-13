@@ -90,6 +90,7 @@ uda = dict(
     l_mix_lambda=0.0,
     consis_filter=False,
     consis_filter_rare_class=False,
+    consis_filter_rare_common_class_compare=False,
     pl_fill=False,
     bottom_pl_fill=False,
     source_only2=False,

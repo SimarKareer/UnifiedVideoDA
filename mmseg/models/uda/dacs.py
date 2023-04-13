@@ -84,6 +84,7 @@ class DACS(UDADecorator):
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
+        self.consis_filter_rare_common_class_compare = cfg["consis_filter_rare_common_class_compare"]
         self.max_confidence = cfg['max_confidence']
 
         self.pl_fill = cfg['pl_fill']
@@ -734,6 +735,11 @@ class DACS(UDADecorator):
                 if self.consis_filter_rare_class:
                     pseudo_label_warped = rare_class_or_filter(pseudo_label, pseudo_label_warped)
                     pseudo_weight_warped[pseudo_label_warped == 255] = 0
+                
+                if self.consis_filter_rare_common_class_compare:
+                    pseudo_label_warped = rare_class_or_filter(pseudo_label, pseudo_label_warped, rare_common_compare=True)
+                    pseudo_weight_warped[pseudo_label_warped == 255] = 0
+                
 
                 if self.oracle_mask:
                     if DEBUG:
