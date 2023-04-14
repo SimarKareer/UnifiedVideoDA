@@ -313,6 +313,9 @@ class SeqUtils():
         def simple_norm(x, mu, std):
             return (x - mu) / std
 
+        def minmax_norm(x):
+            return (x - x.min()) / (x.max() - x.min())
+
         def get_vis_flow(flow):
             # two other options are flowvis.flow_to_color, flow_to_grayscale
             is_list = isinstance(flow, list)
@@ -320,9 +323,13 @@ class SeqUtils():
                 flow = flow[0]
 
             visflow = flow.norm(dim=0, keepdim=True)
+            if visflow.max() == 0 and visflow.min() == 0:
+                raise FileNotFoundError
             mu_of = visflow.float().mean(dim=[1, 2])
             std_of = visflow.float().std(dim=[1, 2])
-            visflow = simple_norm(visflow.float(), mu_of, std_of)
+
+            # visflow = simple_norm(visflow.float(), mu_of, std_of)
+            visflow = minmax_norm(visflow.float())
 
             return [visflow] if is_list else visflow
 

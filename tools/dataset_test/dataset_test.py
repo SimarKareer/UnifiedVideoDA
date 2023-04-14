@@ -14,117 +14,13 @@ from welford import Welford
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 import matplotlib.pyplot as plt
 from torchvision import transforms
-
-
-viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
-cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
-
-FRAME_OFFSET = 1
-if FRAME_OFFSET == 1:
-    cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
-else:
-    cs_train_flow_dir = f'/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/train'
-    cs_val_flow_dir = f'/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/val'
-crop_size = (1024, 1024)
-img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-
-def get_viper():
-    viper_train_pipeline = {
-        "im_load_pipeline": [
-            dict(type='LoadImageFromFile'),
-            dict(type='LoadAnnotations'),
-        ],
-        "load_no_ann_pipeline": [
-            dict(type='LoadImageFromFile'),
-        ],
-        "load_flow_pipeline": [
-            dict(type='LoadFlowFromFile'),
-        ],
-        "shared_pipeline": [
-            dict(type='Resize', img_scale=(2560, 1440)),
-            dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
-            dict(type='RandomFlip', prob=0.5),
-        ],
-        "im_pipeline": [
-            # dict(type='PhotoMetricDistortion'),
-            dict(type='Normalize', **img_norm_cfg),
-            dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
-            # dict(type='DefaultFormatBundle'), #I'm not sure why I had to comment it for im, but not for flow.
-            dict(type='ImageToTensor', keys=['img']),
-            dict(type='Collect', keys=['img', 'gt_semantic_seg']),
-        ],
-        "flow_pipeline": [
-            dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
-            dict(type='DefaultFormatBundle'), #I don't know what this is
-            dict(type='Collect', keys=['img', 'gt_semantic_seg']),
-        ]
-    }
-
-    viper = ViperSeqDataset(
-        data_root=viper_data_root,
-        img_dir='train/img',
-        ann_dir='train/cls',
-        split='splits/train.txt',
-        pipeline=viper_train_pipeline,
-        frame_offset=1,
-        flow_dir=viper_train_flow_dir,
-        no_crash_dataset=True
-    )
-
-    return viper
-
-
-def get_csseq():
-    cityscapes_train_pipeline = {
-        "im_load_pipeline": [
-            dict(type='LoadImageFromFile'),
-            dict(type='LoadAnnotations'),
-        ],
-        "load_no_ann_pipeline": [
-            dict(type='LoadImageFromFile'),
-        ],
-        "load_flow_pipeline": [
-            dict(type='LoadFlowFromFile'),
-        ],
-        "shared_pipeline": [
-            dict(type='Resize', img_scale=(2048, 1024)),
-            dict(type='RandomCrop', crop_size=crop_size),
-            dict(type='RandomFlip', prob=0.5),
-        ],
-        "im_pipeline": [
-            # dict(type='PhotoMetricDistortion'),
-            dict(type='Normalize', **img_norm_cfg),
-            dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
-            # dict(type='DefaultFormatBundle'), 
-            dict(type='ImageToTensor', keys=['img']),
-            dict(type='Collect', keys=['img', 'gt_semantic_seg']),
-        ],
-        "flow_pipeline": [
-            dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
-            dict(type='DefaultFormatBundle'),
-            dict(type='Collect', keys=['img', 'gt_semantic_seg']),
-        ]
-    }
-
-
-    csseq = CityscapesSeqDataset(
-        data_root=cs_data_root,
-        img_dir='leftImg8bit_sequence/train',
-        ann_dir='gtFine/train',
-        split='splits/train.txt',
-        pipeline=cityscapes_train_pipeline,
-        frame_offset=FRAME_OFFSET,
-        flow_dir=cs_train_flow_dir,
-    )
-
-    return csseq
+from get_dataset import get_viper_train, get_viper_val, get_csseq_train, get_csseq_val
 
 
 
 def data_loader_test():
     # data_loader = DataLoader(viper)
-    dataset = get_viper()
+    dataset = get_viper_train()
     dataset.data_type = "rgb+flow"
     data_loader = DataLoader(
         dataset,
@@ -144,15 +40,14 @@ def data_loader_test():
     ])
 
     for i, data in enumerate(tqdm(data_loader)):
-        breakpoint()
         # img, imtk, flow, gt_t, gt_tk = data["img"][0].numpy(), data["imtk"][0], data["flow"][0], data["gt_semantic_seg"][0], data["imtk_gt_semantic_seg"][0]
+        if "failed" not in data:
+            subplotimg(axs[0, 0], invNorm(data["img"][0]), "Source IM 0")
 
-        subplotimg(axs[0, 0], invNorm(data["img"][0]), "Source IM 0")
+            subplotimg(axs[1, 0], data["flowVis"][0], "Source flow 0")
+            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/visFlow2/debugMinMax{i}.png")
 
-        subplotimg(axs[1, 0], data["flowVis"][0], "Source flow 0")
-        fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/visFlow2/debug{i}.png")
-
-        if i == 2:
+        if i == 5:
             break
 
 def flow_statistics_gt():
@@ -196,8 +91,8 @@ def flow_statistics_gt():
         fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/flowHistograms/hist.png")
     
     
-    viper = get_viper()
-    csseq = get_csseq()
+    viper = get_viper_train()
+    csseq = get_csseq_train()
     viper.data_type = "rgb+flow"
     csseq.data_type = "rgb+flow"
 
@@ -210,8 +105,8 @@ def flow_statistics_gt():
 
     
 def main():
-    # data_loader_test()
+    data_loader_test()
 
-    flow_statistics_gt()
+    # flow_statistics_gt()
 
 main()
