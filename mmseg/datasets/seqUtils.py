@@ -125,7 +125,7 @@ class SeqUtils():
                 except FileNotFoundError as e:
                     if self.no_crash_dataset:
                         print("Skipping image due to error: ", e)
-                        imt_imtk_flow = dict(failed=True)
+                        imt_imtk_flow = self.prepare_train_img(self.img_infos, 0, im_tk_infos=self.fut_images, flow_infos=self.flows)
                     else:
                         raise e
 
