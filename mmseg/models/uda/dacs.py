@@ -84,6 +84,8 @@ class DACS(UDADecorator):
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
+        self.consis_filter_rare_common_class_compare = cfg["consis_filter_rare_common_class_compare"]
+        self.max_confidence = cfg['max_confidence']
 
         self.pl_fill = cfg['pl_fill']
         self.bottom_pl_fill = cfg['bottom_pl_fill']
@@ -349,7 +351,7 @@ class DACS(UDADecorator):
         cv2.imwrite(path, grid)
 
 
-    def get_pl(self, target_img, target_img_metas, seg_debug, seg_debug_key, valid_pseudo_mask):
+    def get_pl(self, target_img, target_img_metas, seg_debug, seg_debug_key, valid_pseudo_mask, return_logits=False):
         ema_logits = self.get_ema_model().generate_pseudo_label(
                 target_img, target_img_metas)
         
@@ -358,12 +360,15 @@ class DACS(UDADecorator):
 
         pseudo_label, pseudo_weight = self.get_pseudo_label_and_weight(
             ema_logits)
-        del ema_logits
 
         pseudo_weight = self.filter_valid_pseudo_region(
             pseudo_weight, valid_pseudo_mask)
         
-        return pseudo_label, pseudo_weight
+        if return_logits:
+            return pseudo_label, pseudo_weight, ema_logits
+        else:
+            del ema_logits
+            return pseudo_label, pseudo_weight
     
     def fast_iou(self, pred, label, custom_mask=None, return_raw=False):
         pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
@@ -632,9 +637,16 @@ class DACS(UDADecorator):
                     m.training = False
                 if isinstance(m, DropPath):
                     m.training = False
+        
+
+            # get logits 
+            if self.max_confidence:
+                pseudo_label, pseudo_weight, logits_curr = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, return_logits=True)
+                pseudo_label_fut, pseudo_weight_fut, logits_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, return_logits=True)
+            else:
+                pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+                pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             
-            pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
-            pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
@@ -647,13 +659,21 @@ class DACS(UDADecorator):
                     flowi = target_img_extra["flow"][i].permute(1, 2, 0)
                     pli = pseudo_label_fut[[i]].permute(1, 2, 0)
 
-                    # So technically this was unnecessary bc the pseudo_weight is always just 1 number
-                    pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
+                    if self.max_confidence:
+                        pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0), logits_fut[[i]][0].permute(1,2,0)), dim=2)
+                    else:
+                        pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
                     warped_stack, mask = backpropFlow(flowi, pli_and_weight, return_mask=True, return_mask_count=False) #TODO, will need to stack pli with weights if we want warped weights
                     if DEBUG and i == 0:
                         masks.append(mask.cpu().numpy())
                         subplotimg(axs[3, 0], mask.repeat(3, 1, 1)*255, "Warping Mask")
+
                     pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
+
+                    if self.max_confidence:
+                        logits_warped_i = warped_stack[:, :, 2:]
+                        logits_warped_i = logits_warped_i.permute((2, 0, 1)).float()
+                
                     pseudo_weight_warped_i = pseudo_weight_warped_i.float()
                     pseudo_weight_warped_i[~mask] = 0
                     pltki = pltki.permute((2, 0, 1)).long()
@@ -695,7 +715,33 @@ class DACS(UDADecorator):
                         pltki[0][pltki[0] != pseudo_label[i]] = 255
                         if i == 0 and DEBUG:
                             subplotimg(axs[3][5], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
+                    
+                    # Max Confidence
+                    if self.max_confidence:
+                        #basically consis + max confidence of inconsis pixels
 
+                        logits_curr_i = logits_curr[[i]][0]                        
+                        pseudo_label_i = pseudo_label[i]
+
+                        # get mask of inconsis pixels
+                        mask_inconsis = (pltki[0] != pseudo_label_i) &  mask
+
+                        # logits for predicted values
+                        max_logit_val_fut , max_logit_idx_fut = torch.max(logits_warped_i, dim=0)
+                        max_logit_val_curr ,max_logit_idx_curr = torch.max(logits_curr_i, dim=0)
+                        max_confidence = torch.where(max_logit_val_fut > max_logit_val_curr, pltki, pseudo_label_i).long()
+
+                        #consistency visual during comparison
+                        pltki[0][pltki[0] != pseudo_label[i]] = 255
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[3][5], pltki[0], 'Consistency Map',cmap="cityscapes")
+
+                        # insert max confident predictions for inconsis pixels
+                        pltki[0][mask_inconsis] = max_confidence[0][mask_inconsis]
+
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[6][0], pltki[0], 'Max Confidence', cmap="cityscapes")
+                
                     pseudo_weight_warped.append(pseudo_weight_warped_i)
                     pseudo_label_warped.append(pltki[0])
                 
@@ -707,6 +753,11 @@ class DACS(UDADecorator):
                 if self.consis_filter_rare_class:
                     pseudo_label_warped = rare_class_or_filter(pseudo_label, pseudo_label_warped)
                     pseudo_weight_warped[pseudo_label_warped == 255] = 0
+                
+                if self.consis_filter_rare_common_class_compare:
+                    pseudo_label_warped = rare_class_or_filter(pseudo_label, pseudo_label_warped, rare_common_compare=True)
+                    pseudo_weight_warped[pseudo_label_warped == 255] = 0
+                
 
                 if self.oracle_mask:
                     if DEBUG:

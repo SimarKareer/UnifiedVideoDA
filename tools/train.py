@@ -86,6 +86,7 @@ def parse_args(args):
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
     parser.add_argument('--consis-filter-rare-class', type=bool, default=False)
+    parser.add_argument('--consis-filter-rare-common-class-compare', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--bottom-pl-fill', type=bool, default=False)
     parser.add_argument('--oracle-mask', type=bool, default=False)
@@ -93,6 +94,7 @@ def parse_args(args):
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
+    parser.add_argument('--max_confidence', type=bool, default=False)
 
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
@@ -262,6 +264,9 @@ def main(args):
     
     if args.consis_filter_rare_class:
         cfg.uda.consis_filter_rare_class = True
+
+    if args.consis_filter_rare_common_class_compare:
+        cfg.uda.consis_filter_rare_common_class_compare = True
     
     if args.pl_fill:
         cfg.uda.pl_fill = True
@@ -283,6 +288,9 @@ def main(args):
 
     if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin
+    
+    if args.max_confidence:
+        cfg.uda.max_confidence = True
     
     if args.no_masking:
         cfg.uda.mask_mode = None
