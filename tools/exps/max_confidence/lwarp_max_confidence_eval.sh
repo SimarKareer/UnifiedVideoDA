@@ -13,10 +13,10 @@ CURR_DIR=$PWD
 DATE_STAMP=$(date +"%m-%d-%Y-%H-%M-%S")
 LR=6e-5
 LR_SCHED="poly_10_warm"
-ITERS=40000
+ITERS=1
 OPTIM="adamw"
 FULL_JOB_NAME=${JOB_NAME}_${DATE_STAMP}_iters_${ITERS}_optim_${OPTIM}_lr_sched_${LR_SCHED}_lr${LR}
-LOAD_FROM=""
+LOAD_FROM="/coc/scratch/vvijaykumar6/mmseg/work_dirs/max_confidence/max_confidence_resume_04-10-2023-18-47-29_iters_15000_optim_adamw_lr_sched_poly_10_warm_lr6e-5/latest.pth"
 echo $FULL_JOB_NAME
 
 PORT=$((40000 + $RANDOM % 1000))
@@ -40,4 +40,4 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     --exclude="clippy,xaea-12,omgwth" \
-    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1 --l-warp-begin=0 --l-mix-lambda=0 --warp-cutmix True --bottom-pl-fill True --max_confidence True --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/max_confidence/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME} --load-from $LOAD_FROM
+    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1 --l-warp-begin=0 --l-mix-lambda=0 --warp-cutmix True --bottom-pl-fill True --max_confidence True --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/max_confidence/${FULL_JOB_NAME}" --nowandb True --load-from $LOAD_FROM
