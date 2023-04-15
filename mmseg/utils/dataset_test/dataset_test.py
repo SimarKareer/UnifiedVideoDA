@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader
 from functools import partial
 from mmcv.parallel import collate
 from mmseg.core.evaluation.metrics import flow_prop_iou, intersect_and_union
-from tools.aggregate_flows.flow.my_utils import palette_to_id, backpropFlow, imageMap, imshow, labelMapToIm, visFlow
 import torch
 import numpy as np
 from tqdm import tqdm
