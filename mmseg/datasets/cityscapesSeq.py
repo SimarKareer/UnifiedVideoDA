@@ -51,6 +51,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
         self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
 
         self.data_type = data_type
+        self.aug_view = aug_view
 
         # self.fut_images, self.img_infos, self.flows = self.cofilter_img_infos(self.fut_images, self.img_infos, self.flows, self.img_dir, flow_dir)
 

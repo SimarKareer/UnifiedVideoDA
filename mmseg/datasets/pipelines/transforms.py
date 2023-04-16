@@ -7,6 +7,7 @@ from mmcv.utils import deprecated_api_warning, is_tuple_of
 from numpy import random
 
 from ..builder import PIPELINES
+from RandAugment import RandAugment
 
 
 @PIPELINES.register_module()
@@ -1310,4 +1311,46 @@ class RandomMosaic(object):
         repr_str += f'center_ratio_range={self.center_ratio_range}, '
         repr_str += f'pad_val={self.pad_val}, '
         repr_str += f'seg_pad_val={self.pad_val})'
+        return repr_str
+
+@PIPELINES.register_module()
+class Randaug(object):
+    """Applies Randaug to a given image
+
+    Args:
+        scale_factor (float): The scale factor of the final output.
+    """
+
+    def __init__(self, valid_augmentations=["AutoContrast", "Equalize", "Brightness", "Sharpness"], severity=2.0, num_augs=1):
+        self.valid_augmentations = valid_augmentations
+        self.severity = severity
+        self.num_augs = num_augs
+
+        self.randaug_obj = RandAugment(self.num_augs, self.severity)
+
+        self.randaug_obj.augment_list = [
+            aug for aug in RA_obj.augment_list if aug[0].__name__ in self.valid_augmentations
+        ]
+
+    def __call__(self, results):
+        """Call function to augment image using Randaug augmentations.
+
+        Args:
+            results (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Result dict with randaug applied.
+        """
+        img = results["img"]
+
+        augmented_image = self.randaug_obj(img)
+
+        results["img"] = augmented_image
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(valid_augmentaitons={self.valid_augmentaitons}, '
+        repr_str += f'severity={self.severity}, '
+        repr_str += f'num_augs={self.num_augs}'
         return repr_str

@@ -9,6 +9,7 @@ import os
 import flow_vis
 from torchvision import transforms
 from tools.aggregate_flows.flow.my_utils import flow_to_grayscale
+import copy
 
 @DATASETS.register_module()
 class SeqUtils():
@@ -121,7 +122,7 @@ class SeqUtils():
             else:
                 # print("flow on")
                 try:
-                    imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
+                    imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows, aug_view=self.aug_view)
                 except FileNotFoundError as e:
                     if self.no_crash_dataset:
                         print("Skipping image due to error: ", e)
@@ -139,7 +140,7 @@ class SeqUtils():
         
         return imt_imtk_flow
     
-    def merge(self, ims, imtk, flows=None):
+    def merge(self, ims, imtk, flows=None, ims_aug_1=None, ims_aug_2=None, aug_view=False):
         # print("merge input: ", ims["img"].data, imtk["img"].data, flows["flow"].data)
         # print("merge input: ", type(ims["img"]), type(imtk["img"]), type(flows["flow"]))
         # print("merge input: ", ims["img"].shape, imtk["img"].shape, flows["flow"].shape)
@@ -148,13 +149,18 @@ class SeqUtils():
                 (ims["img"], imtk["img"]), axis=2
             )
         else:
-            ims["img"] = np.concatenate(
-                (ims["img"], imtk["img"], flows["flow"]), axis=2
-            )
+            if aug_view:
+                ims["img"] = np.concatenate(
+                    (ims["img"], imtk["img"], flows["flow"], ims_aug_1["img"], ims_aug_2["img"]), axis=2
+                )
+            else:
+                ims["img"] = np.concatenate(
+                    (ims["img"], imtk["img"] flows["flow"]), axis=2
+                )
 
         return ims
     
-    def unmerge(self, merged):
+    def unmerge(self, merged, aug_view=False):
         def copy_no_img(merged):
             copy = {}
             for k, v in merged.items():
@@ -169,9 +175,17 @@ class SeqUtils():
 
         if self.flows is not None:
             flows = copy_no_img(merged)
-            flows["img"] = merged["img"][:, :, 6:]
+            flows["img"] = merged["img"][:, :, 6:8]
         else:
             flows = None
+        
+        if aug_view:
+            ims_aug_1 = merged["img"][:, :, 8:11]
+            ims_aug_2 = merged["img"][:, :, 12:]
+        else:
+            ims_aug_1 = None
+            ims_aug_2 = None
+
         merged["img"] = merged["img"][:, :, :3]
         # print("merge input: ", merged["img"].shape, imtk["img"].shape, flows["img"].shape)
         return merged, imtk, flows
@@ -221,7 +235,7 @@ class SeqUtils():
         finalIms["imtk_gt_semantic_seg"] = imtk_gt
         return finalIms
 
-    def prepare_train_img(self, infos, idx, im_tk_infos=None, flow_infos=None, load_tk_gt=False):
+    def prepare_train_img(self, infos, idx, im_tk_infos=None, flow_infos=None, load_tk_gt=False, aug_view=False):
         """Get training data and annotations after pipeline.
 
         Args:
@@ -248,6 +262,7 @@ class SeqUtils():
 
         ims = self.pipeline["im_load_pipeline"](results)
 
+
         if load_tk_gt:
             imtk = self.pipeline["im_load_pipeline"](resultsImtk)
             imtk_gt = DataContainer(torch.from_numpy(imtk["gt_semantic_seg"][None, None, :, :]))
@@ -256,12 +271,33 @@ class SeqUtils():
             imtk_gt = None
         
         flows = self.pipeline["load_flow_pipeline"](resultsFlow)
-        ImsAndFlows = self.merge(ims, imtk, flows) #TODO: concat the ims and flows
-        ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
-        im, imtk, flows = self.unmerge(ImsAndFlows) # separate out the ims and flows again
+
+        if aug_view:
+            ims_aug_1 = copy.deepcopy(ims)
+            ims_aug_2 = copy.deepcopy(ims)
+            ImsAndFlows = self.merge(ims, imtk, flows, ims_aug_1, ims_aug_2,aug_view=aug_view) #TODO: concat the ims and flows
+            ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
+            im, imtk, flows, im_aug_1, im_aug2 = self.unmerge(ImsAndFlows, aug_view=aug_view) # separate out the ims and flows again
+        else:
+            ImsAndFlows = self.merge(ims, imtk, flows) #TODO: concat the ims and flows
+            ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
+            im, imtk, flows = self.unmerge(ImsAndFlows) # separate out the ims and flows again
 
         if ImsAndFlows["flip"]:
             flows["img"][:, :, 0] = -flows["img"][:, :, 0]
+
+        #generate augmentations for aug views
+        if aug_view:
+            im_aug_1 = self.pipeline["aug_pipeline"](im_aug_1)
+            im_aug_2 = self.pipeline["aug_pipeline"](im_aug_2)
+
+            finalImsAug1 = self.pipeline["im_pipeline"](im_aug_1) #add the rest of the image augs
+            finalImsAug2 = self.pipeline["im_pipeline"](im_aug_2) #add the rest of the image augs
+
+            finalIms["im_aug_1"] = finalImsAug1["img"]
+            finalIms["im_aug_2"] = finalImsAug2["img"]
+
+        #rest of augs
         finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
         finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
 

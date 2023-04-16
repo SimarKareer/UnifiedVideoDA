@@ -1,6 +1,7 @@
 # dataset settings
 FRAME_OFFSET = 1
 DATA_TYPE = "rgb" # --multi-modal will set this to rgb+depth
+aug_view = True # for augmented consistency filter (2 aug views of data)
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
@@ -75,6 +76,10 @@ cityscapes_train_pipeline = {
         dict(type='RandomCrop', crop_size=crop_size),
         dict(type='RandomFlip', prob=0.5),
     ],
+    "aug_pipeline": [
+        #insert aug 
+        dict(type="RandAugment", valid_augmentations=["AutoContrast", "Equalize", "Brightness", "Sharpness"], num_aug=1, severity=2.0)
+    ],
     "im_pipeline": [
         # dict(type='PhotoMetricDistortion'),
         dict(type='Normalize', **img_norm_cfg),
@@ -145,7 +150,8 @@ data = dict(
             pipeline=cityscapes_train_pipeline,
             frame_offset=FRAME_OFFSET,
             flow_dir=cs_train_flow_dir,
-            data_type=DATA_TYPE
+            data_type=DATA_TYPE,
+            aug_view=aug_view
         )
     ),
     val=dict(
@@ -157,7 +163,7 @@ data = dict(
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
         flow_dir=cs_val_flow_dir,
-        data_type=DATA_TYPE
+        data_type=DATA_TYPE,
     ),
     test=dict(
         type='CityscapesSeqDataset',

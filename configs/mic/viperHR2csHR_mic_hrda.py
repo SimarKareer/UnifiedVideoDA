@@ -106,6 +106,7 @@ uda = dict(
     class_mask_cutmix=None,
     exclusive_warp_cutmix=False,
     multi_modal=False,
+    aug_filter=False,
 )
 # Optimizer Hyperparameters
 optimizer_config = None
