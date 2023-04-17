@@ -78,7 +78,7 @@ cityscapes_train_pipeline = {
     ],
     "aug_pipeline": [
         #insert aug 
-        dict(type="RandAugment", valid_augmentations=["AutoContrast", "Equalize", "Brightness", "Sharpness"], num_aug=1, severity=2.0)
+        dict(type="RandAug", valid_augmentations=["AutoContrast", "Equalize", "Brightness", "Sharpness"], num_augs=1, severity=2.0)
     ],
     "im_pipeline": [
         # dict(type='PhotoMetricDistortion'),

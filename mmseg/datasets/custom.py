@@ -135,6 +135,7 @@ class CustomDataset(Dataset):
             **gt_seg_map_loader_cfg)
 
         self.no_crash_dataset = no_crash_dataset
+        self.aug_view = False
 
         # self.file_client_args = file_client_args
         # self.file_client = mmcv.FileClient.infer_client(self.file_client_args)

@@ -8,6 +8,7 @@ from numpy import random
 
 from ..builder import PIPELINES
 from RandAugment import RandAugment
+from PIL import Image
 
 
 @PIPELINES.register_module()
@@ -1314,14 +1315,14 @@ class RandomMosaic(object):
         return repr_str
 
 @PIPELINES.register_module()
-class Randaug(object):
+class RandAug(object):
     """Applies Randaug to a given image
 
     Args:
         scale_factor (float): The scale factor of the final output.
     """
 
-    def __init__(self, valid_augmentations=["AutoContrast", "Equalize", "Brightness", "Sharpness"], severity=2.0, num_augs=1):
+    def __init__(self, valid_augmentations=["AutoContrast", "Equalize", "Brightness", "Sharpness"], num_augs=1, severity=2.0):
         self.valid_augmentations = valid_augmentations
         self.severity = severity
         self.num_augs = num_augs
@@ -1329,7 +1330,7 @@ class Randaug(object):
         self.randaug_obj = RandAugment(self.num_augs, self.severity)
 
         self.randaug_obj.augment_list = [
-            aug for aug in RA_obj.augment_list if aug[0].__name__ in self.valid_augmentations
+            aug for aug in self.randaug_obj.augment_list if aug[0].__name__ in self.valid_augmentations
         ]
 
     def __call__(self, results):
@@ -1341,16 +1342,20 @@ class Randaug(object):
         Returns:
             dict: Result dict with randaug applied.
         """
-        img = results["img"]
+        img = results['img']
 
-        augmented_image = self.randaug_obj(img)
+        img_PIL = Image.fromarray(img, mode="RGB")
 
-        results["img"] = augmented_image
+        augmented_image = self.randaug_obj(img_PIL)
+
+        aug_img = np.asarray(augmented_image, dtype='float32')
+
+        results['img'] = aug_img
         return results
 
     def __repr__(self):
         repr_str = self.__class__.__name__
         repr_str += f'(valid_augmentaitons={self.valid_augmentaitons}, '
-        repr_str += f'severity={self.severity}, '
-        repr_str += f'num_augs={self.num_augs}'
+        repr_str += f'num_augs={self.num_augs}, '
+        repr_str += f'severity={self.severity}'
         return repr_str

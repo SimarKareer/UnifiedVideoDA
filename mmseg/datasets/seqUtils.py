@@ -155,7 +155,7 @@ class SeqUtils():
                 )
             else:
                 ims["img"] = np.concatenate(
-                    (ims["img"], imtk["img"] flows["flow"]), axis=2
+                    (ims["img"], imtk["img"], flows["flow"]), axis=2
                 )
 
         return ims
@@ -180,15 +180,17 @@ class SeqUtils():
             flows = None
         
         if aug_view:
-            ims_aug_1 = merged["img"][:, :, 8:11]
-            ims_aug_2 = merged["img"][:, :, 12:]
+            ims_aug_1 = copy_no_img(merged)
+            ims_aug_2 = copy_no_img(merged)
+            ims_aug_1["img"] = merged["img"][:, :, 8:11]
+            ims_aug_2["img"] = merged["img"][:, :, 11:]
         else:
             ims_aug_1 = None
             ims_aug_2 = None
 
         merged["img"] = merged["img"][:, :, :3]
         # print("merge input: ", merged["img"].shape, imtk["img"].shape, flows["img"].shape)
-        return merged, imtk, flows
+        return merged, imtk, flows, ims_aug_1, ims_aug_2
     
     def pre_pipeline_flow(self, results):
         """Prepare results dict for pipeline."""
@@ -275,37 +277,39 @@ class SeqUtils():
         if aug_view:
             ims_aug_1 = copy.deepcopy(ims)
             ims_aug_2 = copy.deepcopy(ims)
-            ImsAndFlows = self.merge(ims, imtk, flows, ims_aug_1, ims_aug_2,aug_view=aug_view) #TODO: concat the ims and flows
+            ImsAndFlows = self.merge(ims, imtk, flows, ims_aug_1, ims_aug_2, aug_view=aug_view) #TODO: concat the ims and flows
             ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
-            im, imtk, flows, im_aug_1, im_aug2 = self.unmerge(ImsAndFlows, aug_view=aug_view) # separate out the ims and flows again
+            im, imtk, flows, im_aug_1, im_aug_2 = self.unmerge(ImsAndFlows, aug_view=aug_view) # separate out the ims and flows again
         else:
             ImsAndFlows = self.merge(ims, imtk, flows) #TODO: concat the ims and flows
             ImsAndFlows = self.pipeline["shared_pipeline"](ImsAndFlows) #Apply the spatial aug to concatted im/flow
-            im, imtk, flows = self.unmerge(ImsAndFlows) # separate out the ims and flows again
+            im, imtk, flows, _, _ = self.unmerge(ImsAndFlows) # separate out the ims and flows again
 
         if ImsAndFlows["flip"]:
             flows["img"][:, :, 0] = -flows["img"][:, :, 0]
 
+
+        #rest of augs
+        finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
+        finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
+        finalFlows = self.pipeline["flow_pipeline"](flows) #add the rest of the flow augs
+
+        finalIms["flow"] = finalFlows["img"]
+        finalIms["imtk"] = finalImtk["img"]
+        finalIms["imtk_gt_semantic_seg"] = imtk_gt
+
         #generate augmentations for aug views
         if aug_view:
+
             im_aug_1 = self.pipeline["aug_pipeline"](im_aug_1)
             im_aug_2 = self.pipeline["aug_pipeline"](im_aug_2)
+            # print("COMPARION", im_aug_1["img"] == im_aug_2["img"], np.unique(im_aug_1["img"] == im_aug_2["img"]))
 
             finalImsAug1 = self.pipeline["im_pipeline"](im_aug_1) #add the rest of the image augs
             finalImsAug2 = self.pipeline["im_pipeline"](im_aug_2) #add the rest of the image augs
 
             finalIms["im_aug_1"] = finalImsAug1["img"]
             finalIms["im_aug_2"] = finalImsAug2["img"]
-
-        #rest of augs
-        finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
-        finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
-
-        finalFlows = self.pipeline["flow_pipeline"](flows) #add the rest of the flow augs
-
-        finalIms["flow"] = finalFlows["img"]
-        finalIms["imtk"] = finalImtk["img"]
-        finalIms["imtk_gt_semantic_seg"] = imtk_gt
 
         for k, v in finalIms.items():
             if isinstance(v, DataContainer):

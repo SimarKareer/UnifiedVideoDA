@@ -86,6 +86,7 @@ class DACS(UDADecorator):
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
         self.consis_filter_rare_common_class_compare = cfg["consis_filter_rare_common_class_compare"]
         self.max_confidence = cfg['max_confidence']
+        self.aug_filter = cfg['aug_filter']
 
         self.pl_fill = cfg['pl_fill']
         self.bottom_pl_fill = cfg['bottom_pl_fill']
@@ -541,7 +542,7 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
         if DEBUG:
-            rows, cols = 6, 7
+            rows, cols = 7, 7
             fig, axs = plt.subplots(
                 rows,
                 cols,
@@ -631,6 +632,8 @@ class DACS(UDADecorator):
         pseudo_label, pseudo_weight = None, None
         if not self.source_only:
             target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
+            target_img_aug_1 = target_img_extra["im_aug_1"]
+            target_img_aug_2 = target_img_extra["im_aug_2"]
 
             for m in self.get_ema_model().modules():
                 if isinstance(m, _DropoutNd):
@@ -647,9 +650,16 @@ class DACS(UDADecorator):
                 pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
                 pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             
+            # predictions for augmented views
+            if self.aug_filter:
+                pseudo_label_aug_1, pseudo_weight_aug_1 = self.get_pl(target_img_aug_1, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+                pseudo_label_aug_2, pseudo_weight_aug_2 = self.get_pl(target_img_aug_2, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+            
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
+
+            #change back to OR statement
             if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
@@ -844,6 +854,32 @@ class DACS(UDADecorator):
                     self.init_cml_debug_metrics()
                 self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
 
+            else:
+                #no l_warp
+                if self.aug_filter:
+                    # we will iterate through batch, do "consis filter" on the augmented image, stack the PLs, and then do l_mix_lambda
+
+                    pseudo_labels_aug = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
+                    pseudo_weights_aug = []
+                    for i in range(batch_size):
+                        pli_aug_1_i, pseudo_weight_aug_1_i = pseudo_label_aug_1[i], pseudo_weight_aug_1[i]
+                        pli_aug_2_i = pseudo_label_aug_2[i]
+
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[6][1], pli_aug_1_i, 'Aug View 1 Prediction', cmap="cityscapes")
+                            subplotimg(axs[6][2], pli_aug_2_i, 'Aug View 2 Prediction', cmap="cityscapes")
+
+                        pseudo_weight_aug_1_i[pli_aug_1_i != pli_aug_2_i] = 0
+                        pli_aug_1_i[pli_aug_1_i != pli_aug_2_i] = 255
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[6][3], pli_aug_1_i, 'Aug Views - Consis Filter', cmap="cityscapes")
+
+                        pseudo_weights_aug.append(pseudo_weight_aug_1_i)
+                        pseudo_labels_aug.append(pli_aug_1_i)
+
+                    pseudo_weight = torch.stack(pseudo_weights_aug)
+                    pseudo_label = torch.stack(pseudo_labels_aug)
+                
             if self.l_mix_lambda > 0:
                 # Apply mixing
                 mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)

@@ -211,4 +211,5 @@ tools/exps/or_filter/scratch*.sh
 *_4.sh
 *_6.sh
 *_1.sh
-*_*.sh
+
+*_lr_*.sh

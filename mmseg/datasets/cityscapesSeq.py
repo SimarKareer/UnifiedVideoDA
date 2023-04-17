@@ -21,7 +21,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
     fixed to '_gtFine_labelIds.png' for Cityscapes-seq dataset.
     """
 
-    def __init__(self, split, img_suffix='_leftImg8bit.png', seg_map_suffix='_gtFine_labelTrainIds.png', frame_offset=1, flow_dir=None, crop_pseudo_margins=None, data_type="rgb", **kwargs):
+    def __init__(self, split, img_suffix='_leftImg8bit.png', seg_map_suffix='_gtFine_labelTrainIds.png', frame_offset=1, flow_dir=None, crop_pseudo_margins=None, data_type="rgb", aug_view=False, **kwargs):
         # breakpoint()
 
         CityscapesDataset.__init__(
