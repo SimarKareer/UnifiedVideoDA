@@ -340,8 +340,15 @@ class SeqUtils():
             visflow = get_vis_flow(finalIms["flow"])
             finalIms["flowVis"] = visflow
             # finalIms["img"] = torch.cat([finalIms["img"], visflow], dim=0)
-
-
+        elif self.data_type == "rgb+flowrgb":
+            visFlow = flow_vis.flow_to_color(finalIms["flow"].permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
+            finalIms["flowVis"] = minmax_norm(visFlow.astype('float32'))
+        elif self.data_type == "rgb+flowxynorm":
+            visFlow = minmax_norm(finalIms['flow'])
+            visFlow = torch.cat([visFlow, get_vis_flow(finalIms["flow"])])
+            finalIms["flowVis"] = visFlow
+        else:
+            raise Exception("Unknown data_type: {}".format(self.data_type))
         return finalIms
 
     def prepare_test_img(self, infos, idx):
