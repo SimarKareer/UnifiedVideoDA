@@ -343,6 +343,12 @@ class SeqUtils():
         elif self.data_type == "rgb+flowrgb":
             visFlow = flow_vis.flow_to_color(finalIms["flow"].permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
             finalIms["flowVis"] = minmax_norm(visFlow.astype('float32'))
+        elif self.data_type == "rgb+flowrgbnorm":
+            visFlow = flow_vis.flow_to_color(finalIms["flow"].permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
+            mu_of = np.array([238.27737733, 235.72995985, 226.51926128])
+            std_of = np.array([37.13001504, 38.79420189, 47.94346603])
+            normTrans = transforms.Normalize(mean=mu_of, std=std_of)
+            finalIms["flowVis"] = normTrans(torch.from_numpy(visFlow.astype('float32')))
         elif self.data_type == "rgb+flowxynorm":
             visFlow = minmax_norm(finalIms['flow'])
             visFlow = torch.cat([visFlow, get_vis_flow(finalIms["flow"])])

@@ -20,7 +20,7 @@ from get_dataset import get_viper_train, get_viper_val, get_csseq_train, get_css
 def data_loader_test():
     # data_loader = DataLoader(viper)
     dataset = get_viper_train()
-    dataset.data_type = "rgb+flow"
+    dataset.data_type = "rgb+flowrgbnorm"
     data_loader = DataLoader(
         dataset,
         collate_fn=partial(collate, samples_per_gpu=1),
@@ -41,12 +41,14 @@ def data_loader_test():
     for i, data in enumerate(tqdm(data_loader)):
         # img, imtk, flow, gt_t, gt_tk = data["img"][0].numpy(), data["imtk"][0], data["flow"][0], data["gt_semantic_seg"][0], data["imtk_gt_semantic_seg"][0]
         if "failed" not in data:
+            breakpoint()
             subplotimg(axs[0, 0], invNorm(data["img"][0]), "Source IM 0")
 
-            subplotimg(axs[1, 0], data["flowVis"][0], "Source flow 0")
-            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/visFlow2/debugMinMax{i}.png")
+            # subplotimg(axs[1, 0], data["flowVisNorm"][0], "Source flow Norm 0")
+            subplotimg(axs[0, 1], data["flowVis"][0], "Source flow Norm 0")
+            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/flowRgbVis/Viper{i}.png")
 
-        if i == 5:
+        if i == 20:
             break
 
 def flow_statistics_gt():
