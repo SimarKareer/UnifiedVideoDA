@@ -347,6 +347,8 @@ class SeqUtils():
             visFlow = minmax_norm(finalIms['flow'])
             visFlow = torch.cat([visFlow, get_vis_flow(finalIms["flow"])])
             finalIms["flowVis"] = visFlow
+        elif self.data_type == "rgb":
+            pass
         else:
             raise Exception("Unknown data_type: {}".format(self.data_type))
         return finalIms
