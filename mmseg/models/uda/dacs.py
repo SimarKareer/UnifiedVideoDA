@@ -105,7 +105,7 @@ class DACS(UDADecorator):
         self.enable_masking = self.mask_mode is not None
         self.print_grad_magnitude = cfg['print_grad_magnitude']
 
-        self.multi_modal = cfg["multi_modal"]
+        self.multimodal = cfg["multimodal"]
         assert self.mix == 'class'
 
         self.debug_fdist_mask = None
@@ -479,7 +479,7 @@ class DACS(UDADecorator):
 
             log_vars[f"Mask Percentage {class_name}"] = self.cml_debug_metrics["warp_cml_mask_hit"][i] / self.cml_debug_metrics["warp_cml_mask_total"][i]
 
-    def forward_train_multi_modal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
+    def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
         log_vars = {}
         batch_size = img.shape[0]
         dev = img.device
@@ -499,8 +499,28 @@ class DACS(UDADecorator):
             subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 2")
             fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/visFlow2/debug{self.local_iter}.png")
 
-        
+        if self.local_iter == 0:
+            self._init_ema_weights()
+            # assert _params_equal(self.get_ema_model(), self.get_model())
 
+        if self.local_iter > 0:
+            self._update_ema(self.local_iter)
+            # assert not _params_equal(self.get_ema_model(), self.get_model())
+            # assert self.get_ema_model().training
+        if self.mic is not None:
+            self.mic.update_weights(self.get_model(), self.local_iter)
+        
+        gt_semantic_seg, valid_pseudo_mask, = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"] 
+        seg_debug = {}
+        flow = target_img_extra['flowVis'].repeat(1, 3, 1, 1)
+        img = torch.cat([img, flow], dim = 1)
+        clean_losses = self.get_model().forward_train(
+            img, img_metas, gt_semantic_seg, return_feat=True)
+        src_feat = clean_losses.pop('features')
+        seg_debug['Source'] = self.get_model().debug_output
+        clean_loss, clean_log_vars = self._parse_losses(clean_losses)
+        log_vars.update(clean_log_vars)
+        clean_loss.backward(retain_graph=self.enable_fdist)
 
         self.local_iter += 1
         return log_vars
@@ -523,8 +543,8 @@ class DACS(UDADecorator):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        if self.multi_modal:
-            return self.forward_train_multi_modal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
+        if self.multimodal:
+            return self.forward_train_multimodal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
         gt_semantic_seg, valid_pseudo_mask, = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
         
         log_vars = {}

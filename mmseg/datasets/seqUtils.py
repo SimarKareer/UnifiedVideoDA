@@ -327,7 +327,7 @@ class SeqUtils():
                 flow = flow[0]
 
             visflow = flow.norm(dim=0, keepdim=True)
-            check_min_max(visFlow)
+            check_min_max(visflow)
             mu_of = visflow.float().mean(dim=[1, 2])
             std_of = visflow.float().std(dim=[1, 2])
 

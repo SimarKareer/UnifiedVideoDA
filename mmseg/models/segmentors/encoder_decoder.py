@@ -36,7 +36,8 @@ class EncoderDecoder(BaseSegmentor):
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None,
-                 init_cfg=None):
+                 init_cfg=None,
+                 multimodal=False):
         super(EncoderDecoder, self).__init__(init_cfg)
         if pretrained is not None:
             assert backbone.get('pretrained') is None, \
@@ -56,7 +57,10 @@ class EncoderDecoder(BaseSegmentor):
         if train_cfg is not None and 'log_config' in train_cfg:
             self.debug_img_interval = train_cfg['log_config']['img_interval']
         self.local_iter = 0
-
+        self.multimodal = multimodal
+        if self.multimodal:
+            self.alpha = nn.Parameter(torch.ones(self.backbone.num_parallel, requires_grad=True)) #TODO: Make sure alpha is trainable
+            self.register_parameter('alpha', self.alpha)
         assert self.with_decode_head
 
     def _init_decode_head(self, decode_head):
@@ -112,9 +116,18 @@ class EncoderDecoder(BaseSegmentor):
         self.update_debug_state()
 
         ret = {}
-
-        x = self.extract_feat(img)
-        out = self.decode_head.forward_test(x, img_metas, self.test_cfg)
+        if self.multimodal:
+            assert isinstance(x, list) and len(x) == 2, "Multimodal encoder should return a list of \
+                                                        two tensors, check self.backbone {}".format(type(self.backbone))
+            out = [self._decode_head_forward_test(x[0], img_metas), self._decode_head_forward_test(x[1], img_metas)]
+            ens = 0
+            alpha_soft = F.softmax(self.alpha)
+            for l in range(2):
+                ens += alpha_soft[l] * out[l].detach()
+            out = ens
+        else:    
+            x = self.extract_feat(img)
+            out = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         out = resize(
             input=out,
             size=img.shape[2:],
@@ -124,8 +137,18 @@ class EncoderDecoder(BaseSegmentor):
 
         if self.with_auxiliary_head:
             assert not isinstance(self.auxiliary_head, nn.ModuleList)
-            out_aux = self.auxiliary_head.forward_test(x, img_metas,
-                                                       self.test_cfg)
+            if self.multimodal:
+                assert isinstance(x, list) and len(x) == 2, "Multimodal encoder should return a list of \
+                                                        two tensors, check self.backbone {}".format(type(self.backbone))
+                out = [self.auxiliary_head.forward_test(x[0], img_metas), self.auxiliary_head.forward_test(x[0], img_metas)]
+                ens = 0
+                alpha_soft = F.softmax(self.alpha)
+                for l in range(2):
+                    ens += alpha_soft[l] * out[l].detach()
+                out = ens 
+            else:
+                out_aux = self.auxiliary_head.forward_test(x, img_metas,
+                                                        self.test_cfg)
             out_aux = resize(
                 input=out_aux,
                 size=img.shape[2:],
@@ -134,6 +157,22 @@ class EncoderDecoder(BaseSegmentor):
             ret['aux'] = out_aux
 
         return ret
+
+    def _average_losses(self, losses):
+        """Average losses from different predictions."""
+        averaged_loss = {}
+        for loss in losses:
+            for loss_name, loss_value in loss.items():
+                if loss_name not in averaged_loss:
+                    if loss_name == "logits":
+                        continue
+                    averaged_loss[loss_name] = 0
+                averaged_loss[loss_name] += loss_value
+        for loss_name in averaged_loss:
+            averaged_loss[loss_name] /= len(losses)
+        if "logits" in losses[-1]:
+            averaged_loss["logits"] = losses[-1]["logits"] #TODO: Check if we would need only the ensembled logits 
+        return averaged_loss
 
     def _decode_head_forward_train(self,
                                    x,
@@ -144,10 +183,22 @@ class EncoderDecoder(BaseSegmentor):
         """Run forward function and calculate loss for decode head in
         training."""
         losses = dict()
-        loss_decode = self.decode_head.forward_train(x, img_metas,
-                                                     gt_semantic_seg,
-                                                     self.train_cfg,
-                                                     seg_weight, return_logits)
+        if self.multimodal:
+            loss_decode_list = []
+            for i in range(len(x)):
+                reset_crop = False
+                if i == len(x) - 1:
+                    reset_crop = True #Reset crop only on the last forward pass of the decoder
+                loss_decode_list.append(self.decode_head.forward_train(x[i], img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight, return_logits, reset_crop))
+            loss_decode = self._average_losses(loss_decode_list)
+        else:
+            loss_decode = self.decode_head.forward_train(x, img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight, return_logits)
 
         losses.update(add_prefix(loss_decode, 'decode'))
         return losses
@@ -155,6 +206,8 @@ class EncoderDecoder(BaseSegmentor):
     def _decode_head_forward_test(self, x, img_metas):
         """Run forward function and calculate loss for decode head in
         inference."""
+        if self.multimodal:
+            x = x[-1]    
         seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         return seg_logits
 
@@ -168,13 +221,29 @@ class EncoderDecoder(BaseSegmentor):
         losses = dict()
         if isinstance(self.auxiliary_head, nn.ModuleList):
             for idx, aux_head in enumerate(self.auxiliary_head):
-                loss_aux = aux_head.forward_train(x, img_metas,
+                if self.multimodal:
+                    loss_aux_list = []
+                    for xi in x:
+                        loss_aux_list.append(aux_head.forward_train(xi, img_metas,
                                                   gt_semantic_seg,
-                                                  self.train_cfg, seg_weight)
+                                                  self.train_cfg, seg_weight))
+                    loss_aux = self._average_losses(loss_aux_list)
+                else:
+                    loss_aux = aux_head.forward_train(x, img_metas,
+                                                    gt_semantic_seg,
+                                                    self.train_cfg, seg_weight)
                 losses.update(add_prefix(loss_aux, f'aux_{idx}'))
         else:
-            loss_aux = self.auxiliary_head.forward_train(
-                x, img_metas, gt_semantic_seg, self.train_cfg)
+            if self.multimodal:
+                loss_aux_list = []
+                for xi in x:
+                    loss_aux_list.append(self.auxiliary_head.forward_train(xi, img_metas,
+                                                  gt_semantic_seg,
+                                                  self.train_cfg, seg_weight))
+                loss_aux = self._average_losses(loss_aux_list)
+            else:
+                loss_aux = self.auxiliary_head.forward_train(
+                    x, img_metas, gt_semantic_seg, self.train_cfg)
             losses.update(add_prefix(loss_aux, 'aux'))
 
         return losses

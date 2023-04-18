@@ -97,7 +97,7 @@ def parse_args(args):
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
 
-    parser.add_argument("--multi-modal", type=bool, default=False)
+    parser.add_argument("--multimodal", type=bool, default=False)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -314,13 +314,12 @@ def main(args):
         print("Overwriting LR to ", args.lr)
         cfg.optimizer.lr = args.lr    
     
-    if args.multi_modal:
-        cfg.uda.multi_modal = True
+    if args.multimodal:
+        cfg.uda.multimodal = True
         cfg.data.train.source.data_type = "rgb+flow"
         cfg.data.train.target.data_type = "rgb+flow"
         cfg.data.val.data_type = "rgb+flow"
         cfg.data.test.data_type = "rgb+flow"
-
 
     print("FINISHED INIT DIST")
 

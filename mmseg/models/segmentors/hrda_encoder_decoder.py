@@ -64,7 +64,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
                  hr_slide_overlapping=True,
                  crop_coord_divisible=1,
                  blur_hr_crop=False,
-                 feature_scale=1):
+                 feature_scale=1,
+                 multimodal=False):
         self.feature_scale_all_strs = ['all']
         if isinstance(feature_scale, str):
             assert feature_scale in self.feature_scale_all_strs
@@ -80,7 +81,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
             train_cfg=train_cfg,
             test_cfg=test_cfg,
             pretrained=pretrained,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg, 
+            multimodal=multimodal)
 
         self.scales = scales
         self.feature_scale = feature_scale
