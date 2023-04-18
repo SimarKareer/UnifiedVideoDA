@@ -316,6 +316,10 @@ class SeqUtils():
         def minmax_norm(x):
             return (x - x.min()) / (x.max() - x.min())
 
+        def check_min_max(x):
+            if x.max() == 0 and x.min() == 0:
+                raise FileNotFoundError
+            
         def get_vis_flow(flow):
             # two other options are flowvis.flow_to_color, flow_to_grayscale
             is_list = isinstance(flow, list)
@@ -323,8 +327,7 @@ class SeqUtils():
                 flow = flow[0]
 
             visflow = flow.norm(dim=0, keepdim=True)
-            if visflow.max() == 0 and visflow.min() == 0:
-                raise FileNotFoundError
+            check_min_max(visFlow)
             mu_of = visflow.float().mean(dim=[1, 2])
             std_of = visflow.float().std(dim=[1, 2])
 
@@ -341,16 +344,22 @@ class SeqUtils():
             finalIms["flowVis"] = visflow
             # finalIms["img"] = torch.cat([finalIms["img"], visflow], dim=0)
         elif self.data_type == "rgb+flowrgb":
-            visFlow = flow_vis.flow_to_color(finalIms["flow"].permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
+            visFlow = finalIms["flow"]
+            check_min_max(visFlow)
+            visFlow = flow_vis.flow_to_color(visFlow.permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
             finalIms["flowVis"] = minmax_norm(visFlow.astype('float32'))
         elif self.data_type == "rgb+flowrgbnorm":
-            visFlow = flow_vis.flow_to_color(finalIms["flow"].permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
+            visFlow = finalIms["flow"]
+            check_min_max(visFlow)
+            visFlow = flow_vis.flow_to_color(visFlow.permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
             mu_of = np.array([238.27737733, 235.72995985, 226.51926128])
             std_of = np.array([37.13001504, 38.79420189, 47.94346603])
             normTrans = transforms.Normalize(mean=mu_of, std=std_of)
             finalIms["flowVis"] = normTrans(torch.from_numpy(visFlow.astype('float32')))
         elif self.data_type == "rgb+flowxynorm":
-            visFlow = minmax_norm(finalIms['flow'])
+            visFlow = finalIms["flow"]
+            check_min_max(visFlow)
+            visFlow = minmax_norm(visFlow)
             visFlow = torch.cat([visFlow, get_vis_flow(finalIms["flow"])])
             finalIms["flowVis"] = visFlow
         elif self.data_type == "rgb":
