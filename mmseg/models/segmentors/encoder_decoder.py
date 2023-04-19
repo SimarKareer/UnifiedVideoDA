@@ -113,6 +113,7 @@ class EncoderDecoder(BaseSegmentor):
         return out
 
     def forward_with_aux(self, img, img_metas):
+        raise NotImplementedError("Currently broken")
         self.update_debug_state()
 
         ret = {}
@@ -170,9 +171,14 @@ class EncoderDecoder(BaseSegmentor):
                 averaged_loss[loss_name] += loss_value
         for loss_name in averaged_loss:
             averaged_loss[loss_name] /= len(losses)
-        if "logits" in losses[-1]:
-            averaged_loss["logits"] = losses[-1]["logits"] #TODO: Check if we would need only the ensembled logits 
         return averaged_loss
+
+    def _get_ensemble_logits(self, seg_logits):
+        seg_logit = 0
+        alpha_soft = F.softmax(self.alpha)
+        for l in range(self.backbone.num_parallel):
+            seg_logit += alpha_soft[l] * seg_logits[l].detach()
+        return seg_logit
 
     def _decode_head_forward_train(self,
                                    x,
@@ -181,19 +187,25 @@ class EncoderDecoder(BaseSegmentor):
                                    seg_weight=None,
                                    return_logits=False):
         """Run forward function and calculate loss for decode head in
-        training."""
+        training.
+        
+        losses: dict{}
+        """
         losses = dict()
         if self.multimodal:
             loss_decode_list = []
             for i in range(len(x)):
-                reset_crop = False
-                if i == len(x) - 1:
-                    reset_crop = True #Reset crop only on the last forward pass of the decoder
                 loss_decode_list.append(self.decode_head.forward_train(x[i], img_metas,
                                                         gt_semantic_seg,
                                                         self.train_cfg,
-                                                        seg_weight, return_logits, reset_crop))
+                                                        seg_weight, True))
+
+            ens_logit = self._get_ensemble_logits([loss_decode_list[i]['logits'] for i in range(self.backbone.num_parallel)])
+            ens_loss = self.decode_head.losses(ens_logit, gt_semantic_seg, seg_weight)
+            loss_decode_list.append(ens_loss)
             loss_decode = self._average_losses(loss_decode_list)
+            if return_logits:
+                loss_decode['logits'] = ens_logit
         else:
             loss_decode = self.decode_head.forward_train(x, img_metas,
                                                         gt_semantic_seg,
@@ -207,8 +219,11 @@ class EncoderDecoder(BaseSegmentor):
         """Run forward function and calculate loss for decode head in
         inference."""
         if self.multimodal:
-            x = x[-1]    
-        seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
+            #x[:, i] = x[low/highres, segformer_layer]
+            seg_logits = [self.decode_head.forward_test(x[i], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
+            seg_logits = self._get_ensemble_logits(seg_logits)
+        else:
+            seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         return seg_logits
 
     def _auxiliary_head_forward_train(self,

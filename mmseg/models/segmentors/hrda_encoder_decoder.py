@@ -11,6 +11,7 @@
 import numpy as np
 import torch
 
+from mmseg.core import add_prefix
 from mmseg.ops import resize
 from ..builder import SEGMENTORS
 from .encoder_decoder import EncoderDecoder
@@ -172,6 +173,63 @@ class HRDAEncoderDecoder(EncoderDecoder):
         if self.debug:
             self.debug_output = self.decode_head.debug_output
         return out
+    
+    def _decode_head_forward_test(self, x, img_metas):
+        """Run forward function and calculate loss for decode head in
+        inference.
+        x: x[low/highres, mmbranch, segformer_layer] #This might change in different calls of _decode_head_forward_test
+                          [B, C, H, W]
+            - x[0][0][0]: [2, 64, 128, 128]
+            - x[0][0][1]: [2, 128, 64, 64]
+            - x[0][0][2]: [2, 320, 32, 32]
+            - x[0][0][3]: [2, 512, 16, 16]
+        """
+        breakpoint()
+        if self.multimodal:
+            #x[:, i] = x[low/highres, segformer_layer]
+            seg_logits = [self.decode_head.forward_test([x[0, i], x[1, i]], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
+            seg_logits = self._get_ensemble_logits(seg_logits)
+        else:
+            seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
+        return seg_logits
+
+    def _decode_head_forward_train(self,
+                                   x,
+                                   img_metas,
+                                   gt_semantic_seg,
+                                   seg_weight=None,
+                                   return_logits=False):
+        """Run forward function and calculate loss for decode head in
+        training.
+        
+        losses: dict{}
+        """
+        losses = dict()
+        if self.multimodal:
+            loss_decode_list = []
+            for i in range(len(x)):
+                reset_crop = False
+                if i == len(x) - 1:
+                    reset_crop = True #Reset crop only on the last forward pass of the decoder
+                loss_decode_list.append(self.decode_head.forward_train(x[i], img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight, True, reset_crop))
+
+            ens_logit = self._get_ensemble_logits([loss_decode_list[i]['logits'] for i in range(self.backbone.num_parallel)])
+            ens_loss = self.decode_head.losses(ens_logit, gt_semantic_seg, seg_weight)
+            loss_decode_list.append(ens_loss)
+            loss_decode = self._average_losses(loss_decode_list)
+            if return_logits:
+                loss_decode['logits'] = ens_logit
+        else:
+            loss_decode = self.decode_head.forward_train(x, img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight, return_logits)
+
+        losses.update(add_prefix(loss_decode, 'decode'))
+        return losses
 
     def encode_decode(self, img, img_metas, upscale_pred=True):
         """Encode images with backbone and decode into a semantic segmentation

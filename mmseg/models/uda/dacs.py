@@ -544,7 +544,10 @@ class DACS(UDADecorator):
             dict[str, Tensor]: a dictionary of loss components
         """
         if self.multimodal:
-            return self.forward_train_multimodal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
+            # return self.forward_train_multimodal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
+            img = torch.cat([img, img_extra["img"]], dim=1)
+            target_img = torch.cat([target_img, target_img_extra["img"]], dim=1)
+
         gt_semantic_seg, valid_pseudo_mask, = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
         
         log_vars = {}
