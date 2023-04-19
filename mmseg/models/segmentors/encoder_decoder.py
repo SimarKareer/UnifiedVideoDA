@@ -233,6 +233,7 @@ class EncoderDecoder(BaseSegmentor):
                                       seg_weight=None):
         """Run forward function and calculate loss for auxiliary head in
         training."""
+        raise NotImplementedError("Currently broken")
         losses = dict()
         if isinstance(self.auxiliary_head, nn.ModuleList):
             for idx, aux_head in enumerate(self.auxiliary_head):
