@@ -8,8 +8,10 @@ viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
 cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
 cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
-viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
-viper_val_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/val/flow_occ"
+# viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
+# viper_val_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/val/flow_occ"
+viper_train_flow_dir = "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/forward/train/img"
+viper_val_flow_dir = "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/forward/val/img"
 
 # cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/train"
 # cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/val"
@@ -58,6 +60,7 @@ def get_viper_train():
         data_root=viper_data_root,
         img_dir='train/img',
         ann_dir='train/cls',
+        # split='splits/train.txt',
         split='splits/train_flow_compatible.txt',
         pipeline=viper_train_pipeline,
         frame_offset=1,
@@ -98,6 +101,7 @@ def get_viper_val():
         data_root=viper_data_root,
         img_dir='val/img',
         ann_dir='val/cls',
+        # split='splits/val.txt',
         split='splits/val_flow_compatible.txt',
         pipeline=viper_val_pipeline,
         frame_offset=1,
