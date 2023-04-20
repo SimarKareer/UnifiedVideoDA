@@ -339,6 +339,25 @@ class SeqUtils():
         if self.data_type == "flow":
             visflow = get_vis_flow(finalIms["flow"])
             finalIms["img"] = visflow
+        elif self.data_type == "flowrgb":
+            visFlow = finalIms["flow"]
+            check_min_max(visFlow)
+            visFlow = flow_vis.flow_to_color(visFlow.permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
+            finalIms["img"] = minmax_norm(visFlow.astype('float32'))
+        elif self.data_type == "flowrgbnorm":
+            visFlow = finalIms["flow"]
+            check_min_max(visFlow)
+            visFlow = flow_vis.flow_to_color(visFlow.permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
+            mu_of = np.array([238.27737733, 235.72995985, 226.51926128])
+            std_of = np.array([37.13001504, 38.79420189, 47.94346603])
+            normTrans = transforms.Normalize(mean=mu_of, std=std_of)
+            finalIms["img"] = normTrans(torch.from_numpy(visFlow.astype('float32')))
+        elif self.data_type == "flowxynorm":
+            visFlow = finalIms["flow"]
+            check_min_max(visFlow)
+            visFlow = minmax_norm(visFlow)
+            visFlow = torch.cat([visFlow, get_vis_flow(finalIms["flow"])])
+            finalIms["img"] = visFlow
         elif self.data_type == "rgb+flow":
             visflow = get_vis_flow(finalIms["flow"])
             finalIms["flowVis"] = visflow
