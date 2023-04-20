@@ -478,6 +478,25 @@ class DACS(UDADecorator):
             # log_vars["Diff Mask mIoU"] = log_vars["Warp PL mIoU"] - log_vars["Plain PL Mask mIoU"]
 
             log_vars[f"Mask Percentage {class_name}"] = self.cml_debug_metrics["warp_cml_mask_hit"][i] / self.cml_debug_metrics["warp_cml_mask_total"][i]
+    
+    def add_iou_metrics(self, pseudo_label, gt_sem_seg, log_vars):
+        """
+        pseudo_label: B, H, W
+        gt_sem_seg: B, 1, H, W
+        log_vars: {varName:v}
+        """
+        gt_sem_seg = gt_sem_seg[0, 0]
+        plain_iou = self.fast_iou(pseudo_label[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), return_raw=True)
+        self.cml_debug_metrics["plain_cml_intersect"] += plain_iou[0]
+        self.cml_debug_metrics["plain_cml_union"] += plain_iou[1]
+
+        for i, class_name in enumerate(CityscapesDataset.CLASSES):
+            log_vars[f"Plain PL IoU {class_name}"] = self.cml_debug_metrics["plain_cml_intersect"][i] / self.cml_debug_metrics["plain_cml_union"][i]
+
+            log_vars["Plain PL mIoU"] = np.nanmean((self.cml_debug_metrics["plain_cml_intersect"] / self.cml_debug_metrics["plain_cml_union"]).numpy())
+        
+        return log_vars
+        
 
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
         log_vars = {}
@@ -486,18 +505,27 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
         self.local_iter = 0
 
+
+        # concat flow and img
+        assert(len(img_extra["flowVis"].shape) == 4)
+        repeat_factor = 3 if img_extra["flowVis"].shape[1:] == (1, 1024, 1024) else 1
+        img = torch.cat([img, img_extra["flowVis"].repeat(1, repeat_factor, 1, 1)], dim=1)
+        target_img = torch.cat([target_img, target_img_extra["flowVis"].repeat(1, repeat_factor, 1, 1)], dim=1)
+
+        # Assign other important variables used throughout function.  Try not to edit the dictionary anywhere
+        gt_semantic_seg, valid_pseudo_mask = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
+
         if DEBUG:
             fig, axs = plt.subplots(5, 5, figsize=(15, 15))
             subplotimg(axs[0, 0], invNorm(img[0][:3]), "Source IM 0")
-            subplotimg(axs[0, 1], invNorm(img[1][:3]), "Source IM 1")
+            # subplotimg(axs[0, 1], invNorm(img[1][:3]), "Source IM 1")
             subplotimg(axs[0, 2], invNorm(target_img[0][:3]), "Target IM 1")
-            subplotimg(axs[0, 3], invNorm(target_img[1][:3]), "Target IM 2")
+            # subplotimg(axs[0, 3], invNorm(target_img[1][:3]), "Target IM 2")
 
             subplotimg(axs[1, 0], img_extra["flowVis"][0], "Source flow 0")
-            subplotimg(axs[1, 1], img_extra["flowVis"][1], "Source flow 1")
+            # subplotimg(axs[1, 1], img_extra["flowVis"][1], "Source flow 1")
             subplotimg(axs[1, 2], target_img_extra["flowVis"][0], "Target flow 1")
-            subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 2")
-            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/visFlow2/debug{self.local_iter}.png")
+            # subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 2")
 
         if self.local_iter == 0:
             self._init_ema_weights()
@@ -510,10 +538,11 @@ class DACS(UDADecorator):
         if self.mic is not None:
             self.mic.update_weights(self.get_model(), self.local_iter)
         
-        gt_semantic_seg, valid_pseudo_mask, = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"] 
+        self.update_debug_state()
         seg_debug = {}
-        flow = target_img_extra['flowVis'].repeat(1, 3, 1, 1)
-        img = torch.cat([img, flow], dim = 1)
+        means, stds = get_mean_std(img_metas, dev)
+
+        # Train on source images
         clean_losses = self.get_model().forward_train(
             img, img_metas, gt_semantic_seg, return_feat=True)
         src_feat = clean_losses.pop('features')
@@ -522,6 +551,61 @@ class DACS(UDADecorator):
         log_vars.update(clean_log_vars)
         clean_loss.backward(retain_graph=self.enable_fdist)
 
+
+        for m in self.get_ema_model().modules():
+            if isinstance(m, _DropoutNd):
+                m.training = False
+            if isinstance(m, DropPath):
+                m.training = False
+        pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+        
+        gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
+
+        log_vars["L_warp"] = 0
+
+
+        if self.l_mix_lambda > 0:
+            # Apply mixing
+            mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
+            if DEBUG:
+                subplotimg(axs[2, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
+                subplotimg(axs[2, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
+                subplotimg(axs[2, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
+            # Train on mixed images
+            mix_losses = self.get_model().forward_train(
+                mixed_img,
+                img_metas,
+                mixed_lbl,
+                seg_weight=mixed_seg_weight,
+                return_feat=False,
+            )
+            seg_debug['Mix'] = self.get_model().debug_output
+            mix_losses = add_prefix(mix_losses, 'mix')
+            mix_loss, mix_log_vars = self._parse_losses(mix_losses)
+            log_vars.update(mix_log_vars)
+            (mix_loss * self.l_mix_lambda).backward()
+        
+        # Masked Training
+        if self.enable_masking and self.mask_mode.startswith('separate'):
+            masked_loss = self.mic(self.get_model(), img, img_metas,
+                                gt_semantic_seg, target_img,
+                                target_img_metas, valid_pseudo_mask,
+                                pseudo_label, pseudo_weight)
+            seg_debug.update(self.mic.debug_output)
+            masked_loss = add_prefix(masked_loss, 'masked')
+            masked_loss, masked_log_vars = self._parse_losses(masked_loss)
+            log_vars.update(masked_log_vars)
+            masked_loss.backward()
+        
+        self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars)
+
+        if DEBUG:
+            subplotimg(axs[2, 0], pseudo_label, "PL", cmap="cityscapes")
+            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/multimodal/debug{self.local_iter}.png")
+
+        
+        if self.local_iter % 100 == 0:
+            self.init_cml_debug_metrics()
         self.local_iter += 1
         return log_vars
 
@@ -544,9 +628,7 @@ class DACS(UDADecorator):
             dict[str, Tensor]: a dictionary of loss components
         """
         if self.multimodal:
-            # return self.forward_train_multimodal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
-            img = torch.cat([img, img_extra["img"]], dim=1)
-            target_img = torch.cat([target_img, target_img_extra["img"]], dim=1)
+            return self.forward_train_multimodal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
 
         gt_semantic_seg, valid_pseudo_mask, = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
         
@@ -592,15 +674,6 @@ class DACS(UDADecorator):
         self.update_debug_state()
         seg_debug = {}
         means, stds = get_mean_std(img_metas, dev)
-        strong_parameters = {
-            'mix': None,
-            'color_jitter': random.uniform(0, 1),
-            'color_jitter_s': self.color_jitter_s,
-            'color_jitter_p': self.color_jitter_p,
-            'blur': random.uniform(0, 1) if self.blur else 0,
-            'mean': means[0].unsqueeze(0),  # assume same normalization
-            'std': stds[0].unsqueeze(0)
-        }
 
         # Train on source images
         clean_losses = self.get_model().forward_train(
@@ -812,7 +885,7 @@ class DACS(UDADecorator):
 
                 warped_pl_loss.backward() #NOTE: do we need to retain graph?
 
-                if self.local_iter == 100:
+                if self.local_iter % 100 == 0:
                     self.init_cml_debug_metrics()
                 self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
 

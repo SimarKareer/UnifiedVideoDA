@@ -25,7 +25,9 @@ seed = 2  # seed with median performance
 # HRDA Configuration
 model = dict(
     type='HRDAEncoderDecoder',
-
+    # For multimodal
+    backbone=dict(type='mit_b5_linfus', style='pytorch'),
+    multimodal=True,
     decode_head=dict(
         type='HRDAHead',
         # Use the DAFormer decoder for each scale.
