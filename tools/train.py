@@ -320,6 +320,8 @@ def main(args):
         cfg.data.train.target.data_type = "rgb+flow"
         cfg.data.val.data_type = "rgb+flow"
         cfg.data.test.data_type = "rgb+flow"
+        if not (len(cfg.evaluation.eval_settings.metrics) == 1 and cfg.evaluation.eval_settings.metrics[0] == "mIoU"):
+            raise NotImplementedError("Only mIoU is valid for multimodal")
 
     print("FINISHED INIT DIST")
 

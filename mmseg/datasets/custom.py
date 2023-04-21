@@ -420,19 +420,19 @@ class CustomDataset(Dataset):
 
         pre_eval_results = []
         curr_pred = curr_preds[0][:, :, None]
-        future_pred = future_preds[0][:, :, None]
 
+        if future_preds is not None:
+            future_pred = future_preds[0][:, :, None]
+            future_seg_map = data["imtk_gt_semantic_seg"][0]
+            if future_seg_map.shape[0] == 1 and len(future_seg_map.shape) == 4:
+                future_seg_map = future_seg_map.squeeze(0).to(future_pred.device)
+    
         curr_seg_map = data["gt_semantic_seg"][0]
-        future_seg_map = data["imtk_gt_semantic_seg"][0]
-        # if future_seg_map.shape[0] == 1 and len(future_seg_map) == 4 or curr_seg_map.shape[0] == 1 and len(curr_seg_map) == 4:
-        #     assert False, "check this out"
-        if future_seg_map.shape[0] == 1 and len(future_seg_map.shape) == 4:
-            future_seg_map = future_seg_map.squeeze(0).to(future_pred.device)
         
         if curr_seg_map.shape[0] == 1 and len(curr_seg_map.shape) == 4:
-            curr_seg_map = curr_seg_map.squeeze(0).to(future_pred.device)
+            curr_seg_map = curr_seg_map.squeeze(0).to(curr_pred.device)
 
-        flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(future_pred.device)
+        flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(curr_pred.device)
         return_mask_count = "mask_count" in sub_metrics
         # breakpoint()
         if "pred_pred" in metrics:

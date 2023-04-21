@@ -38,6 +38,7 @@ from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
                                                 get_mean_std, strong_transform)
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 from mmseg.utils.utils import downscale_label_ratio
+from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.datasets.cityscapes import CityscapesDataset
 from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter, invNorm
 import torchvision

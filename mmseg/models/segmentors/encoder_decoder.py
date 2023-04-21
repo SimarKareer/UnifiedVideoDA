@@ -174,6 +174,9 @@ class EncoderDecoder(BaseSegmentor):
         return averaged_loss
 
     def _get_ensemble_logits(self, seg_logits):
+        """
+        seg_logits: based on this function should be [branch, B, H, W]
+        """
         seg_logit = 0
         alpha_soft = F.softmax(self.alpha)
         for l in range(self.backbone.num_parallel):

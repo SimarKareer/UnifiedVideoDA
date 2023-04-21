@@ -124,7 +124,7 @@ runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=1500, max_keep_ckpts=2)
 evaluation = dict(interval=1500, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
+    "metrics": ["mIoU"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
