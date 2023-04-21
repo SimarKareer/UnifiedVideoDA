@@ -106,7 +106,8 @@ class DACS(UDADecorator):
         self.enable_masking = self.mask_mode is not None
         self.print_grad_magnitude = cfg['print_grad_magnitude']
 
-        self.multimodal = cfg["multimodal"]
+        self.multimodal = cfg["modality"] != "rgb"
+        self.modality = cfg["modality"]
         assert self.mix == 'class'
 
         self.debug_fdist_mask = None
@@ -508,24 +509,23 @@ class DACS(UDADecorator):
 
         # concat flow and img
         assert(len(img_extra["flowVis"].shape) == 4)
-        repeat_factor = 3 if img_extra["flowVis"].shape[1:] == (1, 1024, 1024) else 1
-        img = torch.cat([img, img_extra["flowVis"].repeat(1, repeat_factor, 1, 1)], dim=1)
-        target_img = torch.cat([target_img, target_img_extra["flowVis"].repeat(1, repeat_factor, 1, 1)], dim=1)
+        img = torch.cat([img, three_channel_flow(img_extra["flowVis"])], dim=1)
+        target_img = torch.cat([target_img, three_channel_flow(target_img_extra["flowVis"])], dim=1)
 
         # Assign other important variables used throughout function.  Try not to edit the dictionary anywhere
         gt_semantic_seg, valid_pseudo_mask = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
 
         if DEBUG:
-            fig, axs = plt.subplots(5, 5, figsize=(15, 15))
+            fig, axs = plt.subplots(5, 8, figsize=(15, 15))
             subplotimg(axs[0, 0], invNorm(img[0][:3]), "Source IM 0")
             # subplotimg(axs[0, 1], invNorm(img[1][:3]), "Source IM 1")
-            subplotimg(axs[0, 2], invNorm(target_img[0][:3]), "Target IM 1")
-            # subplotimg(axs[0, 3], invNorm(target_img[1][:3]), "Target IM 2")
+            subplotimg(axs[0, 2], invNorm(target_img[0][:3]), "Target IM 0")
+            # subplotimg(axs[0, 3], invNorm(target_img[1][:3]), "Target IM 1")
 
             subplotimg(axs[1, 0], img_extra["flowVis"][0], "Source flow 0")
             # subplotimg(axs[1, 1], img_extra["flowVis"][1], "Source flow 1")
-            subplotimg(axs[1, 2], target_img_extra["flowVis"][0], "Target flow 1")
-            # subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 2")
+            subplotimg(axs[1, 2], target_img_extra["flowVis"][0], "Target flow 0")
+            # subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 1")
 
         if self.local_iter == 0:
             self._init_ema_weights()
@@ -568,7 +568,8 @@ class DACS(UDADecorator):
             # Apply mixing
             mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
             if DEBUG:
-                subplotimg(axs[2, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
+                subplotimg(axs[2, 3], invNorm(mixed_img[0][:3]), "Mixed Im with CutMix")
+                subplotimg(axs[2, 4], mixed_img[0][None, 3], "Mixed flow with CutMix")
                 subplotimg(axs[2, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
                 subplotimg(axs[2, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
             # Train on mixed images

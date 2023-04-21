@@ -97,7 +97,8 @@ def parse_args(args):
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
 
-    parser.add_argument("--multimodal", type=bool, default=False)
+    # parser.add_argument("--modality", type=str, default=None)
+    parser.add_argument("--imnet-feature-dist-lambda", type=float, default=None)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -312,16 +313,19 @@ def main(args):
     
     if args.lr is not None:
         print("Overwriting LR to ", args.lr)
-        cfg.optimizer.lr = args.lr    
+        cfg.optimizer.lr = args.lr   
     
-    if args.multimodal:
-        cfg.uda.multimodal = True
-        cfg.data.train.source.data_type = "rgb+flow"
-        cfg.data.train.target.data_type = "rgb+flow"
-        cfg.data.val.data_type = "rgb+flow"
-        cfg.data.test.data_type = "rgb+flow"
-        if not (len(cfg.evaluation.eval_settings.metrics) == 1 and cfg.evaluation.eval_settings.metrics[0] == "mIoU"):
-            raise NotImplementedError("Only mIoU is valid for multimodal")
+    if args.imnet_feature_dist_lambda is not None:
+        cfg.uda.imnet_feature_dist_lambda = args.imnet_feature_dist_lambda
+    
+    # if args.modality:
+    #     cfg.uda.multimodal = True
+    #     cfg.data.train.source.data_type = args.modality
+    #     cfg.data.train.target.data_type = args.modality
+    #     cfg.data.val.data_type = args.modality
+    #     cfg.data.test.data_type = args.modality
+    #     if not (len(cfg.evaluation.eval_settings.metrics) == 1 and cfg.evaluation.eval_settings.metrics[0] == "mIoU"):
+    #         raise NotImplementedError("Only mIoU is valid for multimodal")
 
     print("FINISHED INIT DIST")
 

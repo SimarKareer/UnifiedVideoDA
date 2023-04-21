@@ -184,10 +184,16 @@ class HRDAEncoderDecoder(EncoderDecoder):
             - x[0][0][2]: [2, 320, 32, 32]
             - x[0][0][3]: [2, 512, 16, 16]
         """
-        breakpoint()
+        # breakpoint()
         if self.multimodal:
             #x[:, i] = x[low/highres, segformer_layer]
-            seg_logits = [self.decode_head.forward_test([x[0, i], x[1, i]], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
+            breakpoint()
+            # seg_logits = [self.decode_head.forward_test([x[0][i], x[1][i]], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
+            seg_logits = []
+            for i in range(self.backbone.num_parallel):
+                # assert len(x[1].keys()) == 2 and ""
+                # moxX1 = {"features": x[1]["features"][i], "boxes"}
+                seg_logits.append(self.decode_head.forward_test([x[0, i], x[1, i]], img_metas, self.test_cfg))
             seg_logits = self._get_ensemble_logits(seg_logits)
         else:
             seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
@@ -201,27 +207,36 @@ class HRDAEncoderDecoder(EncoderDecoder):
                                    return_logits=False):
         """Run forward function and calculate loss for decode head in
         training.
+        x: x[low/highres, mmbranch, segformer_layer] #This might change in different calls of _decode_head_forward_test
+                      [B, C,  H,   W]
+        - x[0][0][0]: [2, 64, 128, 128]
+        - x[0][0][1]: [2, 128, 64, 64]
+        - x[0][0][2]: [2, 320, 32, 32]
+        - x[0][0][3]: [2, 512, 16, 16]
         
-        losses: dict{}
+        return: losses: dict{}
         """
         losses = dict()
         if self.multimodal:
             loss_decode_list = []
             for i in range(len(x)):
-                reset_crop = False
-                if i == len(x) - 1:
-                    reset_crop = True #Reset crop only on the last forward pass of the decoder
-                loss_decode_list.append(self.decode_head.forward_train(x[i], img_metas,
+                loss_decode_list.append(self.decode_head.forward_train([x[0][i], x[1][i]], img_metas,
                                                         gt_semantic_seg,
                                                         self.train_cfg,
-                                                        seg_weight, True, reset_crop))
+                                                        seg_weight=seg_weight, return_logits=True, reset_crop=False))
+            # loss_decode_list[loss_dict_number low or high res]["dict_key"]
+            ens_logit = [] # list over each of the 3 types of logits, (I think hr, lr, fuse but don't know the order)
+            for res_num in range(3):
+                ens_logit.append(self._get_ensemble_logits([loss_decode_list[i]['logits'][res_num] for i in range(self.backbone.num_parallel)]))
 
-            ens_logit = self._get_ensemble_logits([loss_decode_list[i]['logits'] for i in range(self.backbone.num_parallel)])
+            ens_logit = tuple(ens_logit)
             ens_loss = self.decode_head.losses(ens_logit, gt_semantic_seg, seg_weight)
             loss_decode_list.append(ens_loss)
             loss_decode = self._average_losses(loss_decode_list)
             if return_logits:
                 loss_decode['logits'] = ens_logit
+            
+            self.decode_head.reset_crop()
         else:
             loss_decode = self.decode_head.forward_train(x, img_metas,
                                                         gt_semantic_seg,

@@ -8,7 +8,7 @@ _base_ = [
     # DAFormer Network Architecture
     '../_base_/models/daformer_sepaspp_mitb5.py',
     # GTA->Cityscapes High-Resolution Data Loading
-    '../_base_/datasets/uda_viper_CSSeq.py',
+    '../_base_/datasets/uda_viper_CSSeq_smcrop.py',
     # DAFormer Self-Training
     '../_base_/uda/dacs_a999_fdthings_viper.py',
     # AdamW Optimizer
@@ -24,29 +24,11 @@ _base_ = [
 seed = 2  # seed with median performance
 # HRDA Configuration
 model = dict(
-    type='HRDAEncoderDecoder',
+    type='EncoderDecoder',
 
     decode_head=dict(
-        type='HRDAHead',
-        # Use the DAFormer decoder for each scale.
-        single_scale_head='DAFormerHead',
-        # Learn a scale attention for each class channel of the prediction.
-        attention_classwise=True,
-        # Set the detail loss weight $\lambda_d=0.1$.
-        hr_loss_weight=0.1),
-    # Use the full resolution for the detail crop and half the resolution for
-    # the context crop.
-    scales=[1, 0.5],
-    # Use a relative crop size of 0.5 (=512/1024) for the detail crop.
-    hr_crop_size=(512, 512),
-    # Use LR features for the Feature Distance as in the original DAFormer.
-    feature_scale=0.5,
-    # Make the crop coordinates divisible by 8 (output stride = 4,
-    # downscale factor = 2) to ensure alignment during fusion.
-    crop_coord_divisible=8,
-    # Use overlapping slide inference for detail crops for pseudo-labels.
-    hr_slide_inference=True,
-    # Use overlapping slide inference for fused crops during test time.
+        type='DAFormerHead',
+    ),
     test_cfg=dict(
         mode='slide',
         batched_slide=True,
@@ -70,7 +52,7 @@ data = dict(
     # Use one separate thread/worker for data loading.
     workers_per_gpu=3,
     # Batch size
-    samples_per_gpu=2,
+    samples_per_gpu=1,
 )
 # MIC Parameters
 uda = dict(
@@ -122,7 +104,7 @@ runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=1500, max_keep_ckpts=2)
 evaluation = dict(interval=1500, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
+    "metrics": ["mIoU"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,

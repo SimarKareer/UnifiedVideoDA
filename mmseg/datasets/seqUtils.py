@@ -303,12 +303,12 @@ class SeqUtils():
         finalIms["gt_semantic_seg"][0] = finalIms["gt_semantic_seg"][0].unsqueeze(0).long() #TODO, I shouldn't have to do this manually
 
         # Get rid of list dim for all tensors
-        if self.unpack_list: #NOTE: eventually we should just always unpack the list and account for the difference in the test function.
-            for k, v in finalIms.items():
-                if isinstance(v, list) and isinstance(v[0], torch.Tensor):
-                    finalIms[k] = v[0]
-                if k == "img_metas" or k == "imtk_metas":
-                    finalIms[k] = v[0]
+        # if self.unpack_list: #NOTE: eventually we should just always unpack the list and account for the difference in the test function.
+        for k, v in finalIms.items():
+            if isinstance(v, list) and isinstance(v[0], torch.Tensor):
+                finalIms[k] = v[0]
+            if k == "img_metas" or k == "imtk_metas":
+                finalIms[k] = v[0]
 
         def simple_norm(x, mu, std):
             return (x - mu) / std
@@ -385,6 +385,15 @@ class SeqUtils():
             pass
         else:
             raise Exception("Unknown data_type: {}".format(self.data_type))
+    
+
+        if not self.unpack_list:
+            for k, v in finalIms.items():
+                if isinstance(v, torch.Tensor):
+                    finalIms[k] = [v]
+                elif k == "img_metas" or k == "imtk_metas":
+                    finalIms[k] = [v]
+
         return finalIms
 
     def prepare_test_img(self, infos, idx):
