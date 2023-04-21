@@ -504,7 +504,6 @@ class DACS(UDADecorator):
         batch_size = img.shape[0]
         dev = img.device
         DEBUG = self.debug_mode
-        self.local_iter = 0
 
 
         # concat flow and img
