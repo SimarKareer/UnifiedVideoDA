@@ -10,6 +10,7 @@
 
 import numpy as np
 import torch
+import copy
 
 from mmseg.core import add_prefix
 from mmseg.ops import resize
@@ -184,16 +185,16 @@ class HRDAEncoderDecoder(EncoderDecoder):
             - x[0][0][2]: [2, 320, 32, 32]
             - x[0][0][3]: [2, 512, 16, 16]
         """
-        # breakpoint()
         if self.multimodal:
-            #x[:, i] = x[low/highres, segformer_layer]
-            breakpoint()
-            # seg_logits = [self.decode_head.forward_test([x[0][i], x[1][i]], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
-            seg_logits = []
-            for i in range(self.backbone.num_parallel):
-                # assert len(x[1].keys()) == 2 and ""
-                # moxX1 = {"features": x[1]["features"][i], "boxes"}
-                seg_logits.append(self.decode_head.forward_test([x[0, i], x[1, i]], img_metas, self.test_cfg))
+            # scale0branch0 = x[0][0]
+            # scale0branch1 = x[0][1]
+            # scale1branch0 = {"features": x[1]['features'][0], "boxes": x[1]['boxes']}
+            # scale1branch1 = {"features": x[1]['features'][1], "boxes": x[1]['boxes']}
+            x = [ 
+                [x[0][0], {"features": x[1]['features'][0], "boxes": copy.copy(x[1]['boxes'])}], #Need to copy boxes, as it is modified in-place by self.decode_head.forward_test
+                [x[0][1], {"features": x[1]['features'][1], "boxes": copy.copy(x[1]['boxes'])}]  #Need to copy boxes, as it is modified in-place by self.decode_head.forward_test
+                ] #Now x[i] corresponds to branch i
+            seg_logits = [self.decode_head.forward_test(x[i], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
             seg_logits = self._get_ensemble_logits(seg_logits)
         else:
             seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
