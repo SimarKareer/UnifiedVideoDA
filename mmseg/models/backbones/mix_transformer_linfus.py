@@ -6,6 +6,9 @@
 # This work is licensed under the NVIDIA Source Code License
 # ---------------------------------------------------------------
 import math
+import warnings
+from mmcv.runner.base_module import BaseModule
+from mmcv.runner.checkpoint import _load_checkpoint
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,6 +16,7 @@ from functools import partial
 
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from mmseg.models.builder import BACKBONES
+from mmseg.utils.logger import get_root_logger
 
 num_parallel = 2
 
@@ -251,16 +255,29 @@ class OverlapPatchEmbed(nn.Module):
         return x, H, W
 
 @BACKBONES.register_module()
-class MixVisionTransformerLinearFusion(nn.Module):
+class MixVisionTransformerLinearFusion(BaseModule):
     def __init__(self, ratio, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dims=[64, 128, 256, 512],
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=LayerNormParallel,
-                 depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1]):
-        super().__init__()
+                 depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1], style=None, pretrained=None, init_cfg = None, freeze_patch_embed=False):
+        super().__init__(init_cfg)
+
+        assert not (init_cfg and pretrained), \
+            'init_cfg and pretrained cannot be setting at the same time'
+        if isinstance(pretrained, str) or pretrained is None:
+            warnings.warn('DeprecationWarning: pretrained is a deprecated, '
+                          'please use "init_cfg" instead')
+        else:
+            raise TypeError('pretrained must be a str or None')
+        
         self.num_classes = num_classes
         self.depths = depths
+        self.pretrained = pretrained
         self.embed_dims = embed_dims
+        self.init_cfg = init_cfg
 
+        if freeze_patch_embed:
+            raise NotImplementedError("Handle this the way handled in mix_transformer.py")
         # patch_embed
         self.patch_embed1 = OverlapPatchEmbed(img_size=img_size, patch_size=7, stride=4, in_chans=in_chans,
                                               embed_dim=embed_dims[0])
@@ -308,10 +325,7 @@ class MixVisionTransformerLinearFusion(nn.Module):
             for i in range(depths[3])])
         self.norm4 = norm_layer(embed_dims[3])
         self.num_parallel = num_parallel
-        # classification head
-        # self.head = nn.Linear(embed_dims[3], num_classes) if num_classes > 0 else nn.Identity()
-
-        self.apply(self._init_weights)
+        
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -327,12 +341,43 @@ class MixVisionTransformerLinearFusion(nn.Module):
             m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
             if m.bias is not None:
                 m.bias.data.zero_()
-    '''
-    def init_weights(self, pretrained=None):
-        if isinstance(pretrained, str):
-            logger = get_root_logger()
-            load_checkpoint(self, pretrained, map_location='cpu', strict=False, logger=logger)
-    '''
+    
+    def init_weights(self):
+        logger = get_root_logger()
+        if self.pretrained is None:
+            logger.info('Init mit from scratch.')
+            for m in self.modules():
+                self._init_weights(m)
+        elif isinstance(self.pretrained, str):
+            logger.info('Load mit checkpoint.')
+            checkpoint = _load_checkpoint(
+                self.pretrained, logger=logger, map_location='cpu')
+            if 'state_dict' in checkpoint:
+                state_dict = checkpoint['state_dict']
+            elif 'model' in checkpoint:
+                state_dict = checkpoint['model']
+            else:
+                state_dict = checkpoint
+            state_dict.pop('head.weight')
+            state_dict.pop('head.bias')
+            state_dict = self.expand_state_dict(self.state_dict(), state_dict, self.num_parallel)
+            self.load_state_dict(state_dict, strict=True)
+    
+    def expand_state_dict(self, model_dict, state_dict, num_parallel):
+        model_dict_keys = model_dict.keys()
+        state_dict_keys = state_dict.keys()
+        for model_dict_key in model_dict_keys:
+            model_dict_key_re = model_dict_key.replace('module.', '')
+            if model_dict_key_re in state_dict_keys:
+                model_dict[model_dict_key] = state_dict[model_dict_key_re]
+            for i in range(num_parallel):
+                ln = '.ln_%d' % i
+                replace = True if ln in model_dict_key_re else False
+                model_dict_key_re = model_dict_key_re.replace(ln, '')
+                if replace and model_dict_key_re in state_dict_keys:
+                    model_dict[model_dict_key] = state_dict[model_dict_key_re]
+        return model_dict
+            
     def reset_drop_path(self, drop_path_rate):
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths))]
         cur = 0
@@ -446,7 +491,7 @@ class mit_b0_linfus(MixVisionTransformerLinearFusion):
         super(mit_b0_linfus, self).__init__(ratio = ratio,
             patch_size=4, embed_dims=[32, 64, 160, 256], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=LayerNormParallel, depths=[2, 2, 2, 2], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+            drop_rate=0.0, drop_path_rate=0.1, **kwargs)
 
 @BACKBONES.register_module()
 class mit_b1_linfus(MixVisionTransformerLinearFusion):
@@ -454,7 +499,7 @@ class mit_b1_linfus(MixVisionTransformerLinearFusion):
         super(mit_b1_linfus, self).__init__(ratio = ratio,
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=LayerNormParallel, depths=[2, 2, 2, 2], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+            drop_rate=0.0, drop_path_rate=0.1, **kwargs)
 
 @BACKBONES.register_module()
 class mit_b2_linfus(MixVisionTransformerLinearFusion):
@@ -462,7 +507,7 @@ class mit_b2_linfus(MixVisionTransformerLinearFusion):
         super(mit_b2_linfus, self).__init__(ratio = ratio,
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=LayerNormParallel, depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+            drop_rate=0.0, drop_path_rate=0.1, **kwargs)
 
 @BACKBONES.register_module()
 class mit_b3_linfus(MixVisionTransformerLinearFusion):
@@ -470,7 +515,7 @@ class mit_b3_linfus(MixVisionTransformerLinearFusion):
         super(mit_b3_linfus, self).__init__(ratio = ratio,
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=LayerNormParallel, depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+            drop_rate=0.0, drop_path_rate=0.1, **kwargs)
 
 @BACKBONES.register_module()
 class mit_b4_linfus(MixVisionTransformerLinearFusion):
@@ -478,7 +523,7 @@ class mit_b4_linfus(MixVisionTransformerLinearFusion):
         super(mit_b4_linfus, self).__init__(ratio = ratio,
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=LayerNormParallel, depths=[3, 8, 27, 3], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+            drop_rate=0.0, drop_path_rate=0.1, **kwargs)
 
 @BACKBONES.register_module()
 class mit_b5_linfus(MixVisionTransformerLinearFusion):
@@ -486,4 +531,4 @@ class mit_b5_linfus(MixVisionTransformerLinearFusion):
         super(mit_b5_linfus, self).__init__(ratio = ratio,
             patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[4, 4, 4, 4],
             qkv_bias=True, norm_layer=LayerNormParallel, depths=[3, 6, 40, 3], sr_ratios=[8, 4, 2, 1],
-            drop_rate=0.0, drop_path_rate=0.1)
+            drop_rate=0.0, drop_path_rate=0.1, **kwargs)

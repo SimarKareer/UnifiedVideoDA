@@ -498,7 +498,14 @@ class DACS(UDADecorator):
             log_vars["Plain PL mIoU"] = np.nanmean((self.cml_debug_metrics["plain_cml_intersect"] / self.cml_debug_metrics["plain_cml_union"]).numpy())
         
         return log_vars
-        
+
+    def get_grad_magnitude(self):
+        params = self.get_model().backbone.parameters()
+        seg_grads = [
+            p.grad.detach().clone() for p in params if p.grad is not None
+        ]
+        grad_mag = calc_grad_magnitude(seg_grads)
+        return grad_mag
 
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
         log_vars = {}
@@ -551,6 +558,8 @@ class DACS(UDADecorator):
         log_vars.update(clean_log_vars)
         clean_loss.backward(retain_graph=self.enable_fdist)
 
+        if self.print_grad_magnitude:
+            mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
 
         for m in self.get_ema_model().modules():
             if isinstance(m, _DropoutNd):
@@ -558,7 +567,6 @@ class DACS(UDADecorator):
             if isinstance(m, DropPath):
                 m.training = False
         pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
-        
         gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
         log_vars["L_warp"] = 0
@@ -695,12 +703,8 @@ class DACS(UDADecorator):
             return log_vars
         
         if self.print_grad_magnitude:
-            params = self.get_model().backbone.parameters()
-            seg_grads = [
-                p.grad.detach().clone() for p in params if p.grad is not None
-            ]
-            grad_mag = calc_grad_magnitude(seg_grads)
-            mmcv.print_log(f'Seg. Grad.: {grad_mag}', 'mmseg')
+            mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
+            
 
         # ImageNet feature distance
         if self.enable_fdist:
@@ -922,6 +926,9 @@ class DACS(UDADecorator):
                 masked_loss, masked_log_vars = self._parse_losses(masked_loss)
                 log_vars.update(masked_log_vars)
                 masked_loss.backward()
+
+            self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars)
+            
 
             if DEBUG:
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
