@@ -388,6 +388,10 @@ def multi_gpu_test(model,
                 if not os.path.exists(directory):
                     os.makedirs(directory)
                 plt.savefig(out_file, dpi=300)
+            
+            # if it % 100 == 0:
+            #     dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+
 
         results.extend(eval_vals)
 

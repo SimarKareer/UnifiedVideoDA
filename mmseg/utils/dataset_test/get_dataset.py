@@ -70,7 +70,10 @@ def get_viper_train():
 
     return viper
 
-def get_viper_val():
+def get_viper_val(get_dict=False):
+    """
+    get_dict: Whether to return the initialization dictionary or the dataset itself
+    """
     viper_val_pipeline = {
         "im_load_pipeline": [
             dict(type='LoadImageFromFile'),
@@ -83,7 +86,7 @@ def get_viper_val():
             dict(type='LoadFlowFromFile'),
         ],
         "shared_pipeline": [
-            dict(type='Resize', keep_ratio=True, img_scale=(2560, 1440)),
+            dict(type='Resize', keep_ratio=True, img_scale=(1920, 1080)),
             dict(type='RandomFlip', prob=0.0),
         ],
         "im_pipeline": [
@@ -96,18 +99,32 @@ def get_viper_val():
             dict(type='Collect', keys=['img', 'gt_semantic_seg']),
         ]
     }
-
-    viper = ViperSeqDataset(
-        data_root=viper_data_root,
-        img_dir='val/img',
-        ann_dir='val/cls',
-        # split='splits/val.txt',
-        split='splits/val_flow_compatible.txt',
-        pipeline=viper_val_pipeline,
-        frame_offset=1,
-        flow_dir=viper_val_flow_dir,
-        no_crash_dataset=True
-    )
+    
+    if get_dict:
+        viper = dict(
+            type="ViperSeqDataset",
+            data_root=viper_data_root,
+            img_dir='val/img',
+            ann_dir='val/cls',
+            # split='splits/val.txt',
+            split='splits/val_flow_compatible.txt',
+            pipeline=viper_val_pipeline,
+            frame_offset=1,
+            flow_dir=viper_val_flow_dir,
+            no_crash_dataset=True
+        )
+    else:
+        viper = ViperSeqDataset(
+            data_root=viper_data_root,
+            img_dir='val/img',
+            ann_dir='val/cls',
+            # split='splits/val.txt',
+            split='splits/val_flow_compatible.txt',
+            pipeline=viper_val_pipeline,
+            frame_offset=1,
+            flow_dir=viper_val_flow_dir,
+            no_crash_dataset=True
+        )
 
     return viper
 

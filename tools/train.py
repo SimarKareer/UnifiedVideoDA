@@ -24,6 +24,7 @@ from mmseg.datasets import build_dataset, build_dataloader
 from mmseg.models.builder import build_train_model
 from mmseg.utils import collect_env, get_root_logger
 from mmseg.utils.collect_env import gen_code_archive
+from mmseg.utils.dataset_test.get_dataset import get_viper_val
 import configs._base_.schedules.poly10warm as poly10warm
 import configs._base_.schedules.poly10 as poly10
 import configs._base_.schedules.adamw as adamw
@@ -74,7 +75,7 @@ def parse_args(args):
     parser.add_argument('--optimizer', type=str, default=None, choices=["adamw", "sgd"])
 
     parser.add_argument('--analysis', type=bool, default=False)
-    parser.add_argument('--eval', type=bool, default=False)
+    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq"])
     parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--debug-mode', type=bool, default=False)
     parser.add_argument('--pre-exp-check', type=bool, default=False)
@@ -231,11 +232,15 @@ def main(args):
     if args.debug_mode:
         cfg.uda.debug_mode = True
 
-    if args.eval:
+    if args.eval is not None:
         print("EVAL MODE")
         cfg.runner.max_iters = 1
         cfg.evaluation.interval = 1
         cfg.uda.stub_training = True
+        if args.eval == "viper":
+            cfg.data.val = get_viper_val(True)
+            cfg.data.val["data_type"] = "rgb+flowxynorm"
+
     
     if args.source_only2:
         cfg.uda.source_only2=True

@@ -405,6 +405,13 @@ class DACS(UDADecorator):
         class_filter = self.masked_classes_cutmix
         mix_masks = get_class_masks(gt_semantic_seg, class_filter=class_filter)
 
+        # fig, axs = plt.subplots(5, 8, figsize=(15, 15))
+        # subplotimg(axs[0, 0], img[:, 5], "Img before", cmap="Greys")
+        # subplotimg(axs[0, 1], target_img[:, 5], "target_img before", cmap="Greys")
+        # subplotimg(axs[1, 0], invNorm(img[0, :3]), "Img Before")
+        # subplotimg(axs[1, 1], invNorm(target_img[0, :3]), "Target Img Before")
+
+
         for i in range(batch_size):
             strong_parameters['mix'] = mix_masks[i]
             mixed_img[i], mixed_lbl[i] = strong_transform(
@@ -418,6 +425,12 @@ class DACS(UDADecorator):
         del gt_pixel_weight
         mixed_img = torch.cat(mixed_img)
         mixed_lbl = torch.cat(mixed_lbl)
+
+        # subplotimg(axs[0, 2], mixed_img[:, 5], "Mixed after", cmap="Greys")
+        # subplotimg(axs[1, 2], invNorm(mixed_img[0, :3]), "Mixed after")
+        # fig.savefig("work_dirs/debug/transform.png")
+        # breakpoint()
+
 
         return mixed_img, mixed_lbl, mixed_seg_weight, mix_masks
     
@@ -514,10 +527,10 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
 
-        # concat flow and img
+        # concat flow and img.  NOTE, using a copied version.
         assert(len(img_extra["flowVis"].shape) == 4)
-        img = torch.cat([img, three_channel_flow(img_extra["flowVis"])], dim=1)
-        target_img = torch.cat([target_img, three_channel_flow(target_img_extra["flowVis"])], dim=1)
+        img = torch.cat([img, three_channel_flow(img_extra["flowVis"].clone())], dim=1)
+        target_img = torch.cat([target_img, three_channel_flow(target_img_extra["flowVis"].clone())], dim=1)
 
         # Assign other important variables used throughout function.  Try not to edit the dictionary anywhere
         gt_semantic_seg, valid_pseudo_mask = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
