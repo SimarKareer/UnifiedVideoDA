@@ -325,7 +325,6 @@ def main(args):
         cfg.uda.imnet_feature_dist_lambda = args.imnet_feature_dist_lambda
     
     if args.modality_dropout_weights is not None:
-        breakpoint()
         cfg.uda.modality_dropout_weights = args.modality_dropout_weights
     
     # if args.modality:

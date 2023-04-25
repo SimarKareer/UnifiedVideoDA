@@ -94,8 +94,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
         self.crop_coord_divisible = crop_coord_divisible
         self.blur_hr_crop = blur_hr_crop
 
-    def extract_unscaled_feat(self, img):
-        x = self.backbone(img)
+    def extract_unscaled_feat(self, img, masking_branch = None):
+        x = self.backbone(img, masking_branch)
         if self.with_neck:
             x = self.neck(x)
         return x
@@ -273,7 +273,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 align_corners=self.align_corners)
         return out
 
-    def _forward_train_features(self, img):
+    def _forward_train_features(self, img, masking_branch):
         mres_feats = []
         self.decode_head.debug_output = {}
         assert len(self.scales) <= 2, 'Only up to 2 scales are supported.'
@@ -298,7 +298,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
             if self.decode_head.debug:
                 self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
                     scaled_img.detach()
-            mres_feats.append(self.extract_unscaled_feat(scaled_img))
+            mres_feats.append(self.extract_unscaled_feat(scaled_img, masking_branch))
         return mres_feats, prob_vis
 
     def forward_train(self,
@@ -308,7 +308,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
                       seg_weight=None,
                       return_feat=False,
                       return_logits=False,
-                      mask=False):
+                      masking_branch=None):
         """Forward function for training.
 
         Args:
@@ -320,18 +320,16 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 `mmseg/datasets/pipelines/formatting.py:Collect`.
             gt_semantic_seg (Tensor): Semantic segmentation masks
                 used if the architecture supports semantic segmentation task.
-            mask: whether to do modality dropout
+            masking_branch: what branches to mask (modality dropout)
 
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        if mask:
-            raise NotImplementedError("HRDA modality dropout not implemented yet")
         self.update_debug_state()
 
         losses = dict()
 
-        mres_feats, prob_vis = self._forward_train_features(img)
+        mres_feats, prob_vis = self._forward_train_features(img, masking_branch)
         for i, s in enumerate(self.scales):
             if return_feat and self.feature_scale in \
                     self.feature_scale_all_strs:
