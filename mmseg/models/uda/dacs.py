@@ -522,7 +522,6 @@ class DACS(UDADecorator):
         return grad_mag
 
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
-        breakpoint()
         log_vars = {}
         batch_size = img.shape[0]
         dev = img.device
@@ -596,7 +595,6 @@ class DACS(UDADecorator):
                 subplotimg(axs[2, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
                 subplotimg(axs[2, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
             # Train on mixed images
-            breakpoint()
             if self.modality_dropout_weights is not None:
                 masking_branch = random.choices([0, 1, -1], weights = self.modality_dropout_weights, k = mixed_img.shape[0])
             else:

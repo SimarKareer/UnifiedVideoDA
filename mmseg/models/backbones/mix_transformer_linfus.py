@@ -253,13 +253,9 @@ class OverlapPatchEmbed(nn.Module):
         #     print(self.mask_token[:10], x.device, "token")
         _, N, L, D = x.shape  # modality, batch, length, dim
         N = torch.sum(torch.tensor(masking_branch) != -1)
-        indicies = torch.FloatTensor(N, L).uniform_() <= self.masking_ratio
-        # x[indicies] = self.mask_token
         masking_branch = torch.tensor(masking_branch).to(x.device)
         index = torch.stack([torch.tensor(masking_branch == 0), torch.tensor(masking_branch == 1)]).to(x.device)
-        xtemp = x[index]
-        xtemp[indicies] = self.mask_token
-        x[index] = xtemp
+        x[index] = self.mask_token
         return x
     
     def forward(self, x, masking_branch = None):
