@@ -229,7 +229,7 @@ class OverlapPatchEmbed(nn.Module):
         self.proj = ModuleParallel(nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride,
                               padding=(patch_size[0] // 2, patch_size[1] // 2)))
         self.norm = LayerNormParallel(embed_dim)
-
+        self.mask_token = nn.parameter.Parameter(torch.randn(embed_dim), requires_grad = True)
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -246,12 +246,34 @@ class OverlapPatchEmbed(nn.Module):
             m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
             if m.bias is not None:
                 m.bias.data.zero_()
-
-    def forward(self, x):
+    
+    def mask_with_learnt_mask(self, x, masking_branch):
+        # if self.mask_token is None: #When training in the SupOnly loop, unused params raise error in DDP. Hence instantiating mask_token only when masked training begins
+        #     self.mask_token = nn.parameter.Parameter(torch.randn(self.embed_dim, device=x.device), requires_grad = True)
+        #     print(self.mask_token[:10], x.device, "token")
+        _, N, L, D = x.shape  # modality, batch, length, dim
+        N = torch.sum(torch.tensor(masking_branch) != -1)
+        indicies = torch.FloatTensor(N, L).uniform_() <= self.masking_ratio
+        # x[indicies] = self.mask_token
+        masking_branch = torch.tensor(masking_branch).to(x.device)
+        index = torch.stack([torch.tensor(masking_branch == 0), torch.tensor(masking_branch == 1)]).to(x.device)
+        xtemp = x[index]
+        xtemp[indicies] = self.mask_token
+        x[index] = xtemp
+        return x
+    
+    def forward(self, x, masking_branch = None):
+        sum_mask = torch.sum(self.mask_token)
         x = self.proj(x)
         _, _, H, W = x[0].shape
         x = [x_.flatten(2).transpose(1, 2) for x_ in x]
         x = self.norm(x)
+        if masking_branch is not None:
+            xstacked = torch.stack(x)
+            xstacked  = self.mask_with_learnt_mask(xstacked, masking_branch)
+            x = [xstacked[i] for i in range(xstacked.shape[0])]
+        else:
+            x[0] = x[0] + 0*sum_mask #So that when training with SupOnly (and not using any masking), DDP doesn't raise an error that you have unused parameters. 
         return x, H, W
 
 @BACKBONES.register_module()
@@ -410,17 +432,13 @@ class MixVisionTransformerLinearFusion(BaseModule):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x):
+    def forward_features(self, x, masking_branch):
         B = x[0].shape[0]
         outs0, outs1 = [], []
-        # masks = []
 
         # stage 1
-        x, H, W = self.patch_embed1(x)
+        x, H, W = self.patch_embed1(x, masking_branch)
         for i, blk in enumerate(self.block1):
-            # score = self.score_predictor[0](x)
-            # mask = [F.softmax(score_.reshape(B, -1, 2), dim=2)[:, :, 0] for score_ in score]  # mask_: [B, N]
-            # masks.append(mask)
             x = blk(x, H, W)
         x = self.norm1(x)
         x = [x_.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous() for x_ in x]
@@ -428,11 +446,8 @@ class MixVisionTransformerLinearFusion(BaseModule):
         outs1.append(x[1])
 
         # stage 2
-        x, H, W = self.patch_embed2(x)
+        x, H, W = self.patch_embed2(x, masking_branch = None) #masking_branch = None disables masking
         for i, blk in enumerate(self.block2):
-            # score = self.score_predictor[1](x)
-            # mask = [F.softmax(score_.reshape(B, -1, 2), dim=2)[:, :, 0] for score_ in score]  # mask_: [B, N]
-            # masks.append(mask)
             x = blk(x, H, W)
         x = self.norm2(x)
         x = [x_.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous() for x_ in x]
@@ -440,11 +455,8 @@ class MixVisionTransformerLinearFusion(BaseModule):
         outs1.append(x[1])
 
         # stage 3
-        x, H, W = self.patch_embed3(x)
+        x, H, W = self.patch_embed3(x, masking_branch = None) #masking_branch = None disables masking
         for i, blk in enumerate(self.block3):
-            # score = self.score_predictor[2](x)
-            # mask = [F.softmax(score_.reshape(B, -1, 2), dim=2)[:, :, 0] for score_ in score]  # mask_: [B, N]
-            # masks.append(mask)
             x = blk(x, H, W)
         x = self.norm3(x)
         x = [x_.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous() for x_ in x]
@@ -452,11 +464,8 @@ class MixVisionTransformerLinearFusion(BaseModule):
         outs1.append(x[1])
 
         # stage 4
-        x, H, W = self.patch_embed4(x)
+        x, H, W = self.patch_embed4(x, masking_branch = None) #masking_branch = None disables masking
         for i, blk in enumerate(self.block4):
-            # score = self.score_predictor[3](x)
-            # mask = [F.softmax(score_.reshape(B, -1, 2), dim=2)[:, :, 0] for score_ in score]  # mask_: [B, N]
-            # masks.append(mask)
             x = blk(x, H, W)
         x = self.norm4(x)
         x = [x_.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous() for x_ in x]
@@ -465,11 +474,11 @@ class MixVisionTransformerLinearFusion(BaseModule):
 
         return [outs0, outs1]
 
-    def forward(self, x):
+    def forward(self, x, masking_branch = None):
         b, c, h, w = x.shape
         assert c == 6, "Expected the input image to have 6 channels (RGBFFF), got {}".format(c)
         x = [x[:, :3, :, :], x[:, 3:, :, :]]
-        x = self.forward_features(x)
+        x = self.forward_features(x, masking_branch)
         return x
 
 

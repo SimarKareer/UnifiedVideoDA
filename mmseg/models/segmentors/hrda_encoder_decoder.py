@@ -307,7 +307,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
                       gt_semantic_seg,
                       seg_weight=None,
                       return_feat=False,
-                      return_logits=False):
+                      return_logits=False,
+                      mask=False):
         """Forward function for training.
 
         Args:
@@ -319,10 +320,13 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 `mmseg/datasets/pipelines/formatting.py:Collect`.
             gt_semantic_seg (Tensor): Semantic segmentation masks
                 used if the architecture supports semantic segmentation task.
+            mask: whether to do modality dropout
 
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        if mask:
+            raise NotImplementedError("HRDA modality dropout not implemented yet")
         self.update_debug_state()
 
         losses = dict()

@@ -86,6 +86,7 @@ uda = dict(
     class_mask_cutmix=None,
     exclusive_warp_cutmix=False,
     modality="rgb",
+    modality_dropout_weights=None
 )
 # Optimizer Hyperparameters
 optimizer_config = None
@@ -102,8 +103,8 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=1500, max_keep_ckpts=2)
-evaluation = dict(interval=1500, eval_settings={
+checkpoint_config = dict(by_epoch=False, interval=3000, max_keep_ckpts=2)
+evaluation = dict(interval=3000, eval_settings={
     "metrics": ["mIoU"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,

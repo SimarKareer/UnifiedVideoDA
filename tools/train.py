@@ -100,6 +100,7 @@ def parse_args(args):
 
     # parser.add_argument("--modality", type=str, default=None)
     parser.add_argument("--imnet-feature-dist-lambda", type=float, default=None)
+    parser.add_argument("--modality-dropout-weights", nargs=3, metavar=("RGB Dropout", "Flow Dropout", "Neither Dropout"), type=float, default=None)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -322,6 +323,10 @@ def main(args):
     
     if args.imnet_feature_dist_lambda is not None:
         cfg.uda.imnet_feature_dist_lambda = args.imnet_feature_dist_lambda
+    
+    if args.modality_dropout_weights is not None:
+        breakpoint()
+        cfg.uda.modality_dropout_weights = args.modality_dropout_weights
     
     # if args.modality:
     #     cfg.uda.multimodal = True
