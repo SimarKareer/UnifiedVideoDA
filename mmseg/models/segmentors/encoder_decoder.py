@@ -17,6 +17,7 @@ from ..builder import SEGMENTORS
 from ..utils.dacs_transforms import get_mean_std
 from ..utils.visualization import prepare_debug_out, subplotimg
 from .base import BaseSegmentor
+import random
 
 
 @SEGMENTORS.register_module()
@@ -79,9 +80,9 @@ class EncoderDecoder(BaseSegmentor):
             else:
                 self.auxiliary_head = builder.build_head(auxiliary_head)
 
-    def extract_feat(self, img):
+    def extract_feat(self, img, masking_branch = None):
         """Extract features from images."""
-        x = self.backbone(img)
+        x = self.backbone(img, masking_branch)
         if self.with_neck:
             x = self.neck(x)
         return x
@@ -287,7 +288,8 @@ class EncoderDecoder(BaseSegmentor):
                       gt_semantic_seg,
                       seg_weight=None,
                       return_feat=False,
-                      return_logits=False):
+                      return_logits=False,
+                      masking_branch=None):
         """Forward function for training.
 
         Args:
@@ -299,13 +301,14 @@ class EncoderDecoder(BaseSegmentor):
                 `mmseg/datasets/pipelines/formatting.py:Collect`.
             gt_semantic_seg (Tensor): Semantic segmentation masks
                 used if the architecture supports semantic segmentation task.
+            masking_branch: what branches to mask (modality dropout)
 
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
         self.update_debug_state()
 
-        x = self.extract_feat(img)
+        x = self.extract_feat(img, masking_branch)
 
         losses = dict()
         if return_feat:

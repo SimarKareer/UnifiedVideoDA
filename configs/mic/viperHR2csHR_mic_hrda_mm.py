@@ -34,7 +34,7 @@ data = dict(
         data_type=FLOW_TYPE
     )
 )
-evaluation = dict(interval=1500, eval_settings={
+evaluation = dict(interval=3000, eval_settings={
     "metrics": ["mIoU"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,

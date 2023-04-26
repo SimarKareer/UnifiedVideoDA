@@ -108,6 +108,7 @@ class DACS(UDADecorator):
 
         self.multimodal = cfg["modality"] != "rgb"
         self.modality = cfg["modality"]
+        self.modality_dropout_weights = cfg["modality_dropout_weights"]
         assert self.mix == 'class'
 
         self.debug_fdist_mask = None
@@ -594,12 +595,17 @@ class DACS(UDADecorator):
                 subplotimg(axs[2, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
                 subplotimg(axs[2, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
             # Train on mixed images
+            if self.modality_dropout_weights is not None:
+                masking_branch = random.choices([0, 1, -1], weights = self.modality_dropout_weights, k = mixed_img.shape[0])
+            else:
+                masking_branch = None
             mix_losses = self.get_model().forward_train(
                 mixed_img,
                 img_metas,
                 mixed_lbl,
                 seg_weight=mixed_seg_weight,
                 return_feat=False,
+                masking_branch=masking_branch
             )
             seg_debug['Mix'] = self.get_model().debug_output
             mix_losses = add_prefix(mix_losses, 'mix')

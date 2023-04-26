@@ -104,6 +104,7 @@ uda = dict(
     class_mask_cutmix=None,
     exclusive_warp_cutmix=False,
     modality="rgb",
+    modality_dropout_weights=None
 )
 # Optimizer Hyperparameters
 optimizer_config = None
