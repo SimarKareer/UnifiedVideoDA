@@ -520,6 +520,19 @@ class DACS(UDADecorator):
         ]
         grad_mag = calc_grad_magnitude(seg_grads)
         return grad_mag
+    
+    def imnet_feat_dist(self, img, gt_semantic_seg, src_feat, log_vars, log_prefix = None):
+        # ImageNet feature distance
+        # if self.enable_fdist:
+        feat_loss, feat_log = self.calc_feat_dist(img, gt_semantic_seg,
+                                                    src_feat)
+        feat_log = add_prefix(feat_log, 'src')
+        if log_prefix is not None:
+            feat_log = add_prefix(feat_log, log_prefix)
+        log_vars.update(feat_log)
+        return feat_loss
+
+        
 
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
         log_vars = {}
@@ -574,6 +587,16 @@ class DACS(UDADecorator):
 
         if self.print_grad_magnitude:
             mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
+
+        
+        # if self.enable_fdist:
+        #     breakpoint()
+        #     feat_loss_rgb = self.imnet_feat_dist(img, gt_semantic_seg, src_feat[0], log_vars, log_prefix='rgb')
+        #     feat_loss_rgb.backward(retain_graph=True)
+        #     feat_loss_flow = self.imnet_feat_dist(img, gt_semantic_seg, src_feat[1], log_vars, log_prefix='flow')
+        #     feat_loss_flow.backward()
+        #     del src_feat, clean_loss
+        #     del feat_loss_rgb, feat_loss_flow
 
         for m in self.get_ema_model().modules():
             if isinstance(m, _DropoutNd):
