@@ -82,7 +82,10 @@ class EncoderDecoder(BaseSegmentor):
 
     def extract_feat(self, img, masking_branch = None):
         """Extract features from images."""
-        x = self.backbone(img, masking_branch)
+        if not self.multimodal:
+            x = self.backbone(img)
+        else:
+            x = self.backbone(img, masking_branch)
         if self.with_neck:
             x = self.neck(x)
         return x
@@ -282,14 +285,14 @@ class EncoderDecoder(BaseSegmentor):
         if self.with_auxiliary_head:
             self.auxiliary_head.debug = self.debug
 
-    def forward_train(self,
-                      img,
-                      img_metas,
-                      gt_semantic_seg,
-                      seg_weight=None,
-                      return_feat=False,
-                      return_logits=False,
-                      masking_branch=None):
+    def forward(self,
+                img,
+                img_metas,
+                gt_semantic_seg,
+                seg_weight=None,
+                return_feat=False,
+                return_logits=False,
+                masking_branch=None):
         """Forward function for training.
 
         Args:
@@ -331,6 +334,16 @@ class EncoderDecoder(BaseSegmentor):
         self.local_iter += 1
         return losses
 
+    def forward_train(self,
+                    img,
+                    img_metas,
+                    gt_semantic_seg,
+                    seg_weight=None,
+                    return_feat=False,
+                    return_logits=False,
+                    masking_branch=None):
+        self.forward(img, img_metas, gt_semantic_seg, seg_weight, return_feat, return_logits, masking_branch)
+    
     def process_debug(self, img, img_metas):
         self.debug_output = {
             'Image': img,

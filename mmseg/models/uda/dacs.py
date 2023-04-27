@@ -143,7 +143,8 @@ class DACS(UDADecorator):
         if self.enable_masking:
             self.mic = MaskingConsistencyModule(require_teacher=False, cfg=cfg)
         if self.enable_fdist:
-            self.imnet_model = build_segmentor(deepcopy(cfg['model']))
+            raise NotImplementedError("Not initializing this to save memory.")
+            # self.imnet_model = build_segmentor(deepcopy(cfg['model']))
         else:
             self.imnet_model = None
 
@@ -155,9 +156,7 @@ class DACS(UDADecorator):
             "warp_cml_union", "plain_cml_union", "plain_mask_cml_union", 
             "warp_cml_pixel_total", "plain_cml_pixel_total", "plain_mask_cml_pixel_total",
             "warp_cml_mask_hit", 
-            "warp_cml_mask_total"]}
-        
-        
+            "warp_cml_mask_total"]}  
 
     def get_ema_model(self):
         return get_module(self.ema_model)
@@ -351,7 +350,6 @@ class DACS(UDADecorator):
         grid = (grid * 255).astype(np.uint8)
         cv2.imwrite(path, grid)
 
-
     def get_pl(self, target_img, target_img_metas, seg_debug, seg_debug_key, valid_pseudo_mask):
         ema_logits = self.get_ema_model().generate_pseudo_label(
                 target_img, target_img_metas)
@@ -532,8 +530,6 @@ class DACS(UDADecorator):
         log_vars.update(feat_log)
         return feat_loss
 
-        
-
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
         log_vars = {}
         batch_size = img.shape[0]
@@ -577,8 +573,7 @@ class DACS(UDADecorator):
         means, stds = get_mean_std(img_metas, dev)
 
         # Train on source images
-        clean_losses = self.get_model().forward_train(
-            img, img_metas, gt_semantic_seg, return_feat=True)
+        clean_losses = self.model(img, img_metas, gt_semantic_seg, return_feat=True)
         src_feat = clean_losses.pop('features')
         seg_debug['Source'] = self.get_model().debug_output
         clean_loss, clean_log_vars = self._parse_losses(clean_losses)
@@ -622,7 +617,7 @@ class DACS(UDADecorator):
                 masking_branch = random.choices([0, 1, -1], weights = self.modality_dropout_weights, k = mixed_img.shape[0])
             else:
                 masking_branch = None
-            mix_losses = self.get_model().forward_train(
+            mix_losses = self.model(
                 mixed_img,
                 img_metas,
                 mixed_lbl,
@@ -638,7 +633,7 @@ class DACS(UDADecorator):
         
         # Masked Training
         if self.enable_masking and self.mask_mode.startswith('separate'):
-            masked_loss = self.mic(self.get_model(), img, img_metas,
+            masked_loss = self.mic(self.model, img, img_metas,
                                 gt_semantic_seg, target_img,
                                 target_img_metas, valid_pseudo_mask,
                                 pseudo_label, pseudo_weight)
@@ -659,8 +654,6 @@ class DACS(UDADecorator):
             self.init_cml_debug_metrics()
         self.local_iter += 1
         return log_vars
-
-
 
     def forward_train(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
         """Forward function for training.
@@ -727,7 +720,7 @@ class DACS(UDADecorator):
         means, stds = get_mean_std(img_metas, dev)
 
         # Train on source images
-        clean_losses = self.get_model().forward_train(
+        clean_losses = self.model(
             img, img_metas, gt_semantic_seg, return_feat=True)
         src_feat = clean_losses.pop('features')
         seg_debug['Source'] = self.get_model().debug_output
@@ -882,7 +875,7 @@ class DACS(UDADecorator):
                         subplotimg(axs[1, 6], mixed_seg_weight_warp[0].repeat(3, 1, 1)*255)
 
                     B, C, H, W = target_img_extra["imtk"].shape
-                    custom_loss = self.get_model().forward_train(
+                    custom_loss = self.model(
                         mixed_im_warp,
                         target_img_metas, #NOTE: is this the correct metas to pass
                         mixed_lbl_warp.view(B, 1, H, W),
@@ -893,7 +886,7 @@ class DACS(UDADecorator):
                     choice = 0 if random.uniform(0, 1) > 0.5 else 1
                     if choice == 0: # Warp but no cutmix
                         B, C, H, W = target_img_extra["imtk"].shape
-                        custom_loss = self.get_model().forward_train(
+                        custom_loss = self.model(
                             target_img,
                             target_img_metas,
                             pseudo_label_warped.view(B, 1, H, W),
@@ -906,7 +899,7 @@ class DACS(UDADecorator):
                             subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
                             subplotimg(axs[0, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
                         # Train on mixed images
-                        custom_loss = self.get_model().forward_train(
+                        custom_loss = self.model(
                             mixed_img,
                             img_metas,
                             mixed_lbl,
@@ -920,7 +913,7 @@ class DACS(UDADecorator):
                         # (mix_loss * self.l_mix_lambda).backward()
                 else:
                     B, C, H, W = target_img_extra["imtk"].shape
-                    custom_loss = self.get_model().forward_train(
+                    custom_loss = self.model(
                         target_img,
                         target_img_metas,
                         pseudo_label_warped.view(B, 1, H, W),
@@ -944,7 +937,7 @@ class DACS(UDADecorator):
                     subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
                     subplotimg(axs[0, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
                 # Train on mixed images
-                mix_losses = self.get_model().forward_train(
+                mix_losses = self.model(
                     mixed_img,
                     img_metas,
                     mixed_lbl,
@@ -959,7 +952,7 @@ class DACS(UDADecorator):
             
             # Masked Training
             if self.enable_masking and self.mask_mode.startswith('separate'):
-                masked_loss = self.mic(self.get_model(), img, img_metas,
+                masked_loss = self.mic(self.model, img, img_metas,
                                     gt_semantic_seg, target_img,
                                     target_img_metas, valid_pseudo_mask,
                                     pseudo_label, pseudo_weight)

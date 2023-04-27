@@ -304,7 +304,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
             mres_feats.append(self.extract_unscaled_feat(scaled_img, masking_branch))
         return mres_feats, prob_vis
 
-    def forward_train(self,
+    def forward(self,
                       img,
                       img_metas,
                       gt_semantic_seg,
