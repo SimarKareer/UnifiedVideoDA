@@ -9,6 +9,7 @@ from numpy import random
 from ..builder import PIPELINES
 from RandAugment import RandAugment
 from PIL import Image
+import cv2
 
 
 @PIPELINES.register_module()
@@ -1344,11 +1345,16 @@ class RandAug(object):
         """
         img = results['img']
 
-        img_PIL = Image.fromarray(img, mode="RGB")
+        img_cv2 = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        img_pil_input = img_cv2.astype('uint8')
+
+        img_PIL = Image.fromarray(img_pil_input, mode="RGB")
 
         augmented_image = self.randaug_obj(img_PIL)
 
         aug_img = np.asarray(augmented_image, dtype='float32')
+        aug_img = cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR)
 
         results['img'] = aug_img
         return results

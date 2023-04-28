@@ -1,17 +1,17 @@
 # dataset settings
-FRAME_OFFSET = 1
+FRAME_OFFSET = -1
 DATA_TYPE = "rgb" # --multi-modal will set this to rgb+depth
 aug_view = True # for augmented consistency filter (2 aug views of data)
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
-cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
+# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
+# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
 viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
 
 #Backward
-# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
-# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
+cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
+cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
 
 #Forward
 # cs_train_flow_dir="/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_3/forward/train"
@@ -78,6 +78,7 @@ cityscapes_train_pipeline = {
     ],
     "aug_pipeline": [
         #insert aug 
+        # 
         dict(type="RandAug", valid_augmentations=["AutoContrast", "Equalize", "Brightness", "Sharpness"], num_augs=1, severity=2.0)
     ],
     "im_pipeline": [

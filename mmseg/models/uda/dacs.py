@@ -87,6 +87,8 @@ class DACS(UDADecorator):
         self.consis_filter_rare_common_class_compare = cfg["consis_filter_rare_common_class_compare"]
         self.max_confidence = cfg['max_confidence']
         self.aug_filter = cfg['aug_filter']
+        self.simclr = cfg['simclr']
+        self.ssl_lambda = cfg['sll_lambda']
 
         self.pl_fill = cfg['pl_fill']
         self.bottom_pl_fill = cfg['bottom_pl_fill']
@@ -632,8 +634,13 @@ class DACS(UDADecorator):
         pseudo_label, pseudo_weight = None, None
         if not self.source_only:
             target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
-            target_img_aug_1 = target_img_extra["im_aug_1"]
-            target_img_aug_2 = target_img_extra["im_aug_2"]
+
+            if self.aug_filter or self.simclr:
+                target_img_aug_1 = target_img_extra["im_aug_1"]
+                target_img_aug_2 = target_img_extra["im_aug_2"]
+
+                target_imtk_aug_1 = target_img_extra["imtk_aug_1"]
+                target_imtk_aug_2 = target_img_extra["imtk_aug_2"]
 
             for m in self.get_ema_model().modules():
                 if isinstance(m, _DropoutNd):
@@ -655,12 +662,56 @@ class DACS(UDADecorator):
                 pseudo_label_aug_1, pseudo_weight_aug_1 = self.get_pl(target_img_aug_1, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
                 pseudo_label_aug_2, pseudo_weight_aug_2 = self.get_pl(target_img_aug_2, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
             
+            if self.simclr:
+                img_imtk_concat = torch.concat(target_img_aug_1, target_img_aug_2, target_imtk_aug_1, target_imtk_aug_2)
+                print("Img concat shape", img_tk_concat.size())
+                img_tk_feats = self.get_model().extract_feat(img_tk_concat)
+                img_tk_feats_last_layer = [f[-1].detach() for f in img_tk_feats]
+
+                img_tk_feats_flattened =  [torch.flatten(f) for f in img_tk_feats_last_layer]
+
+                dims = img_tk_feats_flattened[0].size()[0]
+                img_tk_feats_batched = torch.stack(img_tk_feats_flattened)
+
+                ## PASS INTO MLP ALYER
+
+                #linear layer
+                dims = proj_feat.size()[0]
+                
+                hidden_nodes = dims // 8
+                mlp = nn.Sequential(
+                    nn.Linear(dims, hidden_nodes),
+                    nn.Relu(),
+                    nn.Linear(hidden_nodes, 256),
+                )
+
+                proj_feat = mlp(proj_feat)
+
+
+
+                # WORK IN PROGRESS
+                #similarity calculations
+                temperature=0.07
+
+                # taken from here: https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial17/SimCLR.html
+                cos_sim = F.cosine_similarity(img_tk_feats_last_layer[:,None,:], img_tk_feats_last_layer[None,:,:], dim=-1)
+                self_mask = torch.eye(cos_sim.shape[0], dtype=torch.bool, device=cos_sim.device)
+                cos_sim.masked_fill_(self_mask, -9e15)
+                pos_mask = self_mask.roll(shifts=cos_sim.shape[0]//2, dims=0)
+                cos_sim = cos_sim / temperature
+                ssl_losses = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
+                sll_loss = nll.mean()
+
+                ssl_loss = ssl_loss * self.ssl_lambda
+                ssl_loss.backward()
+
+            
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
 
             #change back to OR statement
-            if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
+            if DEBUG and self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
@@ -866,13 +917,15 @@ class DACS(UDADecorator):
                         pli_aug_2_i = pseudo_label_aug_2[i]
 
                         if i == 0 and DEBUG:
-                            subplotimg(axs[6][1], pli_aug_1_i, 'Aug View 1 Prediction', cmap="cityscapes")
-                            subplotimg(axs[6][2], pli_aug_2_i, 'Aug View 2 Prediction', cmap="cityscapes")
+                            subplotimg(axs[6][1], invNorm(target_img_extra["im_aug_1"][0]), 'Current Img - Aug 1 ')
+                            subplotimg(axs[6][2], invNorm(target_img_extra["im_aug_2"][0]), 'Current Img - Aug 2 ')
+                            subplotimg(axs[6][3], pli_aug_1_i, 'Aug View 1 Prediction', cmap="cityscapes")
+                            subplotimg(axs[6][4], pli_aug_2_i, 'Aug View 2 Prediction', cmap="cityscapes")
 
                         pseudo_weight_aug_1_i[pli_aug_1_i != pli_aug_2_i] = 0
                         pli_aug_1_i[pli_aug_1_i != pli_aug_2_i] = 255
                         if i == 0 and DEBUG:
-                            subplotimg(axs[6][3], pli_aug_1_i, 'Aug Views - Consis Filter', cmap="cityscapes")
+                            subplotimg(axs[6][5], pli_aug_1_i, 'Aug Views - Consis Filter', cmap="cityscapes")
 
                         pseudo_weights_aug.append(pseudo_weight_aug_1_i)
                         pseudo_labels_aug.append(pli_aug_1_i)
@@ -916,38 +969,38 @@ class DACS(UDADecorator):
             if DEBUG:
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
                 subplotimg(axs[0][1], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
-                subplotimg(axs[1][0], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
+                # subplotimg(axs[1][0], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
                 # subplotimg(axs[1][1], pseudo_label_warped[1], 'PL Warped2', cmap="cityscapes")
                 subplotimg(axs[1][1], pseudo_label[0], 'PL Plain', cmap="cityscapes")
                 subplotimg(axs[1][2], pseudo_label_fut[0], 'PL Plain FUT', cmap="cityscapes")
                 # subplotimg(axs[1][2], pseudo_label[1], 'PL Plain2', cmap="cityscapes")
-                subplotimg(axs[3][1], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Warped PL Weight')
+                # subplotimg(axs[3][1], pseudo_weight_warped[[0]].repeat(3, 1, 1) * 255, 'Warped PL Weight')
 
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
 
-                tolog = f"L_warp: {warped_pl_loss.item():.2f}\n"
-                if self.l_mix_lambda > 0:
-                    tolog += f"L_mix: {mix_loss.item():.2f}\n"
+                # tolog = f"L_warp: {warped_pl_loss.item():.2f}\n"
+                # if self.l_mix_lambda > 0:
+                #     tolog += f"L_mix: {mix_loss.item():.2f}\n"
 
-                warp_iou, warp_miou, warp_iou_mask = self.fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight_warped[0].cpu().bool().numpy())
-                tolog += f"Warp PL miou: {warp_miou:.2f}\n"
-                plain_iou, plain_miou, plain_iou_mask = self.fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight[0].cpu().bool().numpy())
-                tolog += f"Plain PL miou: {plain_miou:.2f}\n"
-                pl_agreement_iou, pl_agreement_miou, _ = self.fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy(), custom_mask=masks[0])
-                tolog += f"PL Agree miou: {pl_agreement_miou:.2f}\n"
+                # warp_iou, warp_miou, warp_iou_mask = self.fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight_warped[0].cpu().bool().numpy())
+                # tolog += f"Warp PL miou: {warp_miou:.2f}\n"
+                # plain_iou, plain_miou, plain_iou_mask = self.fast_iou(pseudo_label[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight[0].cpu().bool().numpy())
+                # tolog += f"Plain PL miou: {plain_miou:.2f}\n"
+                # pl_agreement_iou, pl_agreement_miou, _ = self.fast_iou(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy(), custom_mask=masks[0])
+                # tolog += f"PL Agree miou: {pl_agreement_miou:.2f}\n"
                 # ax[3][0].bar(plain_iou, CityscapesDataset.CLASSES)
                 # ax[3][0].bar(warp_iou, CityscapesDataset.CLASSES)
                 
-                multiBarChart({"warp_iou": warp_iou, "plain_iou": plain_iou, "agreement_iou": pl_agreement_iou}, CityscapesDataset.CLASSES, title="Per class IoU", xlabel="Class", ylabel="IoU", ax=large_axs[0][0])
+                # multiBarChart({"warp_iou": warp_iou, "plain_iou": plain_iou, "agreement_iou": pl_agreement_iou}, CityscapesDataset.CLASSES, title="Per class IoU", xlabel="Class", ylabel="IoU", ax=large_axs[0][0])
 
-                plot_confusion_matrix(confusion_matrix(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), num_classes=len(CityscapesDataset.CLASSES)), large_axs[1][0], class_names=CityscapesDataset.CLASSES, title="Warp PL Confusion Matrix", normalize=True)
+                # plot_confusion_matrix(confusion_matrix(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), num_classes=len(CityscapesDataset.CLASSES)), large_axs[1][0], class_names=CityscapesDataset.CLASSES, title="Warp PL Confusion Matrix", normalize=True)
 
 
-                axs[2][0].text(
-                    0.1,
-                    0.5,
-                    tolog
-                )
+                # axs[2][0].text(
+                #     0.1,
+                #     0.5,
+                #     tolog
+                # )
 
                 subplotimg(
                     axs[1][3],
@@ -955,11 +1008,11 @@ class DACS(UDADecorator):
                     cmap="cityscapes"
                 )
 
-                subplotimg(
-                    axs[2][1],
-                    get_segmentation_error_vis(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy()), 'PL Warped Error',
-                    cmap="cityscapes"
-                )
+                # subplotimg(
+                #     axs[2][1],
+                #     get_segmentation_error_vis(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy()), 'PL Warped Error',
+                #     cmap="cityscapes"
+                # )
 
                 subplotimg(
                     axs[2][2],
@@ -968,11 +1021,11 @@ class DACS(UDADecorator):
                 )
 
                 #plot the pl agreement error
-                subplotimg(
-                    axs[2][3],
-                    get_segmentation_error_vis(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy()), 'PL Agreement Error',
-                    cmap="cityscapes"
-                )
+                # subplotimg(
+                #     axs[2][3],
+                #     get_segmentation_error_vis(pseudo_label[0].cpu().numpy(), pseudo_label_warped[0].cpu().numpy()), 'PL Agreement Error',
+                #     cmap="cityscapes"
+                # )
                 
                 subplotimg(axs[4, 0],
                     visFlow(target_img_extra["flow"][0].permute(1, 2, 0).cpu().numpy(), image=invNorm(target_img_extra["img"][0]).permute(1, 2, 0).cpu().numpy(), skip_amount=200)

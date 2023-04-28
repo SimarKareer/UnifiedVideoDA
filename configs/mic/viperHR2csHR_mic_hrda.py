@@ -88,6 +88,7 @@ uda = dict(
     # and a mask ratio of 0.7
     l_warp_lambda=1.0,
     l_mix_lambda=0.0,
+    ssl_lambda=0.0,
     consis_filter=False,
     consis_filter_rare_class=False,
     consis_filter_rare_common_class_compare=False,
@@ -107,6 +108,7 @@ uda = dict(
     exclusive_warp_cutmix=False,
     multi_modal=False,
     aug_filter=False,
+    simclr=False,
 )
 # Optimizer Hyperparameters
 optimizer_config = None
