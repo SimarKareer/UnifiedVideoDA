@@ -579,6 +579,10 @@ class DACS(UDADecorator):
         clean_loss, clean_log_vars = self._parse_losses(clean_losses)
         log_vars.update(clean_log_vars)
         clean_loss.backward(retain_graph=self.enable_fdist)
+        if self.source_only2:
+            del src_feat, clean_loss
+            del seg_debug
+            return log_vars
 
         if self.print_grad_magnitude:
             mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
