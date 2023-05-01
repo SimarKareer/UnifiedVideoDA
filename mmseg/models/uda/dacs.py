@@ -143,8 +143,7 @@ class DACS(UDADecorator):
         if self.enable_masking:
             self.mic = MaskingConsistencyModule(require_teacher=False, cfg=cfg)
         if self.enable_fdist:
-            raise NotImplementedError("Not initializing this to save memory.")
-            # self.imnet_model = build_segmentor(deepcopy(cfg['model']))
+            self.imnet_model = build_segmentor(deepcopy(cfg['model']))
         else:
             self.imnet_model = None
 
