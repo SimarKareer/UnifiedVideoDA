@@ -27,6 +27,7 @@ from matplotlib import pyplot as plt
 from timm.models.layers import DropPath
 from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
+import torch.nn as nn
 
 from mmseg.core import add_prefix, intersect_and_union, confusion_matrix, plot_confusion_matrix, per_class_pixel_accuracy
 from mmseg.models import UDA, HRDAEncoderDecoder, build_segmentor
@@ -88,7 +89,7 @@ class DACS(UDADecorator):
         self.max_confidence = cfg['max_confidence']
         self.aug_filter = cfg['aug_filter']
         self.simclr = cfg['simclr']
-        self.ssl_lambda = cfg['sll_lambda']
+        self.ssl_lambda = cfg['ssl_lambda']
 
         self.pl_fill = cfg['pl_fill']
         self.bottom_pl_fill = cfg['bottom_pl_fill']
@@ -663,47 +664,19 @@ class DACS(UDADecorator):
                 pseudo_label_aug_2, pseudo_weight_aug_2 = self.get_pl(target_img_aug_2, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
             
             if self.simclr:
-                img_imtk_concat = torch.concat(target_img_aug_1, target_img_aug_2, target_imtk_aug_1, target_imtk_aug_2)
-                print("Img concat shape", img_tk_concat.size())
-                img_tk_feats = self.get_model().extract_feat(img_tk_concat)
-                img_tk_feats_last_layer = [f[-1].detach() for f in img_tk_feats]
-
-                img_tk_feats_flattened =  [torch.flatten(f) for f in img_tk_feats_last_layer]
-
-                dims = img_tk_feats_flattened[0].size()[0]
-                img_tk_feats_batched = torch.stack(img_tk_feats_flattened)
-
-                ## PASS INTO MLP ALYER
-
-                #linear layer
-                dims = proj_feat.size()[0]
+                log_vars["sll_loss"] = 0
                 
-                hidden_nodes = dims // 8
-                mlp = nn.Sequential(
-                    nn.Linear(dims, hidden_nodes),
-                    nn.Relu(),
-                    nn.Linear(hidden_nodes, 256),
-                )
+                p1, p2, z1, z2 = self.get_model().ssl_obj(target_img_aug_1, target_imtk_aug_1)
+            
+                # criterion = nn.CosineSimilarity(dim=1).cuda(args.gpu)
+                ssl_criterion = nn.CosineSimilarity(dim=1).cuda()
+                ssl_loss = -(ssl_criterion(p1, z2).mean() + ssl_criterion(p2, z1).mean()) * 0.5
 
-                proj_feat = mlp(proj_feat)
-
-
-
-                # WORK IN PROGRESS
-                #similarity calculations
-                temperature=0.07
-
-                # taken from here: https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial17/SimCLR.html
-                cos_sim = F.cosine_similarity(img_tk_feats_last_layer[:,None,:], img_tk_feats_last_layer[None,:,:], dim=-1)
-                self_mask = torch.eye(cos_sim.shape[0], dtype=torch.bool, device=cos_sim.device)
-                cos_sim.masked_fill_(self_mask, -9e15)
-                pos_mask = self_mask.roll(shifts=cos_sim.shape[0]//2, dims=0)
-                cos_sim = cos_sim / temperature
-                ssl_losses = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
-                sll_loss = nll.mean()
-
+                ssl_loss, ssl_log_vars = self._parse_losses(ssl_loss)
                 ssl_loss = ssl_loss * self.ssl_lambda
-                ssl_loss.backward()
+                log_vars["ssl_loss"] = warped_pl_log_vars["loss"]
+
+                ssl_loss.backward() #NOTE: do we need to retain graph?
 
             
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)

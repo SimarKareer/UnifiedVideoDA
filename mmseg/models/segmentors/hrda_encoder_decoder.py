@@ -14,6 +14,7 @@ import torch
 from mmseg.ops import resize
 from ..builder import SEGMENTORS
 from .encoder_decoder import EncoderDecoder
+import torch.nn as nn
 
 
 def get_crop_bbox(img_h, img_w, crop_size, divisible=1):
@@ -89,6 +90,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
         self.hr_slide_overlapping = hr_slide_overlapping
         self.crop_coord_divisible = crop_coord_divisible
         self.blur_hr_crop = blur_hr_crop
+
 
     def extract_unscaled_feat(self, img):
         x = self.backbone(img)
@@ -289,3 +291,64 @@ class HRDAEncoderDecoder(EncoderDecoder):
         #     mode='bilinear',
         #     align_corners=self.align_corners)
         return {'main': out}
+    
+    def ssl_obj(self, target_img_aug_1, target_imtk_aug_1):
+        img_tk_concat = torch.concat((target_img_aug_1, target_imtk_aug_1))
+        print("Img concat shape", img_tk_concat.size())
+        img_tk_feats = self.extract_feat(img_tk_concat)
+        img_tk_feats_last_layer = [f[-1] for f in img_tk_feats]
+        img_tk_feats_flattened =  [torch.flatten(f).cuda() for f in img_tk_feats_last_layer]
+
+        #get output dims from extractor
+        prev_dim = img_tk_feats_flattened[0].size()[0]
+
+        half_split = len(img_tk_feats_flattened) / 2
+        print(half_split)
+        half_split = int(half_split)
+
+        for i in img_tk_feats_flattened:
+            print(i.is_cuda)
+
+        img_feats_flattened = torch.concat(tuple(img_tk_feats_flattened[:half_split]))  # N x C 
+        img_tk_feats_flattened = torch.concat(tuple(img_tk_feats_flattened[half_split: ])) # N x C
+
+        print(img_feats_flattened.size())
+
+
+        #3-LAYER PROJECTOR
+        out_dim = 2048
+        pred_dim = 512
+        reduced_dim = out_dim
+        fc = nn.Sequential(
+                    nn.Linear(prev_dim, reduced_dim, bias=False),
+                    nn.BatchNorm1d(reduced_dim),
+                    nn.ReLU(inplace=True), # first layer
+                    nn.Linear(reduced_dim, reduced_dim, bias=False),
+                    nn.BatchNorm1d(reduced_dim),
+                    nn.ReLU(inplace=True), # second layer
+                    nn.Linear(reduced_dim, out_dim),
+                    nn.BatchNorm1d(out_dim, affine=False)
+                ) # output layer
+        fc[6].bias.requires_grad = False
+
+        #2-LAYER PREDICTOR 
+        predictor = nn.Sequential(
+            nn.Linear(out_dim, pred_dim, bias=False),
+            nn.BatchNorm1d(pred_dim),
+            nn.ReLU(inplace=True), # hidden layer
+            nn.Linear(pred_dim, out_dim)
+        ) # output layer
+
+
+        z1 = fc(img_feats_flattened.cuda())
+        z2 = fc(img_tk_feats_flattened.cuda())
+        print("hi")
+
+        p1 = predictor(z1)
+        p2 = predictor(z2)
+
+        return p1, p2, z1.detach(), z2.detach()
+
+
+        
+
