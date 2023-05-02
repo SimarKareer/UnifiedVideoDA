@@ -6,11 +6,30 @@ import kornia
 import numpy as np
 import torch
 import torch.nn as nn
+from mmseg.datasets.cityscapes import CityscapesDataset
 
 
 def strong_transform(param, data=None, target=None):
+    if data is None or len(data.shape) != 4 or data.shape[1] != 6:
+        return _strong_transform(param, data=data, target=target)
+
+    rgb_data, flow_data = data[:, :3], data[:, 3:]
+    rgb_transform = _strong_transform(param, data=rgb_data, target=target)
+    flow_transform = _strong_transform(param, data=flow_data, target=target, mix_only=True)
+
+    merged_transform = torch.cat([rgb_transform[0], flow_transform[0]], dim=1)
+    
+    if target is not None:
+        assert (rgb_transform[1] != flow_transform[1]).sum() == 0, "Something wrong happened in the tranformation"
+    return (merged_transform, rgb_transform[1])
+
+
+def _strong_transform(param, data=None, target=None, mix_only=False):
     assert ((data is not None) or (target is not None))
     data, target = one_mix(mask=param['mix'], data=data, target=target)
+    if mix_only:
+        return data, target
+
     data, target = color_jitter(
         color_jitter=param['color_jitter'],
         s=param['color_jitter_s'],
@@ -87,10 +106,14 @@ def gaussian_blur(blur, data=None, target=None):
     return data, target
 
 
-def get_class_masks(labels):
+def get_class_masks(labels, class_filter=None):
     class_masks = []
     for label in labels:
         classes = torch.unique(labels)
+        if class_filter:
+            # Note: I decided to not cutmix any of the ignored indices (like poles)
+            for cls in np.unique(class_filter + CityscapesDataset.ignore_index):
+                classes = classes[classes != cls]
         nclasses = classes.shape[0]
         class_choice = np.random.choice(
             nclasses, int((nclasses + nclasses % 2) / 2), replace=False)

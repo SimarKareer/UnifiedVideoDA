@@ -13,7 +13,7 @@ log_config = dict(
             init_kwargs={
                 'dir': "wandb_dir",
                 'entity': "video-da",
-                'project': "Lwarp",
+                'project': "multimodal",
                 'resume': 'allow'
             },
             interval=5,

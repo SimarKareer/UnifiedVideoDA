@@ -7,6 +7,33 @@ import matplotlib.pyplot as plt
 # from benchmark_viper import VIPER
 from tools.aggregate_flows.flow.util_flow import ReadKittiPngFile
 import torch
+from torchvision import transforms
+
+def flow_to_grayscale(flow_uv, clip_flow=None, convert_to_bgr=False):
+    """
+    Expects a two dimensional flow image of shape.
+    Args:
+        flow_uv (np.ndarray): Flow UV image of shape [H,W,2]
+        clip_flow (float, optional): Clip maximum of flow values. Defaults to None.
+        convert_to_bgr (bool, optional): Convert output image to BGR. Defaults to False.
+    Returns:
+        np.ndarray: Flow visualization image of shape [H,W,3]
+    """
+    assert flow_uv.ndim == 3, 'input flow must have three dimensions'
+    assert flow_uv.shape[2] == 2, 'input flow must have shape [H,W,2]'
+    if clip_flow is not None:
+        flow_uv = torch.clip(flow_uv, 0, clip_flow)
+    u = flow_uv[:,:,0]
+    v = flow_uv[:,:,1]
+    rad = torch.sqrt(torch.square(u) + torch.square(v))
+    rad_max = torch.max(rad)
+    epsilon = 1e-5
+    u = u / (rad_max + epsilon)
+    v = v / (rad_max + epsilon)
+
+    # print(u.shape, v.shape)
+    return torch.stack([u, v])
+    # print('hi')
 
 def multiBarChart(data, labels, title="title", xlabel="xlabel", ylabel="ylabel", ax=None, colors=None, figsize=(10, 5), save_path=None):
     """
@@ -238,7 +265,7 @@ def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False)
     indices[0] = (torch.arange(flow.shape[1])[:, None]).to(dev) + flow[1]
     indices[1] = (torch.arange(flow.shape[2])[None, :]).to(dev) + flow[0]
 
-    flow[:, indices[0] >= 800] = 0
+    flow[:, indices[0] >= 840] = 0
     flow[:, indices[0] < 0] = 0
     flow[:, indices[1] >= W] = 0
     flow[:, indices[1] < 0] = 0
@@ -369,6 +396,17 @@ def backpropFlowFilter(flow, im2, im1, thresh=300):
 
     return im2_1
 
+def tensor_map(tensor, label_map):
+    """
+    tensor: any shape tensor
+    label_map: {old: new}
+    """
+    tensor_copy = tensor.clone()
+    for old_id, new_id in label_map.items():
+        tensor_copy[tensor == old_id] = new_id
+    
+    return tensor_copy
+
 def imageMap2(label, label_map):
     """
     label: (H, W, C) numpy array
@@ -450,3 +488,44 @@ palette_to_id = [
     ([0,100,100], 30),
     ([50,0,90], 31)
 ]
+
+def rare_class_or_filter(pl1, pl2):
+        """
+        pl1: (B, H, W)
+        pl2: (B, H, W)
+        returns a pseudolabel which keeps consistent pixels, and masks out inconsistent pixels except when the pixel is rare.  In the case that both pl1 and pl2 are rare take the more rare pixel
+        """
+        # most to least rare
+        # pl1[pl1 == 255]
+        #                                                     | 
+        rarity_order = [3, 5, 12, 16, 18, 17, 7, 6, 15, 4, 11, 14, 9, 8, 1, 2, 10, 13, 0]
+        # rarity_index = torch.tensor([rarity_order.index(i) for i in range(19)])
+        rarity_thresh = 11 #rarity_order[:11] is rare, past that not rare
+
+        inconsis_pixels = pl1 != pl2
+        consistent_pixels = pl1 == pl2
+        # pl1_rarity = rarity_index[]
+        pl1_rarity = tensor_map(pl1, {i: rarity_order.index(i) for i in range(19)}) # {0: 19, 1:15} ie 0 is the 19th rarest class, 1 is the 15th rarest class
+        pl2_rarity = tensor_map(pl2, {i: rarity_order.index(i) for i in range(19)})
+        output = torch.ones_like(pl1)*255
+        # print("pl1 rarity", pl1_rarity)
+        # print("pl2 rarity", pl2_rarity)
+
+        # print("output1", output)
+        output[consistent_pixels] = pl1[consistent_pixels]
+        # print("output2", output)
+
+
+        pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl1_rarity < pl2_rarity)
+        output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
+
+        pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl2_rarity < pl1_rarity)
+        output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
+        # breakpoint()
+
+        return output
+
+invNorm = transforms.Compose([
+    transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
+    transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
+])

@@ -247,6 +247,10 @@ class VIPER(Benchmark):
                 if not os.path.exists(seq_folder):
                     os.mkdir(seq_folder)
                 flow_dst_path = os.path.join(seq_dst_dir, f"{seq}/{seq}_{frame:05d}.png")
+                # Only save the 10th frame for viper since that's all we're using
+                if os.path.exists(flow_dst_path) or int(flow_dst_path.split(".")[0][-2:]) % 10 != 0:
+                    # print("skipped: ", flow_dst_path)
+                    continue
 
                 d = np.load(flow_src_path)
                 u = d["u"]
@@ -270,6 +274,7 @@ class VIPER(Benchmark):
                 u = array.array("f", np.asarray(u.ravel().astype(np.float32)))
                 v = array.array("f", np.asarray(v.ravel().astype(np.float32)))
                 m = array.array("B", np.asarray(m.ravel().astype(np.uint8)))
+                print("saved: ", flow_dst_path)
                 WriteKittiPngFile(flow_dst_path, w, h, u, v, m)
                 pass
 

@@ -16,7 +16,7 @@ class ViperSeqDataset(SeqUtils, ViperDataset):
     """Viper dataset with options for loading flow and neightboring frames.
     """
 
-    def __init__(self, split, img_suffix='.jpg', seg_map_suffix='_labelTrainIds.png', frame_offset=1, flow_dir=None, **kwargs):
+    def __init__(self, split, img_suffix='.jpg', seg_map_suffix='_labelTrainIds.png', frame_offset=1, flow_dir=None, data_type="rgb", **kwargs):
         ViperDataset.__init__(
             self, #must explicitly pass self
             split=split,
@@ -30,6 +30,8 @@ class ViperSeqDataset(SeqUtils, ViperDataset):
         self.fut_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=-1)
         self.img_infos = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
         self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
+
+        self.data_type = data_type
 
         # self.fut_images, self.img_infos, self.flows = self.cofilter_img_infos(self.fut_images, self.img_infos, self.flows, self.img_dir, flow_dir, mandate_flow=False)
 

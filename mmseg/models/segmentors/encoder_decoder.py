@@ -17,6 +17,7 @@ from ..builder import SEGMENTORS
 from ..utils.dacs_transforms import get_mean_std
 from ..utils.visualization import prepare_debug_out, subplotimg
 from .base import BaseSegmentor
+import random
 
 
 @SEGMENTORS.register_module()
@@ -36,7 +37,8 @@ class EncoderDecoder(BaseSegmentor):
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None,
-                 init_cfg=None):
+                 init_cfg=None,
+                 multimodal=False):
         super(EncoderDecoder, self).__init__(init_cfg)
         if pretrained is not None:
             assert backbone.get('pretrained') is None, \
@@ -56,7 +58,10 @@ class EncoderDecoder(BaseSegmentor):
         if train_cfg is not None and 'log_config' in train_cfg:
             self.debug_img_interval = train_cfg['log_config']['img_interval']
         self.local_iter = 0
-
+        self.multimodal = multimodal
+        if self.multimodal:
+            self.alpha = nn.Parameter(torch.ones(self.backbone.num_parallel, requires_grad=True)) #TODO: Make sure alpha is trainable
+            self.register_parameter('alpha', self.alpha)
         assert self.with_decode_head
 
     def _init_decode_head(self, decode_head):
@@ -75,9 +80,12 @@ class EncoderDecoder(BaseSegmentor):
             else:
                 self.auxiliary_head = builder.build_head(auxiliary_head)
 
-    def extract_feat(self, img):
+    def extract_feat(self, img, masking_branch = None):
         """Extract features from images."""
-        x = self.backbone(img)
+        if not self.multimodal:
+            x = self.backbone(img)
+        else:
+            x = self.backbone(img, masking_branch)
         if self.with_neck:
             x = self.neck(x)
         return x
@@ -109,12 +117,22 @@ class EncoderDecoder(BaseSegmentor):
         return out
 
     def forward_with_aux(self, img, img_metas):
+        raise NotImplementedError("Currently broken")
         self.update_debug_state()
 
         ret = {}
-
-        x = self.extract_feat(img)
-        out = self.decode_head.forward_test(x, img_metas, self.test_cfg)
+        if self.multimodal:
+            assert isinstance(x, list) and len(x) == 2, "Multimodal encoder should return a list of \
+                                                        two tensors, check self.backbone {}".format(type(self.backbone))
+            out = [self._decode_head_forward_test(x[0], img_metas), self._decode_head_forward_test(x[1], img_metas)]
+            ens = 0
+            alpha_soft = F.softmax(self.alpha)
+            for l in range(2):
+                ens += alpha_soft[l] * out[l].detach()
+            out = ens
+        else:    
+            x = self.extract_feat(img)
+            out = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         out = resize(
             input=out,
             size=img.shape[2:],
@@ -124,8 +142,18 @@ class EncoderDecoder(BaseSegmentor):
 
         if self.with_auxiliary_head:
             assert not isinstance(self.auxiliary_head, nn.ModuleList)
-            out_aux = self.auxiliary_head.forward_test(x, img_metas,
-                                                       self.test_cfg)
+            if self.multimodal:
+                assert isinstance(x, list) and len(x) == 2, "Multimodal encoder should return a list of \
+                                                        two tensors, check self.backbone {}".format(type(self.backbone))
+                out = [self.auxiliary_head.forward_test(x[0], img_metas), self.auxiliary_head.forward_test(x[0], img_metas)]
+                ens = 0
+                alpha_soft = F.softmax(self.alpha)
+                for l in range(2):
+                    ens += alpha_soft[l] * out[l].detach()
+                out = ens 
+            else:
+                out_aux = self.auxiliary_head.forward_test(x, img_metas,
+                                                        self.test_cfg)
             out_aux = resize(
                 input=out_aux,
                 size=img.shape[2:],
@@ -135,6 +163,30 @@ class EncoderDecoder(BaseSegmentor):
 
         return ret
 
+    def _average_losses(self, losses):
+        """Average losses from different predictions."""
+        averaged_loss = {}
+        for loss in losses:
+            for loss_name, loss_value in loss.items():
+                if loss_name not in averaged_loss:
+                    if loss_name == "logits":
+                        continue
+                    averaged_loss[loss_name] = 0
+                averaged_loss[loss_name] += loss_value
+        for loss_name in averaged_loss:
+            averaged_loss[loss_name] /= len(losses)
+        return averaged_loss
+
+    def _get_ensemble_logits(self, seg_logits):
+        """
+        seg_logits: based on this function should be [branch, B, H, W]
+        """
+        seg_logit = 0
+        alpha_soft = F.softmax(self.alpha)
+        for l in range(self.backbone.num_parallel):
+            seg_logit += alpha_soft[l] * seg_logits[l].detach()
+        return seg_logit
+
     def _decode_head_forward_train(self,
                                    x,
                                    img_metas,
@@ -142,12 +194,30 @@ class EncoderDecoder(BaseSegmentor):
                                    seg_weight=None,
                                    return_logits=False):
         """Run forward function and calculate loss for decode head in
-        training."""
+        training.
+        
+        losses: dict{}
+        """
         losses = dict()
-        loss_decode = self.decode_head.forward_train(x, img_metas,
-                                                     gt_semantic_seg,
-                                                     self.train_cfg,
-                                                     seg_weight, return_logits)
+        if self.multimodal:
+            loss_decode_list = []
+            for i in range(len(x)):
+                loss_decode_list.append(self.decode_head.forward_train(x[i], img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight, True))
+
+            ens_logit = self._get_ensemble_logits([loss_decode_list[i]['logits'] for i in range(self.backbone.num_parallel)])
+            ens_loss = self.decode_head.losses(ens_logit, gt_semantic_seg, seg_weight)
+            loss_decode_list.append(ens_loss)
+            loss_decode = self._average_losses(loss_decode_list)
+            if return_logits:
+                loss_decode['logits'] = ens_logit
+        else:
+            loss_decode = self.decode_head.forward_train(x, img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight, return_logits)
 
         losses.update(add_prefix(loss_decode, 'decode'))
         return losses
@@ -155,7 +225,12 @@ class EncoderDecoder(BaseSegmentor):
     def _decode_head_forward_test(self, x, img_metas):
         """Run forward function and calculate loss for decode head in
         inference."""
-        seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
+        if self.multimodal:
+            #x[:, i] = x[low/highres, segformer_layer]
+            seg_logits = [self.decode_head.forward_test(x[i], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
+            seg_logits = self._get_ensemble_logits(seg_logits)
+        else:
+            seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         return seg_logits
 
     def _auxiliary_head_forward_train(self,
@@ -165,16 +240,33 @@ class EncoderDecoder(BaseSegmentor):
                                       seg_weight=None):
         """Run forward function and calculate loss for auxiliary head in
         training."""
+        raise NotImplementedError("Currently broken")
         losses = dict()
         if isinstance(self.auxiliary_head, nn.ModuleList):
             for idx, aux_head in enumerate(self.auxiliary_head):
-                loss_aux = aux_head.forward_train(x, img_metas,
+                if self.multimodal:
+                    loss_aux_list = []
+                    for xi in x:
+                        loss_aux_list.append(aux_head.forward_train(xi, img_metas,
                                                   gt_semantic_seg,
-                                                  self.train_cfg, seg_weight)
+                                                  self.train_cfg, seg_weight))
+                    loss_aux = self._average_losses(loss_aux_list)
+                else:
+                    loss_aux = aux_head.forward_train(x, img_metas,
+                                                    gt_semantic_seg,
+                                                    self.train_cfg, seg_weight)
                 losses.update(add_prefix(loss_aux, f'aux_{idx}'))
         else:
-            loss_aux = self.auxiliary_head.forward_train(
-                x, img_metas, gt_semantic_seg, self.train_cfg)
+            if self.multimodal:
+                loss_aux_list = []
+                for xi in x:
+                    loss_aux_list.append(self.auxiliary_head.forward_train(xi, img_metas,
+                                                  gt_semantic_seg,
+                                                  self.train_cfg, seg_weight))
+                loss_aux = self._average_losses(loss_aux_list)
+            else:
+                loss_aux = self.auxiliary_head.forward_train(
+                    x, img_metas, gt_semantic_seg, self.train_cfg)
             losses.update(add_prefix(loss_aux, 'aux'))
 
         return losses
@@ -193,13 +285,14 @@ class EncoderDecoder(BaseSegmentor):
         if self.with_auxiliary_head:
             self.auxiliary_head.debug = self.debug
 
-    def forward_train(self,
-                      img,
-                      img_metas,
-                      gt_semantic_seg,
-                      seg_weight=None,
-                      return_feat=False,
-                      return_logits=False):
+    def forward(self,
+                img,
+                img_metas,
+                gt_semantic_seg,
+                seg_weight=None,
+                return_feat=False,
+                return_logits=False,
+                masking_branch=None):
         """Forward function for training.
 
         Args:
@@ -211,13 +304,14 @@ class EncoderDecoder(BaseSegmentor):
                 `mmseg/datasets/pipelines/formatting.py:Collect`.
             gt_semantic_seg (Tensor): Semantic segmentation masks
                 used if the architecture supports semantic segmentation task.
+            masking_branch: what branches to mask (modality dropout)
 
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
         self.update_debug_state()
 
-        x = self.extract_feat(img)
+        x = self.extract_feat(img, masking_branch)
 
         losses = dict()
         if return_feat:
@@ -240,6 +334,16 @@ class EncoderDecoder(BaseSegmentor):
         self.local_iter += 1
         return losses
 
+    def forward_train(self,
+                    img,
+                    img_metas,
+                    gt_semantic_seg,
+                    seg_weight=None,
+                    return_feat=False,
+                    return_logits=False,
+                    masking_branch=None):
+        self.forward(img, img_metas, gt_semantic_seg, seg_weight, return_feat, return_logits, masking_branch)
+    
     def process_debug(self, img, img_metas):
         self.debug_output = {
             'Image': img,

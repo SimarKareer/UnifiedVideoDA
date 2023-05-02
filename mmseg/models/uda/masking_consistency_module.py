@@ -133,7 +133,7 @@ class MaskingConsistencyModule(Module):
         masked_img = self.mask_gen.mask_image(masked_img)
 
         # Train on masked images
-        masked_loss = model.forward_train(
+        masked_loss = model(
             masked_img,
             img_metas,
             masked_lbl,

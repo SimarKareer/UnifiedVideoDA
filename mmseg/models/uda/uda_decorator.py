@@ -76,6 +76,7 @@ class UDADecorator(BaseSegmentor):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        raise NotImplementedError("UDADecorator does not support multi-gpu training.")
         losses = self.get_model().forward_train(
             img, img_metas, gt_semantic_seg, return_feat=return_feat)
         return losses

@@ -20,6 +20,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import torch.distributed as dist
 import matplotlib.pyplot as plt
+from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 import torchvision.transforms as transforms
 
@@ -344,10 +345,20 @@ def multi_gpu_test(model,
     it = 0
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
-            refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            if "flowVis" in data and model.module.multimodal:
+                refined_data = {
+                    "img_metas": data["img_metas"], 
+                    "img": [torch.cat([data["img"][0], three_channel_flow(data["flowVis"][0])], dim=1)]
+                }
+            else:
+                refined_data = {
+                    "img_metas": data["img_metas"], 
+                    "img": data["img"]
+                }
             result = model(return_loss=False, logits=False, **refined_data)
             result[0] = torch.from_numpy(result[0]).to(device)
 
+            result_tk = None
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=False, **refined_data)
@@ -377,6 +388,10 @@ def multi_gpu_test(model,
                 if not os.path.exists(directory):
                     os.makedirs(directory)
                 plt.savefig(out_file, dpi=300)
+            
+            # if it % 100 == 0:
+            #     dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+
 
         results.extend(eval_vals)
 

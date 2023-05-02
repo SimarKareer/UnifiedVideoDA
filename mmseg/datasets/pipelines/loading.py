@@ -8,6 +8,7 @@ from tools.aggregate_flows.flow.my_utils import loadFlow
 from tools.aggregate_flows.flow.util_flow import loadFlowVec
 from ..builder import PIPELINES
 import torch
+import os
 
 @PIPELINES.register_module()
 class LoadImageFromFile(object):
@@ -167,6 +168,8 @@ class LoadFlowFromFile(object):
 
     def __call__(self, results):
         flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
+        if not os.path.exists(flow_path):
+            raise FileNotFoundError(f"Flow file not found: {flow_path}")
         flow = loadFlowVec(flow_path).astype(np.float32)
         results["flow"] = flow
 

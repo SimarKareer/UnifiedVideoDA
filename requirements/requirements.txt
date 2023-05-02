@@ -26,3 +26,4 @@ wandb
 ifcfg
 ninja
 psutil
+flow-vis

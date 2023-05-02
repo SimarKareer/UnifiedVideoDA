@@ -10,7 +10,9 @@
 
 import numpy as np
 import torch
+import copy
 
+from mmseg.core import add_prefix
 from mmseg.ops import resize
 from ..builder import SEGMENTORS
 from .encoder_decoder import EncoderDecoder
@@ -64,7 +66,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
                  hr_slide_overlapping=True,
                  crop_coord_divisible=1,
                  blur_hr_crop=False,
-                 feature_scale=1):
+                 feature_scale=1,
+                 multimodal=False):
         self.feature_scale_all_strs = ['all']
         if isinstance(feature_scale, str):
             assert feature_scale in self.feature_scale_all_strs
@@ -80,7 +83,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
             train_cfg=train_cfg,
             test_cfg=test_cfg,
             pretrained=pretrained,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg, 
+            multimodal=multimodal)
 
         self.scales = scales
         self.feature_scale = feature_scale
@@ -90,8 +94,11 @@ class HRDAEncoderDecoder(EncoderDecoder):
         self.crop_coord_divisible = crop_coord_divisible
         self.blur_hr_crop = blur_hr_crop
 
-    def extract_unscaled_feat(self, img):
-        x = self.backbone(img)
+    def extract_unscaled_feat(self, img, masking_branch = None):
+        if self.multimodal:
+            x = self.backbone(img, masking_branch)
+        else:
+            x = self.backbone(img)
         if self.with_neck:
             x = self.neck(x)
         return x
@@ -170,6 +177,78 @@ class HRDAEncoderDecoder(EncoderDecoder):
         if self.debug:
             self.debug_output = self.decode_head.debug_output
         return out
+    
+    def _decode_head_forward_test(self, x, img_metas):
+        """Run forward function and calculate loss for decode head in
+        inference.
+        x: x[low/highres, mmbranch, segformer_layer] #This might change in different calls of _decode_head_forward_test
+                          [B, C, H, W]
+            - x[0][0][0]: [2, 64, 128, 128]
+            - x[0][0][1]: [2, 128, 64, 64]
+            - x[0][0][2]: [2, 320, 32, 32]
+            - x[0][0][3]: [2, 512, 16, 16]
+        """
+        if self.multimodal:
+            # scale0branch0 = x[0][0]
+            # scale0branch1 = x[0][1]
+            # scale1branch0 = {"features": x[1]['features'][0], "boxes": x[1]['boxes']}
+            # scale1branch1 = {"features": x[1]['features'][1], "boxes": x[1]['boxes']}
+            x = [ 
+                [x[0][0], {"features": x[1]['features'][0], "boxes": copy.copy(x[1]['boxes'])}], #Need to copy boxes, as it is modified in-place by self.decode_head.forward_test
+                [x[0][1], {"features": x[1]['features'][1], "boxes": copy.copy(x[1]['boxes'])}]  #Need to copy boxes, as it is modified in-place by self.decode_head.forward_test
+                ] #Now x[i] corresponds to branch i
+            seg_logits = [self.decode_head.forward_test(x[i], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
+            seg_logits = self._get_ensemble_logits(seg_logits)
+        else:
+            seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
+        return seg_logits
+
+    def _decode_head_forward_train(self,
+                                   x,
+                                   img_metas,
+                                   gt_semantic_seg,
+                                   seg_weight=None,
+                                   return_logits=False):
+        """Run forward function and calculate loss for decode head in
+        training.
+        x: x[low/highres, mmbranch, segformer_layer] #This might change in different calls of _decode_head_forward_test
+                      [B, C,  H,   W]
+        - x[0][0][0]: [2, 64, 128, 128]
+        - x[0][0][1]: [2, 128, 64, 64]
+        - x[0][0][2]: [2, 320, 32, 32]
+        - x[0][0][3]: [2, 512, 16, 16]
+        
+        return: losses: dict{}
+        """
+        losses = dict()
+        if self.multimodal:
+            loss_decode_list = []
+            for i in range(len(x)):
+                loss_decode_list.append(self.decode_head.forward_train([x[0][i], x[1][i]], img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight=seg_weight, return_logits=True, reset_crop=False))
+            # loss_decode_list[loss_dict_number low or high res]["dict_key"]
+            ens_logit = [] # list over each of the 3 types of logits, (I think hr, lr, fuse but don't know the order)
+            for res_num in range(3):
+                ens_logit.append(self._get_ensemble_logits([loss_decode_list[i]['logits'][res_num] for i in range(self.backbone.num_parallel)]))
+
+            ens_logit = tuple(ens_logit)
+            ens_loss = self.decode_head.losses(ens_logit, gt_semantic_seg, seg_weight)
+            loss_decode_list.append(ens_loss)
+            loss_decode = self._average_losses(loss_decode_list)
+            if return_logits:
+                loss_decode['logits'] = ens_logit
+            
+            self.decode_head.reset_crop()
+        else:
+            loss_decode = self.decode_head.forward_train(x, img_metas,
+                                                        gt_semantic_seg,
+                                                        self.train_cfg,
+                                                        seg_weight, return_logits)
+
+        losses.update(add_prefix(loss_decode, 'decode'))
+        return losses
 
     def encode_decode(self, img, img_metas, upscale_pred=True):
         """Encode images with backbone and decode into a semantic segmentation
@@ -197,7 +276,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 align_corners=self.align_corners)
         return out
 
-    def _forward_train_features(self, img):
+    def _forward_train_features(self, img, masking_branch):
         mres_feats = []
         self.decode_head.debug_output = {}
         assert len(self.scales) <= 2, 'Only up to 2 scales are supported.'
@@ -222,16 +301,17 @@ class HRDAEncoderDecoder(EncoderDecoder):
             if self.decode_head.debug:
                 self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
                     scaled_img.detach()
-            mres_feats.append(self.extract_unscaled_feat(scaled_img))
+            mres_feats.append(self.extract_unscaled_feat(scaled_img, masking_branch))
         return mres_feats, prob_vis
 
-    def forward_train(self,
+    def forward(self,
                       img,
                       img_metas,
                       gt_semantic_seg,
                       seg_weight=None,
                       return_feat=False,
-                      return_logits=False):
+                      return_logits=False,
+                      masking_branch=None):
         """Forward function for training.
 
         Args:
@@ -243,6 +323,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 `mmseg/datasets/pipelines/formatting.py:Collect`.
             gt_semantic_seg (Tensor): Semantic segmentation masks
                 used if the architecture supports semantic segmentation task.
+            masking_branch: what branches to mask (modality dropout)
 
         Returns:
             dict[str, Tensor]: a dictionary of loss components
@@ -251,7 +332,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
 
         losses = dict()
 
-        mres_feats, prob_vis = self._forward_train_features(img)
+        mres_feats, prob_vis = self._forward_train_features(img, masking_branch)
         for i, s in enumerate(self.scales):
             if return_feat and self.feature_scale in \
                     self.feature_scale_all_strs:
