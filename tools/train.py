@@ -84,6 +84,7 @@ def parse_args(args):
 
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
+    parser.add_argument('--ssl-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
     parser.add_argument('--consis-filter-rare-class', type=bool, default=False)
     parser.add_argument('--consis-filter-rare-common-class-compare', type=bool, default=False)
@@ -96,7 +97,7 @@ def parse_args(args):
     parser.add_argument('--l-warp-begin', type=int, default=None)
     parser.add_argument('--max_confidence', type=bool, default=False)
     parser.add_argument('--aug-filter', type=bool, default=False)
-    parser.add_argument('--simclr', type=bool, default=False)
+    parser.add_argument('--simsiam', type=bool, default=False)
 
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
@@ -224,6 +225,10 @@ def main(args):
     if args.l_mix_lambda is not None:
         print("Overwriting l_mix_lambda to ", args.l_mix_lambda)
         cfg.uda.l_mix_lambda = args.l_mix_lambda
+
+    if args.ssl_lambda is not None:
+        print("Overwriting ssl_lambda to ", args.ssl_lambda)
+        cfg.uda.ssl_lambda = args.ssl_lambda
     
     if args.nowandb:
         for i in range(len(cfg.log_config.hooks)):
@@ -297,8 +302,8 @@ def main(args):
     if args.aug_filter:
         cfg.uda.aug_filter = True
 
-    if args.simclr:
-        cfg.uda.simclr = True
+    if args.simsiam:
+        cfg.uda.simsiam = True
     
     if args.no_masking:
         cfg.uda.mask_mode = None

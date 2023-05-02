@@ -13,7 +13,7 @@ CURR_DIR=$PWD
 DATE_STAMP=$(date +"%m-%d-%Y-%H-%M-%S")
 LR=6e-5
 LR_SCHED="poly_10_warm"
-ITERS=10
+ITERS=40000
 OPTIM="adamw"
 FULL_JOB_NAME=${JOB_NAME}_${DATE_STAMP}_iters_${ITERS}_optim_${OPTIM}_lr_sched_${LR_SCHED}_lr${LR}
 # LOAD_FROM="/coc/scratch/vvijaykumar6/mmseg/work_dirs/1gbaseline/1gbaseline_rerun_04-09-2023-01-22-19_iters_40000_optim_adamw_lr_sched_poly_10_warm_lr6e-5/latest.pth"
@@ -40,5 +40,5 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     --exclude="clippy,xaea-12,omgwth" \
-    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=-1 --l-mix-lambda=1 --aug-filter True --simclr True --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/aug-filter/${FULL_JOB_NAME}" --nowandb True
-    # --wandbid=${FULL_JOB_NAME}
+    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=-1 --l-mix-lambda=1 --ssl-lambda 0.2 --aug-filter True --simsiam True --optimizer $OPTIM --lr-schedule $LR_SCHED --lr=$LR --total-iters=$ITERS --work-dir="./work_dirs/simsiam/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME}
+    # --nowandb True

@@ -34,6 +34,8 @@ from mmseg.models import UDA, HRDAEncoderDecoder, build_segmentor
 from mmseg.models.segmentors.hrda_encoder_decoder import crop
 from mmseg.models.uda.masking_consistency_module import \
     MaskingConsistencyModule
+from mmseg.models.uda.ssl_simsiam import \
+    SSLSimSiamModule
 from mmseg.models.uda.uda_decorator import UDADecorator, get_module
 from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
                                                 get_mean_std, strong_transform)
@@ -88,7 +90,7 @@ class DACS(UDADecorator):
         self.consis_filter_rare_common_class_compare = cfg["consis_filter_rare_common_class_compare"]
         self.max_confidence = cfg['max_confidence']
         self.aug_filter = cfg['aug_filter']
-        self.simclr = cfg['simclr']
+        self.simsiam = cfg['simsiam']
         self.ssl_lambda = cfg['ssl_lambda']
 
         self.pl_fill = cfg['pl_fill']
@@ -149,6 +151,11 @@ class DACS(UDADecorator):
             self.imnet_model = build_segmentor(deepcopy(cfg['model']))
         else:
             self.imnet_model = None
+
+        #simsiam setup
+        self.ssl_simsiam = None
+        if self.simsiam:
+            self.ssl_simsiam = SSLSimSiamModule(cfg=cfg)
 
     def init_cml_debug_metrics(self):
         
@@ -636,7 +643,7 @@ class DACS(UDADecorator):
         if not self.source_only:
             target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
 
-            if self.aug_filter or self.simclr:
+            if self.aug_filter or self.simsiam:
                 target_img_aug_1 = target_img_extra["im_aug_1"]
                 target_img_aug_2 = target_img_extra["im_aug_2"]
 
@@ -663,18 +670,13 @@ class DACS(UDADecorator):
                 pseudo_label_aug_1, pseudo_weight_aug_1 = self.get_pl(target_img_aug_1, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
                 pseudo_label_aug_2, pseudo_weight_aug_2 = self.get_pl(target_img_aug_2, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
             
-            if self.simclr:
-                log_vars["sll_loss"] = 0
+            if self.simsiam:
                 
-                p1, p2, z1, z2 = self.get_model().ssl_obj(target_img_aug_1, target_imtk_aug_1)
+                ssl_loss = self.ssl_simsiam(self.get_model(), target_img_aug_1, target_imtk_aug_1)
             
-                # criterion = nn.CosineSimilarity(dim=1).cuda(args.gpu)
-                ssl_criterion = nn.CosineSimilarity(dim=1).cuda()
-                ssl_loss = -(ssl_criterion(p1, z2).mean() + ssl_criterion(p2, z1).mean()) * 0.5
-
-                ssl_loss, ssl_log_vars = self._parse_losses(ssl_loss)
+                ssl_loss, ssl_log_vars = self._parse_losses({'loss_ssl_simsiam': ssl_loss})
                 ssl_loss = ssl_loss * self.ssl_lambda
-                log_vars["ssl_loss"] = warped_pl_log_vars["loss"]
+                log_vars["ssl_loss"] = ssl_log_vars["loss"]
 
                 ssl_loss.backward() #NOTE: do we need to retain graph?
 

@@ -108,7 +108,10 @@ uda = dict(
     exclusive_warp_cutmix=False,
     multi_modal=False,
     aug_filter=False,
-    simclr=False,
+    simsiam=False,
+    ssl_out_dim=2048,
+    ssl_reduced_dim=4096,
+    ssl_pred_dim=512,
 )
 # Optimizer Hyperparameters
 optimizer_config = None
@@ -126,7 +129,7 @@ gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=2)
-evaluation = dict(interval=4000, eval_settings={
+evaluation = dict(interval=2000, eval_settings={
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
