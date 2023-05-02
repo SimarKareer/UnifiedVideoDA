@@ -8,7 +8,7 @@ _base_ = [
     # DAFormer Network Architecture
     '../_base_/models/daformer_sepaspp_mitb5.py',
     # GTA->Cityscapes High-Resolution Data Loading
-    '../_base_/datasets/uda_viper_CSSeq_smcrop.py',
+    '../_base_/datasets/uda_viper_CSSeq.py',
     # DAFormer Self-Training
     '../_base_/uda/dacs_a999_fdthings_viper.py',
     # AdamW Optimizer
