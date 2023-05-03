@@ -103,7 +103,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
             x = self.neck(x)
         return x
 
-    def extract_slide_feat(self, img):
+    def extract_slide_feat(self, img, masking_branch=None):
         if self.hr_slide_overlapping:
             h_stride, w_stride = [e // 2 for e in self.crop_size]
         else:
@@ -125,7 +125,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 crop_imgs.append(img[:, :, y1:y2, x1:x2])
                 crop_boxes.append([y1, y2, x1, x2])
         crop_imgs = torch.cat(crop_imgs, dim=0)
-        crop_feats = self.extract_unscaled_feat(crop_imgs)
+        crop_feats = self.extract_unscaled_feat(crop_imgs, masking_branch)
         # shape: feature levels, crops * batch size x c x h x w
 
         return {'features': crop_feats, 'boxes': crop_boxes}
@@ -250,7 +250,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
         losses.update(add_prefix(loss_decode, 'decode'))
         return losses
 
-    def encode_decode(self, img, img_metas, upscale_pred=True):
+    def encode_decode(self, img, img_metas, upscale_pred=True, masking_branch=None):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         mres_feats = []
@@ -261,9 +261,9 @@ class HRDAEncoderDecoder(EncoderDecoder):
             else:
                 scaled_img = self.resize(img, s)
             if i >= 1 and self.hr_slide_inference:
-                mres_feats.append(self.extract_slide_feat(scaled_img))
+                mres_feats.append(self.extract_slide_feat(scaled_img, masking_branch))
             else:
-                mres_feats.append(self.extract_unscaled_feat(scaled_img))
+                mres_feats.append(self.extract_unscaled_feat(scaled_img, masking_branch))
             if self.decode_head.debug:
                 self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
                     scaled_img.detach()

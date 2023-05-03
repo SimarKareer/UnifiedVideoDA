@@ -674,14 +674,15 @@ class DACS(UDADecorator):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        log_vars = {}
+        if self.stub_training:
+            return log_vars
+
         if self.multimodal:
             return self.forward_train_multimodal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
 
         gt_semantic_seg, valid_pseudo_mask, = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
         
-        log_vars = {}
-        if self.stub_training:
-            return log_vars
         batch_size = img.shape[0]
         dev = img.device
 

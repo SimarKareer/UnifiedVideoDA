@@ -357,9 +357,17 @@ def multi_gpu_test(model,
                 }
             result = model(return_loss=False, logits=False, **refined_data)
             result[0] = torch.from_numpy(result[0]).to(device)
+            if "multimodalM5" in metrics:
+                result_no_rgb = torch.from_numpy(
+                    model(return_loss=False, logits=False, masking_branch=[0], **refined_data)[0]
+                ).to(device)
+
+                result_no_flow = torch.from_numpy(
+                    model(return_loss=False, logits=False, masking_branch=[1], **refined_data)[0]
+                ).to(device)
 
             result_tk = None
-            if len(metrics) > 1 or metrics[0] != "mIoU":
+            if False:#len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=False, **refined_data)
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
@@ -367,7 +375,7 @@ def multi_gpu_test(model,
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
+            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix, mm_preds={"no_rgb": result_no_rgb, "no_flow": result_no_flow})
 
             if out_dir:
                 intersection, union, _,_  = eval_vals[0]
@@ -389,8 +397,8 @@ def multi_gpu_test(model,
                     os.makedirs(directory)
                 plt.savefig(out_file, dpi=300)
             
-            # if it % 100 == 0:
-            #     dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+            if it % 10 == 0:
+                dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
 
 
         results.extend(eval_vals)

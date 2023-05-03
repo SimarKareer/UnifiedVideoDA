@@ -123,6 +123,12 @@ def flow_prop_iou(gt_t, gt_tk, flow_tk_t, num_classes=31, return_mask_count=Fals
     else:
         return iau
 
+def correct_consis(pred1, pred2, gt):
+    """
+    gt here should handle invalid 255 pixels
+    """
+    pass
+
 def correctness_confusion(gt_tk, pred_t, pred_tk, flow_tk_t, label_map, preds_t_tk=None, **kwargs):
     """
     gt_tk: H, W, 1  ground truth at t-k

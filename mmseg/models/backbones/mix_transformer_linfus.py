@@ -252,7 +252,9 @@ class OverlapPatchEmbed(nn.Module):
         #     self.mask_token = nn.parameter.Parameter(torch.randn(self.embed_dim, device=x.device), requires_grad = True)
         #     print(self.mask_token[:10], x.device, "token")
         _, N, L, D = x.shape  # modality, batch, length, dim
-        N = torch.sum(torch.tensor(masking_branch) != -1)
+        if not N == len(masking_branch):
+            assert len(masking_branch) == 1, "Repeating the masking branch for all samples in the batch! Not sure what to repeat if there are multiple masking_branches"
+            masking_branch = [masking_branch[0] for _ in range(N)]
         masking_branch = torch.tensor(masking_branch).to(x.device)
         index = torch.stack([torch.tensor(masking_branch == 0), torch.tensor(masking_branch == 1)]).to(x.device)
         x[index] = self.mask_token

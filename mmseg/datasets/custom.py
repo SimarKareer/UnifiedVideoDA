@@ -159,16 +159,24 @@ class CustomDataset(Dataset):
         self.init_cml_metrics()
 
     def init_cml_metrics(self):
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]}
+        all_metrics = ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "multimodalM5", "MM_v1", "MM_v2", "MM_v3"]
+
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in all_metrics} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in all_metrics}
         self.mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
-        self.cml_correct_consis = {k: torch.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
+        # self.cml_correct_consis = {k: torch.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
+        
+        self.filter_correct_consis = {
+            k: {
+                k2: torch.zeros(len(self.CLASSES)) for k2 in ["correct_consis", "correct_inconsis", "incorrect_consis", "incorrect_inconsis"]
+            } for k in ["multimodalB5"]
+        }
 
-        self.pixelwise_correct = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.pixelwise_total = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]}
+        self.pixelwise_correct = {k: torch.zeros(len(self.CLASSES)) for k in all_metrics} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.pixelwise_total = {k: torch.zeros(len(self.CLASSES)) for k in all_metrics}
 
-        self.confusion_matrix = {k: torch.zeros(len(self.CLASSES), len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.confusion_matrix = {k: torch.zeros(len(self.CLASSES), len(self.CLASSES)) for k in all_metrics} #TODO: this needs to persist out of this loop for iou prints to be accurate.
     def __len__(self):
         """Total number of samples of data."""
         return len(self.img_infos)
@@ -335,7 +343,7 @@ class CustomDataset(Dataset):
                 out_str += "          "
                 out_str += f", {str(self.pixelwise_correct[metric][i].item()):15s}, {str(self.pixelwise_total[metric][i].item()):15s}"
 
-                if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5" and metric != "M5Fixed" and metric != "OR_Filter" and metric != "inconsis_predt_gt" and metric != "inconsis_predtk_gt" and metric != "inconsis_predt_predtk":
+                if "mask_count" in sub_metrics and metric in ["gt_pred", "pred_pred"]:
                     # breakpoint()
                     mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
 
@@ -415,7 +423,7 @@ class CustomDataset(Dataset):
         # print("HI: ", cml_sum)
         print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
     
-    def pre_eval_dataloader_consis(self, curr_preds, data, future_preds, metrics=["mIoU"], sub_metrics=[], return_pixelwise_acc=False, return_confusion_matrix=False,out_dir=None):
+    def pre_eval_dataloader_consis(self, curr_preds, data, future_preds, metrics=["mIoU"], sub_metrics=[], return_pixelwise_acc=False, return_confusion_matrix=False,out_dir=None, mm_preds=None):
         assert(curr_preds) is not None
 
         pre_eval_results = []
@@ -533,6 +541,149 @@ class CustomDataset(Dataset):
             self.cml_intersect["M5"] += intersection
             self.cml_union["M5"] += union
         
+        if "multimodalM5" in metrics:
+            consis = (mm_preds["no_rgb"] == mm_preds["no_flow"])
+            # breakpoint()
+
+            iau = intersect_and_union(
+                curr_pred.squeeze(-1), #past frame
+                curr_seg_map.squeeze(0), #past GT
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                # indices=indices,
+                return_mask=False,
+                custom_mask=consis, #where past and future agree
+                return_pixelwise_acc=return_pixelwise_acc,
+                return_confusion_matrix=return_confusion_matrix
+            )
+
+            #NOW INSERT METRICS FOR PIXEL WISE AND CONFUSION
+            if return_pixelwise_acc or return_confusion_matrix:
+                other_metrics = iau[-1]
+                iau = iau[:-1]
+
+                if 'pixelwise accuracy' in other_metrics:
+                    pixel_correct, pixel_total = other_metrics['pixelwise accuracy']
+                    self.pixelwise_correct["multimodalM5"] += pixel_correct
+                    self.pixelwise_total["multimodalM5"] += pixel_total
+
+                if 'confusion matrix' in other_metrics:
+                    confusion_matrix = other_metrics['confusion matrix']
+                    self.confusion_matrix["multimodalM5"] += confusion_matrix
+
+            intersection, union, _, _ = iau
+            self.cml_intersect["multimodalM5"] += intersection
+            self.cml_union["multimodalM5"] += union
+        
+        if "MM_v1" in metrics:
+            consis = torch.logical_and(mm_preds["no_rgb"] == mm_preds["no_flow"], (mm_preds["no_rgb"] == curr_pred.squeeze(-1)))
+            # breakpoint()
+
+            iau = intersect_and_union(
+                curr_pred.squeeze(-1), #past frame
+                curr_seg_map.squeeze(0), #past GT
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                # indices=indices,
+                return_mask=False,
+                custom_mask=consis, #where past and future agree
+                return_pixelwise_acc=return_pixelwise_acc,
+                return_confusion_matrix=return_confusion_matrix
+            )
+
+            #NOW INSERT METRICS FOR PIXEL WISE AND CONFUSION
+            if return_pixelwise_acc or return_confusion_matrix:
+                other_metrics = iau[-1]
+                iau = iau[:-1]
+
+                if 'pixelwise accuracy' in other_metrics:
+                    pixel_correct, pixel_total = other_metrics['pixelwise accuracy']
+                    self.pixelwise_correct["MM_v1"] += pixel_correct
+                    self.pixelwise_total["MM_v1"] += pixel_total
+
+                if 'confusion matrix' in other_metrics:
+                    confusion_matrix = other_metrics['confusion matrix']
+                    self.confusion_matrix["MM_v1"] += confusion_matrix
+
+            intersection, union, _, _ = iau
+            self.cml_intersect["MM_v1"] += intersection
+            self.cml_union["MM_v1"] += union
+        
+
+        if "MM_v2" in metrics:
+            consis = (mm_preds["no_rgb"] == curr_pred.squeeze(-1))
+            # breakpoint()
+
+            iau = intersect_and_union(
+                curr_pred.squeeze(-1), #past frame
+                curr_seg_map.squeeze(0), #past GT
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                # indices=indices,
+                return_mask=False,
+                custom_mask=consis, #where past and future agree
+                return_pixelwise_acc=return_pixelwise_acc,
+                return_confusion_matrix=return_confusion_matrix
+            )
+
+            #NOW INSERT METRICS FOR PIXEL WISE AND CONFUSION
+            if return_pixelwise_acc or return_confusion_matrix:
+                other_metrics = iau[-1]
+                iau = iau[:-1]
+
+                if 'pixelwise accuracy' in other_metrics:
+                    pixel_correct, pixel_total = other_metrics['pixelwise accuracy']
+                    self.pixelwise_correct["MM_v2"] += pixel_correct
+                    self.pixelwise_total["MM_v2"] += pixel_total
+
+                if 'confusion matrix' in other_metrics:
+                    confusion_matrix = other_metrics['confusion matrix']
+                    self.confusion_matrix["MM_v2"] += confusion_matrix
+
+            intersection, union, _, _ = iau
+            self.cml_intersect["MM_v2"] += intersection
+            self.cml_union["MM_v2"] += union
+
+
+        if "MM_v3" in metrics:
+            consis = (mm_preds["no_flow"] == curr_pred.squeeze(-1))
+            # breakpoint()
+
+            iau = intersect_and_union(
+                curr_pred.squeeze(-1), #past frame
+                curr_seg_map.squeeze(0), #past GT
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                # indices=indices,
+                return_mask=False,
+                custom_mask=consis, #where past and future agree
+                return_pixelwise_acc=return_pixelwise_acc,
+                return_confusion_matrix=return_confusion_matrix
+            )
+
+            #NOW INSERT METRICS FOR PIXEL WISE AND CONFUSION
+            if return_pixelwise_acc or return_confusion_matrix:
+                other_metrics = iau[-1]
+                iau = iau[:-1]
+
+                if 'pixelwise accuracy' in other_metrics:
+                    pixel_correct, pixel_total = other_metrics['pixelwise accuracy']
+                    self.pixelwise_correct["MM_v3"] += pixel_correct
+                    self.pixelwise_total["MM_v3"] += pixel_total
+
+                if 'confusion matrix' in other_metrics:
+                    confusion_matrix = other_metrics['confusion matrix']
+                    self.confusion_matrix["MM_v3"] += confusion_matrix
+
+            intersection, union, _, _ = iau
+            self.cml_intersect["MM_v3"] += intersection
+            self.cml_union["MM_v3"] += union
+
+
         if "M5Fixed" in metrics:
             consis = (curr_pred == backpropFlow(flow, future_pred)).squeeze(-1) #where past frame pred matches future frame
             # breakpoint()

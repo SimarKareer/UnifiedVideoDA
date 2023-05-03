@@ -103,10 +103,10 @@ class EncoderDecoder(BaseSegmentor):
 
         return out
 
-    def encode_decode(self, img, img_metas, upscale_pred=True):
+    def encode_decode(self, img, img_metas, upscale_pred=True, masking_branch = None):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
-        x = self.extract_feat(img)
+        x = self.extract_feat(img, masking_branch)
         out = self._decode_head_forward_test(x, img_metas)
         if upscale_pred:
             out = resize(
@@ -383,7 +383,7 @@ class EncoderDecoder(BaseSegmentor):
             del self.debug_output
 
     # TODO refactor
-    def slide_inference(self, img, img_meta, rescale):
+    def slide_inference(self, img, img_meta, rescale, masking_branch = None):
         """Inference by sliding-window with overlap.
 
         If h_crop > h_img or w_crop > w_img, the small patch will be used to
@@ -413,7 +413,7 @@ class EncoderDecoder(BaseSegmentor):
                     crop_imgs.append(crop_img)
                     crops.append((y1, y2, x1, x2))
             crop_imgs = torch.cat(crop_imgs, dim=0)
-            crop_seg_logits = self.encode_decode(crop_imgs, img_meta)
+            crop_seg_logits = self.encode_decode(crop_imgs, img_meta, masking_branch=masking_branch)
             for i in range(len(crops)):
                 y1, y2, x1, x2 = crops[i]
                 crop_seg_logit = \
@@ -433,7 +433,7 @@ class EncoderDecoder(BaseSegmentor):
                     y1 = max(y2 - h_crop, 0)
                     x1 = max(x2 - w_crop, 0)
                     crop_img = img[:, :, y1:y2, x1:x2]
-                    crop_seg_logit = self.encode_decode(crop_img, img_meta)
+                    crop_seg_logit = self.encode_decode(crop_img, img_meta, masking_branch=masking_branch)
                     preds += F.pad(crop_seg_logit,
                                    (int(x1), int(preds.shape[3] - x2), int(y1),
                                     int(preds.shape[2] - y2)))
@@ -454,10 +454,10 @@ class EncoderDecoder(BaseSegmentor):
                 warning=False)
         return preds
 
-    def whole_inference(self, img, img_meta, rescale):
+    def whole_inference(self, img, img_meta, rescale, masking_branch = None):
         """Inference with full image."""
 
-        seg_logit = self.encode_decode(img, img_meta)
+        seg_logit = self.encode_decode(img, img_meta, masking_branch=masking_branch)
         if rescale:
             # support dynamic shape for onnx
             if torch.onnx.is_in_onnx_export():
@@ -473,7 +473,7 @@ class EncoderDecoder(BaseSegmentor):
 
         return seg_logit
 
-    def inference(self, img, img_meta, rescale):
+    def inference(self, img, img_meta, rescale, masking_branch=None):
         """Inference with slide/whole style.
 
         Args:
@@ -493,9 +493,9 @@ class EncoderDecoder(BaseSegmentor):
         ori_shape = img_meta[0]['ori_shape']
         assert all(_['ori_shape'] == ori_shape for _ in img_meta)
         if self.test_cfg.mode == 'slide':
-            seg_logit = self.slide_inference(img, img_meta, rescale)
+            seg_logit = self.slide_inference(img, img_meta, rescale, masking_branch)
         else:
-            seg_logit = self.whole_inference(img, img_meta, rescale)
+            seg_logit = self.whole_inference(img, img_meta, rescale, masking_branch)
         if hasattr(self.decode_head, 'debug_output_attention') and \
                 self.decode_head.debug_output_attention:
             output = seg_logit
@@ -512,14 +512,14 @@ class EncoderDecoder(BaseSegmentor):
 
         return output
 
-    def simple_test(self, img, img_meta, rescale=True, logits=False):
+    def simple_test(self, img, img_meta, rescale=True, logits=False, masking_branch=None):
         """Simple test with single image."""
         if logits:
             seg_logit = self.inference(img, img_meta, rescale)
             seg_logit = seg_logit.cpu().numpy()
             return seg_logit
 
-        seg_logit = self.inference(img, img_meta, rescale)
+        seg_logit = self.inference(img, img_meta, rescale, masking_branch=masking_branch)
         if hasattr(self.decode_head, 'debug_output_attention') and \
                 self.decode_head.debug_output_attention:
             seg_pred = seg_logit[:, 0]
