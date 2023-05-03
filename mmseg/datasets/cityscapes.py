@@ -24,6 +24,12 @@ class CityscapesDataset(CustomDataset):
     # for Viper -> CS ignore [5, 3, 16, 12, 201, 255]
     CLASSES = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle')
 
+    THINGS = ('person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'fence', 'pole', 'traffic light', 'traffic sign')
+    THINGS_IDX = (11, 12, 13, 14, 15, 16, 17, 18, 4, 5, 6, 7)
+    STUFF = ('road', 'sidewalk', 'building', 'wall', 'vegetation', 'terrain', 'sky')
+    STUFF_IDX = (0, 1, 2, 3, 8, 9, 10)
+    ALL_IDX = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)
+
     PALETTE = [[128, 64, 128], [244, 35, 232], [70, 70, 70], [102, 102, 156],
                [190, 153, 153], [153, 153, 153], [250, 170, 30], [220, 220, 0],
                [107, 142, 35], [152, 251, 152], [70, 130, 180], [220, 20, 60],

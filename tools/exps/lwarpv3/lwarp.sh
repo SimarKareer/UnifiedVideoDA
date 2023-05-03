@@ -12,8 +12,8 @@
 export PYTHONUNBUFFERED=TRUE
 export MASTER_PORT=$P
 source ~/.bashrc
-conda activate mic3
+conda activate micExp
 cd ~/flash/Projects/VideoDA/experiments/mmsegmentationExps
 
 set -x
-srun -u python -u tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=0.1 --l-mix-lambda=1.0 --work-dir="./work_dirs/lwarpv3/$1$T" --auto-resume True --wandbid $1$T
+srun -u python -u tools/train.py ./configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=0.1 --l-mix-lambda=1.0 --consis-filter True --work-dir="./work_dirs/lwarpv3/$1$T" --auto-resume True --wandbid $1$T --load-from /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth

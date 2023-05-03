@@ -1,0 +1,38 @@
+#!/bin/bash
+
+set +x
+source ~/.bashrc
+
+PARTITION=short
+JOB_NAME=$1
+GPUS=${GPUS:-1}
+GPUS_PER_NODE=${GPUS_PER_NODE:-1}
+CPUS_PER_TASK=${CPUS_PER_TASK:-15}
+SRUN_ARGS=""
+CURR_DIR=$PWD
+DATE_STAMP=$(date +"%m-%d-%Y-%H-%M-%S")
+FULL_JOB_NAME=${JOB_NAME}_${DATE_STAMP}
+echo $FULL_JOB_NAME
+
+PORT=$((40000 + $RANDOM % 1000))
+export MASTER_PORT=$PORT
+echo "MASTER_PORT: ${PORT}"
+
+cp ${0##*/} $FULL_JOB_NAME.sh
+
+cd /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation
+conda activate mic
+PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
+srun -p ${PARTITION} \
+    --output=${CURR_DIR}/${FULL_JOB_NAME}.out \
+    --error=${CURR_DIR}/${FULL_JOB_NAME}.err \
+    --account=hoffman-lab \
+    --job-name=${JOB_NAME} \
+    --gres=gpu:${GPUS_PER_NODE} \
+    --ntasks=${GPUS} \
+    --ntasks-per-node=${GPUS_PER_NODE} \
+    --cpus-per-task=${CPUS_PER_TASK} \
+    --kill-on-bad-exit=1 \
+    --constraint="a40" \
+    --exclude="clippy,xaea-12,omgwth" \
+    python -u ./tools/train.py ./configs/mic/viperHR2csHR_mic_daformer_mm.py --launcher="slurm" --multimodal True --l-warp-lambda -1 --l-mix-lambda 1 --optimizer adamw --lr-schedule poly_10_warm --lr 6e-5 --total-iters=40000 --work-dir="./work_dirs/mmv1/${FULL_JOB_NAME}" --wandbid=${FULL_JOB_NAME}

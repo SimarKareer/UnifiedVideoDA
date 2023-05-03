@@ -19,6 +19,10 @@ from tools.aggregate_flows.flow.my_utils import backpropFlowNoDup
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import torch.distributed as dist
+import matplotlib.pyplot as plt
+from mmseg.utils.custom_utils import three_channel_flow
+from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
+import torchvision.transforms as transforms
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -291,7 +295,9 @@ def multi_gpu_test(model,
                    gpu_collect=False,
                    efficient_test=False,
                    pre_eval=False,
-                   format_only=False):
+                   format_only=False,
+                   out_dir=None,
+                   show=False):
     """Updated multi_gpu_test for multiframe / flow loaders"""
 
     if efficient_test:
@@ -304,10 +310,16 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
-    metrics, sub_metrics = eval_settings["metrics"], eval_settings["sub_metrics"]
+    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"]
 
     device = model.module.model.device
     print("TESTING METRICS: ", metrics)
+
+    fig, axs = plt.subplots(
+        5,
+        2,
+        figsize=(10, 10),
+    )
 
     model.eval()
     results = []
@@ -333,29 +345,63 @@ def multi_gpu_test(model,
     it = 0
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
-            refined_data = {"img_metas": data["img_metas"], "img": data["img"]}
+            if "flowVis" in data and model.module.multimodal:
+                refined_data = {
+                    "img_metas": data["img_metas"], 
+                    "img": [torch.cat([data["img"][0], three_channel_flow(data["flowVis"][0])], dim=1)]
+                }
+            else:
+                refined_data = {
+                    "img_metas": data["img_metas"], 
+                    "img": data["img"]
+                }
             result = model(return_loss=False, logits=False, **refined_data)
             result[0] = torch.from_numpy(result[0]).to(device)
 
+            result_tk = None
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=False, **refined_data)
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
-
+        
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            result = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics)
-            
+            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
 
-        results.extend(result)
+            if out_dir:
+                intersection, union, _,_  = eval_vals[0]
+                iou = intersection / union
+                car_iou = iou[13]
+                label = (data["gt_semantic_seg"][0][0, 0]).cpu()
+                pred_for_diff = torch.where(label == 255, 255, result[0].cpu()) 
+                diff = torch.where(pred_for_diff == label, 255 , pred_for_diff) #creates a diff image for visualization 
+                img_metas = data['img_metas'][0].data[0]
+                subplotimg(axs[0, 0], result[0], cmap="cityscapes",title=("Car Miou: " + str(car_iou)))
+                subplotimg(axs[1, 0], data["gt_semantic_seg"][0][0, 0], cmap="cityscapes")
+                subplotimg(axs[2, 0], data["img"][0][0].permute(1, 2, 0))
+                subplotimg(axs[3, 0], diff,cmap="cityscapes")
+
+
+                out_file = os.path.join(out_dir,img_metas[0]['ori_filename'])
+                directory = "/".join(out_file.split('/')[:-1])
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
+                plt.savefig(out_file, dpi=300)
+            
+            # if it % 100 == 0:
+            #     dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+
+
+        results.extend(eval_vals)
 
         if rank == 0:
-            batch_size = len(result) * world_size
+            batch_size = len(eval_vals) * world_size
             for _ in range(batch_size):
                 prog_bar.update()
 
         it += 1
+
 
     
     for met in metrics:
@@ -364,6 +410,18 @@ def multi_gpu_test(model,
 
         dist.all_reduce(dataset.cml_intersect[met], op=dist.ReduceOp.SUM)
         dist.all_reduce(dataset.cml_union[met], op=dist.ReduceOp.SUM)
+        
+        #for pixel wise accuracy
+        dataset.pixelwise_correct[met] = dataset.pixelwise_correct[met].cuda()
+        dataset.pixelwise_total[met] = dataset.pixelwise_total[met].cuda()
+
+        dist.all_reduce(dataset.pixelwise_correct[met], op=dist.ReduceOp.SUM)
+        dist.all_reduce(dataset.pixelwise_total[met], op=dist.ReduceOp.SUM)
+
+        #for confusion matrix
+        dataset.confusion_matrix[met] = dataset.confusion_matrix[met].cuda()
+        dist.all_reduce(dataset.confusion_matrix[met], op=dist.ReduceOp.SUM)
+
     if rank == 0:
         dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
     dataset.init_cml_metrics()

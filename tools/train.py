@@ -24,6 +24,11 @@ from mmseg.datasets import build_dataset, build_dataloader
 from mmseg.models.builder import build_train_model
 from mmseg.utils import collect_env, get_root_logger
 from mmseg.utils.collect_env import gen_code_archive
+from mmseg.utils.dataset_test.get_dataset import get_viper_val
+import configs._base_.schedules.poly10warm as poly10warm
+import configs._base_.schedules.poly10 as poly10
+import configs._base_.schedules.adamw as adamw
+import configs._base_.schedules.sgd as sgd
 
 
 def parse_args(args):
@@ -63,24 +68,39 @@ def parse_args(args):
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
+
+    parser.add_argument("--total-iters", type=int, default=None)
+    parser.add_argument('--lr', type=float, default=None)
+    parser.add_argument('--lr-schedule', type=str, default=None, choices=["poly_10_warm", "poly_10", "constant"])
+    parser.add_argument('--optimizer', type=str, default=None, choices=["adamw", "sgd"])
+
     parser.add_argument('--analysis', type=bool, default=False)
+    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq"])
     parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--debug-mode', type=bool, default=False)
     parser.add_argument('--pre-exp-check', type=bool, default=False)
     parser.add_argument('--auto-resume', type=bool, default=False)
     parser.add_argument('--nowandb', type=bool, default=False)
     parser.add_argument('--wandbid', type=str, default=None)
-    parser.add_argument('--eval', type=bool, default=False)
-    parser.add_argument('--lr', type=float, default=None)
+
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
+    parser.add_argument('--consis-filter-rare-class', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
+    parser.add_argument('--bottom-pl-fill', type=bool, default=False)
     parser.add_argument('--oracle-mask', type=bool, default=False)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
+    parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
-    parser.add_argument("--total-iters", type=int, default=None)
+
+    parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
+    parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
+
+    # parser.add_argument("--modality", type=str, default=None)
+    parser.add_argument("--imnet-feature-dist-lambda", type=float, default=None)
+    parser.add_argument("--modality-dropout-weights", nargs=3, metavar=("RGB Dropout", "Flow Dropout", "Neither Dropout"), type=float, default=None)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -196,10 +216,6 @@ def main(args):
         distributed = True
         init_dist(cfg.launcher, **cfg.dist_params)
     
-    if args.lr is not None:
-        print("Overwriting LR to ", args.lr)
-        cfg.optimizer.lr = args.lr
-
     if args.l_warp_lambda is not None:
         print("Overwriting l_warp_lambda to ", args.l_warp_lambda)
         cfg.uda.l_warp_lambda = args.l_warp_lambda
@@ -217,11 +233,15 @@ def main(args):
     if args.debug_mode:
         cfg.uda.debug_mode = True
 
-    if args.eval:
+    if args.eval is not None:
         print("EVAL MODE")
         cfg.runner.max_iters = 1
         cfg.evaluation.interval = 1
         cfg.uda.stub_training = True
+        if args.eval == "viper":
+            cfg.data.val = get_viper_val(True)
+            cfg.data.val["data_type"] = "rgb+flowxynorm"
+
     
     if args.source_only2:
         cfg.uda.source_only2=True
@@ -247,8 +267,14 @@ def main(args):
     if args.consis_filter:
         cfg.uda.consis_filter = True
     
+    if args.consis_filter_rare_class:
+        cfg.uda.consis_filter_rare_class = True
+    
     if args.pl_fill:
         cfg.uda.pl_fill = True
+    
+    if args.bottom_pl_fill:
+        cfg.uda.bottom_pl_fill = True
     
     if args.consis_filter and args.pl_fill:
         raise Exception("Don't use both consis_filter and pl_fill, it's the same as just plain PL")
@@ -259,6 +285,9 @@ def main(args):
     if args.warp_cutmix:
         cfg.uda.warp_cutmix = True
 
+    if args.exclusive_warp_cutmix:
+        cfg.uda.exclusive_warp_cutmix = True
+
     if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin
     
@@ -267,6 +296,45 @@ def main(args):
     
     if args.total_iters:
         cfg.runner.max_iters = args.total_iters
+    
+    if args.class_mask_warp:
+        cfg.uda.class_mask_warp = args.class_mask_warp
+
+    if args.class_mask_cutmix:
+        cfg.uda.class_mask_cutmix = args.class_mask_cutmix
+    
+    if args.lr_schedule == "poly_10_warm":
+        cfg.lr_config = poly10warm.lr_config
+    elif args.lr_schedule == "poly_10":
+        cfg.lr_config = poly10.lr_config
+    elif args.lr_schedule == "constant":
+        cfg.lr_config = None
+
+    if args.optimizer == "adamw":
+        cfg.optimizer = adamw.optimizer
+        cfg.optimizer_config = adamw.optimizer_config
+    elif args.optimizer == "sgd":
+        cfg.optimizer = sgd.optimizer
+        cfg.optimizer_config = sgd.optimizer_config
+    
+    if args.lr is not None:
+        print("Overwriting LR to ", args.lr)
+        cfg.optimizer.lr = args.lr   
+    
+    if args.imnet_feature_dist_lambda is not None:
+        cfg.uda.imnet_feature_dist_lambda = args.imnet_feature_dist_lambda
+    
+    if args.modality_dropout_weights is not None:
+        cfg.uda.modality_dropout_weights = args.modality_dropout_weights
+    
+    # if args.modality:
+    #     cfg.uda.multimodal = True
+    #     cfg.data.train.source.data_type = args.modality
+    #     cfg.data.train.target.data_type = args.modality
+    #     cfg.data.val.data_type = args.modality
+    #     cfg.data.test.data_type = args.modality
+    #     if not (len(cfg.evaluation.eval_settings.metrics) == 1 and cfg.evaluation.eval_settings.metrics[0] == "mIoU"):
+    #         raise NotImplementedError("Only mIoU is valid for multimodal")
 
     print("FINISHED INIT DIST")
 

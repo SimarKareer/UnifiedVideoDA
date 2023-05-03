@@ -223,7 +223,8 @@ class HRDAHead(BaseDecodeHead):
                       gt_semantic_seg,
                       train_cfg,
                       seg_weight=None,
-                      return_logits=False):
+                      return_logits=False,
+                      reset_crop=True):
         """Forward function for training."""
         if self.enable_hr_crop:
             assert self.hr_crop_box is not None
@@ -231,7 +232,8 @@ class HRDAHead(BaseDecodeHead):
         losses = self.losses(seg_logits, gt_semantic_seg, seg_weight)
         if return_logits:
             losses['logits'] = seg_logits
-        self.reset_crop()
+        if reset_crop:
+            self.reset_crop()
         return losses
 
     def forward_test(self, inputs, img_metas, test_cfg):

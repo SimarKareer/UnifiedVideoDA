@@ -18,37 +18,17 @@ _base_ = [
 ]
 # load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
 # load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-load_from = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth" # base 
-# load_from="/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/trainDebug/cutmix-mask03-23-15-53-46/latest.pth" # cutmix + mask 
-# load_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv7/bottomFill03-30-18-51-19/latest.pth" # cutmix + mask + car hood PL fill
 # resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
 # resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
 model = dict(
-    type='HRDAEncoderDecoder',
+    type='EncoderDecoder',
+
     decode_head=dict(
-        type='HRDAHead',
-        # Use the DAFormer decoder for each scale.
-        single_scale_head='DAFormerHead',
-        # Learn a scale attention for each class channel of the prediction.
-        attention_classwise=True,
-        # Set the detail loss weight $\lambda_d=0.1$.
-        hr_loss_weight=0.1),
-    # Use the full resolution for the detail crop and half the resolution for
-    # the context crop.
-    scales=[1, 0.5],
-    # Use a relative crop size of 0.5 (=512/1024) for the detail crop.
-    hr_crop_size=(512, 512),
-    # Use LR features for the Feature Distance as in the original DAFormer.
-    feature_scale=0.5,
-    # Make the crop coordinates divisible by 8 (output stride = 4,
-    # downscale factor = 2) to ensure alignment during fusion.
-    crop_coord_divisible=8,
-    # Use overlapping slide inference for detail crops for pseudo-labels.
-    hr_slide_inference=True,
-    # Use overlapping slide inference for fused crops during test time.
+        type='DAFormerHead',
+    ),
     test_cfg=dict(
         mode='slide',
         batched_slide=True,
@@ -70,9 +50,9 @@ data = dict(
         target=dict(crop_pseudo_margins=[30, 240, 30, 30]),
     ),
     # Use one separate thread/worker for data loading.
-    workers_per_gpu=2,
+    workers_per_gpu=3,
     # Batch size
-    samples_per_gpu=2,
+    samples_per_gpu=1,
 )
 # MIC Parameters
 uda = dict(
@@ -105,30 +85,31 @@ uda = dict(
     class_mask_warp=None,
     class_mask_cutmix=None,
     exclusive_warp_cutmix=False,
+    modality="rgb",
+    modality_dropout_weights=None
 )
 # Optimizer Hyperparameters
 optimizer_config = None
-optimizer = dict(
-    lr=6e-05,
-    paramwise_cfg=dict(
-        custom_keys=dict(
-            head=dict(lr_mult=10.0),
-            pos_block=dict(decay_mult=0.0),
-            norm=dict(decay_mult=0.0))))
+# optimizer = dict(
+#     lr=6e-05,
+#     paramwise_cfg=dict(
+#         custom_keys=dict(
+#             head=dict(lr_mult=10.0),
+#             pos_block=dict(decay_mult=0.0),
+#             norm=dict(decay_mult=0.0))))
+# lr_config=None turns off LR schedule
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
-runner = dict(type='IterBasedRunner', max_iters=1)
+runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=8)
-evaluation = dict(interval=1, eval_settings={
-        "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed", "mIoU_gt_pred", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"],
-        "sub_metrics": ["mask_count"],
-        "pixelwise accuracy": True,
-        "confusion matrix": True,
-    },
-    # out_dir='predictions/cutmix_mask_PL_fill_car_viz',  #change based on model checkpoint or set as None 'cutmix_mask_lwarp'
-)
+checkpoint_config = dict(by_epoch=False, interval=3000, max_keep_ckpts=2)
+evaluation = dict(interval=3000, eval_settings={
+    "metrics": ["mIoU"],
+    "sub_metrics": ["mask_count"],
+    "pixelwise accuracy": True,
+    "confusion matrix": True,
+})
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
 exp = 'basic'
