@@ -335,6 +335,7 @@ def main(args):
     #     cfg.data.test.data_type = args.modality
     #     if not (len(cfg.evaluation.eval_settings.metrics) == 1 and cfg.evaluation.eval_settings.metrics[0] == "mIoU"):
     #         raise NotImplementedError("Only mIoU is valid for multimodal")
+    cfg.evaluation.eval_settings.work_dir = cfg.work_dir
 
     print("FINISHED INIT DIST")
 

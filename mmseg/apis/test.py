@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 import torchvision.transforms as transforms
+import pickle as pkl
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -421,6 +422,21 @@ def multi_gpu_test(model,
         #for confusion matrix
         dataset.confusion_matrix[met] = dataset.confusion_matrix[met].cuda()
         dist.all_reduce(dataset.confusion_matrix[met], op=dist.ReduceOp.SUM)
+
+        # dist.all_reduce(dataset.mask_counts, op=dist.ReduceOp.SUM)
+        # dist.all_reduce(dataset.total_mask_counts, op=dist.ReduceOp.SUM)
+
+    def dict_cpu(d1):
+        return {k: v.cpu() for k, v in d1.items()}
+
+    if rank == 0:
+        all_metrics = {"cml_intersect": dict_cpu(dataset.cml_intersect),
+                "cml_union": dict_cpu(dataset.cml_union),
+                "pixelwise_correct": dict_cpu(dataset.pixelwise_correct),
+                "pixelwise_total": dict_cpu(dataset.pixelwise_total),
+                "confusion_matrix": dict_cpu(dataset.confusion_matrix)}
+        with open(os.path.join(eval_settings['work_dir'], "eval_results.pkl"), 'wb') as f:
+            pkl.dump(all_metrics, f)
 
     if rank == 0:
         dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
