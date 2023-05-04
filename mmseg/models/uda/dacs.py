@@ -85,7 +85,8 @@ class DACS(UDADecorator):
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
-        self.oracle_mask_noise = cfg['oracle_mask_noise']
+        self.oracle_mask_add_noise = cfg['oracle_mask_add_noise']
+        self.oracle_mask_remove_pix = cfg['oracle_mask_remove_pix']
         self.oracle_mask_noise_percent = cfg['oracle_mask_noise_percent']
 
         self.pl_fill = cfg['pl_fill']
@@ -608,7 +609,7 @@ class DACS(UDADecorator):
 
         log_vars["L_warp"] = 0
 
-        if self.oracle_mask_noise:
+        if self.oracle_mask_add_noise or oracle_mask_remove_pix:
                 # oracle masking
                 oracle_map = (pseudo_label == target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
                 pseudo_label_oracle_consis = torch.clone(pseudo_label)
@@ -976,7 +977,7 @@ class DACS(UDADecorator):
                     self.init_cml_debug_metrics()
                 self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
 
-            if self.oracle_mask_noise:
+            if self.oracle_mask_add_noise or oracle_mask_remove_pix:
                 # oracle masking
                 oracle_map = (pseudo_label == target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
                 pseudo_label_oracle_consis = torch.clone(pseudo_label)
@@ -988,34 +989,46 @@ class DACS(UDADecorator):
                 inconsis_pixels = (pseudo_label != target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
 
                 for i in range(batch_size):
+                    
 
-                    inconsis_pix_i = inconsis_pixels[i]
-                    # print("Before non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
-                    # print("before", inconsis_pix_i.sum().item())
-                    # turn 1 - percentage of Trues into Falses (Trues mean inconsis = noise)
-                    # print(self.oracle_mask_noise_percent)
+                    if self.oracle_mask_add_noise:
+                        inconsis_pix_i = inconsis_pixels[i]
+                        # print("Before non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+                        # print(self.oracle_mask_noise_percent)
 
-                    num_inconsis = inconsis_pix_i.sum().item()
-                    num_noise = min(int(self.oracle_mask_noise_percent * oracle_map[i].sum().item()), num_inconsis)
+                        num_inconsis = inconsis_pix_i.sum().item()
+                        num_noise = min(int(self.oracle_mask_noise_percent * oracle_map[i].sum().item()), num_inconsis)
 
-                    num_to_change = num_inconsis - num_noise
+                        num_to_change = num_inconsis - num_noise
 
-                    # print(num_noise)
+                        true_indices = torch.where(inconsis_pix_i)
 
-                    true_indices = torch.where(inconsis_pix_i)
+                        change_indices = np.random.choice(len(true_indices[0]), size=num_to_change, replace=False)
+                    
+                        inconsis_pix_i[true_indices[0][change_indices], true_indices[1][change_indices]] = False
 
-                    change_indices = np.random.choice(len(true_indices[0]), size=num_to_change, replace=False)
-                
-                    inconsis_pix_i[true_indices[0][change_indices], true_indices[1][change_indices]] = False
+                        # print("after", inconsis_pix_i.sum().item())
 
-                    # print("after", inconsis_pix_i.sum().item())
+                        pseudo_label_oracle_consis[i][inconsis_pix_i] = pseudo_label[i][inconsis_pix_i]
+                        pseudo_label_oracle_consis_weight[i][inconsis_pix_i] = pseudo_weight[i][inconsis_pix_i]
 
-                    pseudo_label_oracle_consis[i][inconsis_pix_i] = pseudo_label[i][inconsis_pix_i]
-                    pseudo_label_oracle_consis_weight[i][inconsis_pix_i] = pseudo_weight[i][inconsis_pix_i]
+                        # print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
 
-                    # print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+                    if self.oracle_mask_remove_pix:
+                        print("Before non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+                        num_noise = int(self.oracle_mask_noise_percent * oracle_map[i].sum().item())
 
-                
+                        true_indices = torch.where(oracle_map[i])
+
+                        change_indices = np.random.choice(len(true_indices[0]), size=num_to_change, replace=False)
+
+                        oracle_mask[i][true_indices[0][change_indices], true_indices[1][change_indices]] = False
+
+                        pseudo_label_oracle_consis[i][~oracle_map] = 255
+                        pseudo_label_oracle_consis_weight[i][~oracle_map] = 0
+
+                        print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+
                 pseudo_label = pseudo_label_oracle_consis
                 pseudo_weight = pseudo_label_oracle_consis_weight
 
