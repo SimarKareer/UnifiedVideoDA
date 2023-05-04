@@ -366,7 +366,8 @@ class SeqUtils():
             visFlow = finalIms["flow"]
             check_min_max(visFlow)
             visFlow = flow_vis.flow_to_color(visFlow.permute(1, 2, 0).numpy(), convert_to_bgr=False).transpose([2, 0, 1])
-            finalIms["flowVis"] = minmax_norm(visFlow.astype('float32'))
+            visFlow = torch.from_numpy(visFlow.astype('float32'))
+            finalIms["flowVis"] = minmax_norm(visFlow)
         elif self.data_type == "rgb+flowrgbnorm":
             visFlow = finalIms["flow"]
             check_min_max(visFlow)
