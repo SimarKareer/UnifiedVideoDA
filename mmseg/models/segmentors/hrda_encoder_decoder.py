@@ -95,6 +95,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
         self.blur_hr_crop = blur_hr_crop
 
     def extract_unscaled_feat(self, img, masking_branch = None):
+        if masking_branch is not None:
+            masking_branch = masking_branch["masking"]
         if self.multimodal:
             x = self.backbone(img, masking_branch)
         else:
@@ -178,7 +180,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
             self.debug_output = self.decode_head.debug_output
         return out
     
-    def _decode_head_forward_test(self, x, img_metas):
+    def _decode_head_forward_test(self, x, img_metas, masking_branch=None):
         """Run forward function and calculate loss for decode head in
         inference.
         x: x[low/highres, mmbranch, segformer_layer] #This might change in different calls of _decode_head_forward_test
@@ -197,8 +199,14 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 [x[0][0], {"features": x[1]['features'][0], "boxes": copy.copy(x[1]['boxes'])}], #Need to copy boxes, as it is modified in-place by self.decode_head.forward_test
                 [x[0][1], {"features": x[1]['features'][1], "boxes": copy.copy(x[1]['boxes'])}]  #Need to copy boxes, as it is modified in-place by self.decode_head.forward_test
                 ] #Now x[i] corresponds to branch i
+        
             seg_logits = [self.decode_head.forward_test(x[i], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
-            seg_logits = self._get_ensemble_logits(seg_logits)
+
+            if masking_branch is not None:
+                branch = masking_branch["select"]
+                seg_logits = seg_logits[branch]
+            else:
+                seg_logits = self._get_ensemble_logits(seg_logits)
         else:
             seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         return seg_logits
@@ -267,7 +275,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
             if self.decode_head.debug:
                 self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
                     scaled_img.detach()
-        out = self._decode_head_forward_test(mres_feats, img_metas)
+        out = self._decode_head_forward_test(mres_feats, img_metas, masking_branch=masking_branch)
         if upscale_pred:
             out = resize(
                 input=out,

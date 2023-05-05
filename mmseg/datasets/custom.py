@@ -159,7 +159,7 @@ class CustomDataset(Dataset):
         self.init_cml_metrics()
 
     def init_cml_metrics(self):
-        all_metrics = ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "multimodalM5", "MM_v1", "MM_v2", "MM_v3"]
+        all_metrics = ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "multimodalM5", "MM_v1", "MM_v2", "MM_v3", "branch_consis", "branch1_miou", "branch2_miou", "mIoUDup"]
 
         self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in all_metrics} #TODO: this needs to persist out of this loop for iou prints to be accurate.
         self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in all_metrics}
@@ -443,6 +443,38 @@ class CustomDataset(Dataset):
         flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(curr_pred.device)
         return_mask_count = "mask_count" in sub_metrics
         # breakpoint()
+        def consistency_template(metric_name, consis, prediction):
+            iau = intersect_and_union(
+                prediction.squeeze(-1), #past frame
+                curr_seg_map.squeeze(0), #past GT
+                len(self.CLASSES),
+                self.ignore_index,
+                label_map=self.label_map,
+                # indices=indices,
+                return_mask=False,
+                custom_mask=consis, #where past and future agree
+                return_pixelwise_acc=return_pixelwise_acc,
+                return_confusion_matrix=return_confusion_matrix
+            )
+
+            #NOW INSERT METRICS FOR PIXEL WISE AND CONFUSION
+            if return_pixelwise_acc or return_confusion_matrix:
+                other_metrics = iau[-1]
+                iau = iau[:-1]
+
+                if 'pixelwise accuracy' in other_metrics:
+                    pixel_correct, pixel_total = other_metrics['pixelwise accuracy']
+                    self.pixelwise_correct[metric_name] += pixel_correct
+                    self.pixelwise_total[metric_name] += pixel_total
+
+                if 'confusion matrix' in other_metrics:
+                    confusion_matrix = other_metrics['confusion matrix']
+                    self.confusion_matrix[metric_name] += confusion_matrix
+
+            intersection, union, _, _ = iau
+            self.cml_intersect[metric_name] += intersection
+            self.cml_union[metric_name] += union
+
         if "pred_pred" in metrics:
             iau_pred_pred = flow_prop_iou(
                 future_pred,
@@ -947,6 +979,21 @@ class CustomDataset(Dataset):
             self.cml_intersect["mIoU"] += intersection
             self.cml_union["mIoU"] += union
             pre_eval_results.append(iau_miou)
+
+        if "branch_consis" in metrics:
+            consis = mm_preds["branch1"] == mm_preds["branch2"]
+            # breakpoint()
+
+            consistency_template("branch_consis", consis, curr_pred)
+        
+        if "branch1_miou" in metrics:
+            consistency_template("branch1_miou", None, mm_preds["branch1"])
+        
+        if "branch2_miou" in metrics:
+            consistency_template("branch2_miou", None, mm_preds["branch2"])
+        
+        if "mIoUDup" in metrics:
+            consistency_template("mIoUDup", None, curr_pred)
 
         return pre_eval_results
 

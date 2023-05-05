@@ -366,6 +366,22 @@ def multi_gpu_test(model,
                 result_no_flow = torch.from_numpy(
                     model(return_loss=False, logits=False, masking_branch=[1], **refined_data)[0]
                 ).to(device)
+                mm_preds = {"no_rgb": result_no_rgb, "no_flow": result_no_flow}
+            
+            if "branch_consis" in metrics:
+                masking_branch = {"masking": None, "select": 0}
+                result_branch1 = torch.from_numpy(
+                    model(return_loss=False, logits=False, masking_branch=masking_branch, **refined_data)[0]
+                ).to(device)
+
+                masking_branch = {"masking": None, "select": 1}
+                result_branch2 = torch.from_numpy(
+                    model(return_loss=False, logits=False, masking_branch=masking_branch, **refined_data)[0]
+                ).to(device)
+
+                mm_preds = {"branch1": result_branch1, "branch2": result_branch2}
+            
+
 
             result_tk = None
             if False:#len(metrics) > 1 or metrics[0] != "mIoU":
@@ -376,7 +392,7 @@ def multi_gpu_test(model,
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix, mm_preds={"no_rgb": result_no_rgb, "no_flow": result_no_flow})
+            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix, mm_preds=mm_preds)
 
             if out_dir:
                 intersection, union, _,_  = eval_vals[0]

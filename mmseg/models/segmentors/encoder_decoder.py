@@ -82,6 +82,8 @@ class EncoderDecoder(BaseSegmentor):
 
     def extract_feat(self, img, masking_branch = None):
         """Extract features from images."""
+        if masking_branch is not None:
+            masking_branch = masking_branch["masking"]
         if not self.multimodal:
             x = self.backbone(img)
         else:
@@ -107,7 +109,7 @@ class EncoderDecoder(BaseSegmentor):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         x = self.extract_feat(img, masking_branch)
-        out = self._decode_head_forward_test(x, img_metas)
+        out = self._decode_head_forward_test(x, img_metas, masking_branch=masking_branch)
         if upscale_pred:
             out = resize(
                 input=out,

@@ -35,7 +35,8 @@ data = dict(
     )
 )
 evaluation = dict(interval=3000, eval_settings={
-    "metrics": ["mIoU", "multimodalM5", "MM_v1", "MM_v2", "MM_v3"],
+    # "metrics": ["mIoU", "multimodalM5", "MM_v1", "MM_v2", "MM_v3"],
+    "metrics": ["mIoU", "branch_consis", "branch1_miou", "branch2_miou", "mIoUDup"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
