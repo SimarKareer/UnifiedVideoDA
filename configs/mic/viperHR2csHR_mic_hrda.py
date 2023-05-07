@@ -106,7 +106,7 @@ uda = dict(
     modality="rgb",
     modality_dropout_weights=None,
     oracle_mask_add_noise=False,
-    oracle_mask_remove_pix=False
+    oracle_mask_remove_pix=False,
     oracle_mask_noise_percent=0.0,
 )
 # Optimizer Hyperparameters

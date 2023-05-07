@@ -35,8 +35,9 @@ from mmseg.models.uda.masking_consistency_module import \
     MaskingConsistencyModule
 from mmseg.models.uda.uda_decorator import UDADecorator, get_module
 from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
-                                                get_mean_std, strong_transform)
+                                                get_mean_std, one_mix, strong_transform)
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
+from mmseg.ops import resize
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.datasets.cityscapes import CityscapesDataset
@@ -435,6 +436,15 @@ class DACS(UDADecorator):
 
         return mixed_img, mixed_lbl, mixed_seg_weight, mix_masks
     
+    def get_mixed_gt(self, mix_masks, gt_semantic_seg, target_img_extra):
+        batch_size = gt_semantic_seg.shape[0]
+        mixed_gt = [None] * batch_size
+        for i in range(batch_size):
+            _, mixed_gt[i] = one_mix(mask=mix_masks[i], 
+                                data=None, 
+                                target=torch.stack((gt_semantic_seg[i][0], target_img_extra["gt_semantic_seg"][i][0])))
+        return mixed_gt
+
     def add_training_debug_metrics(self, pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars):
         pl_warp = pseudo_label_warped[0]
         pw_warp = pseudo_weight_warped[0]
@@ -495,21 +505,21 @@ class DACS(UDADecorator):
 
             log_vars[f"Mask Percentage {class_name}"] = self.cml_debug_metrics["warp_cml_mask_hit"][i] / self.cml_debug_metrics["warp_cml_mask_total"][i]
     
-    def add_iou_metrics(self, pseudo_label, gt_sem_seg, log_vars):
+    def add_iou_metrics(self, pred, gt_sem_seg, log_vars, name):
         """
         pseudo_label: B, H, W
         gt_sem_seg: B, 1, H, W
         log_vars: {varName:v}
         """
         gt_sem_seg = gt_sem_seg[0, 0]
-        plain_iou = self.fast_iou(pseudo_label[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), return_raw=True)
+        plain_iou = self.fast_iou(pred[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), return_raw=True)
         self.cml_debug_metrics["plain_cml_intersect"] += plain_iou[0]
         self.cml_debug_metrics["plain_cml_union"] += plain_iou[1]
 
         for i, class_name in enumerate(CityscapesDataset.CLASSES):
-            log_vars[f"Plain PL IoU {class_name}"] = self.cml_debug_metrics["plain_cml_intersect"][i] / self.cml_debug_metrics["plain_cml_union"][i]
+            log_vars[f"Plain {name} IoU {class_name}"] = self.cml_debug_metrics["plain_cml_intersect"][i] / self.cml_debug_metrics["plain_cml_union"][i]
 
-            log_vars["Plain PL mIoU"] = np.nanmean((self.cml_debug_metrics["plain_cml_intersect"] / self.cml_debug_metrics["plain_cml_union"]).numpy())
+        log_vars[f"Plain {name} mIoU"] = np.nanmean((self.cml_debug_metrics["plain_cml_intersect"] / self.cml_debug_metrics["plain_cml_union"]).numpy())
         
         return log_vars
 
@@ -605,35 +615,34 @@ class DACS(UDADecorator):
             if isinstance(m, DropPath):
                 m.training = False
         pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+        self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
         gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
         log_vars["L_warp"] = 0
 
-        if self.oracle_mask_add_noise or oracle_mask_remove_pix:
-                # oracle masking
-                oracle_map = (pseudo_label == target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
-                pseudo_label_oracle_consis = torch.clone(pseudo_label)
-                pseudo_label_oracle_consis_weight = torch.clone(pseudo_weight)
+        if self.oracle_mask_add_noise or self.oracle_mask_remove_pix:
+            # oracle masking
+            oracle_map = (pseudo_label == target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
+            pseudo_label_oracle_consis = torch.clone(pseudo_label)
+            pseudo_label_oracle_consis_weight = torch.clone(pseudo_weight)
 
-                pseudo_label_oracle_consis_weight[~oracle_map] = 0
-                pseudo_label_oracle_consis[~oracle_map] = 255
+            pseudo_label_oracle_consis_weight[~oracle_map] = 0
+            pseudo_label_oracle_consis[~oracle_map] = 255
 
-                inconsis_pixels = (pseudo_label != target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
+            inconsis_pixels = (pseudo_label != target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
 
-                for i in range(batch_size):
+            for i in range(batch_size):
+                
 
+                if self.oracle_mask_add_noise:
                     inconsis_pix_i = inconsis_pixels[i]
                     # print("Before non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
-                    # print("before", inconsis_pix_i.sum().item())
-                    # turn 1 - percentage of Trues into Falses (Trues mean inconsis = noise)
                     # print(self.oracle_mask_noise_percent)
 
                     num_inconsis = inconsis_pix_i.sum().item()
                     num_noise = min(int(self.oracle_mask_noise_percent * oracle_map[i].sum().item()), num_inconsis)
 
                     num_to_change = num_inconsis - num_noise
-
-                    # print(num_noise)
 
                     true_indices = torch.where(inconsis_pix_i)
 
@@ -648,9 +657,23 @@ class DACS(UDADecorator):
 
                     # print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
 
-                
-                pseudo_label = pseudo_label_oracle_consis
-                pseudo_weight = pseudo_label_oracle_consis_weight
+                if self.oracle_mask_remove_pix:
+                    # print("Before non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+                    num_to_change = int(self.oracle_mask_noise_percent * oracle_map[i].sum().item())
+
+                    true_indices = torch.where(oracle_map[i])
+
+                    change_indices = np.random.choice(len(true_indices[0]), size=num_to_change, replace=False)
+
+                    oracle_map[i][true_indices[0][change_indices], true_indices[1][change_indices]] = False
+
+                    pseudo_label_oracle_consis[i][~oracle_map[i]] = 255
+                    pseudo_label_oracle_consis_weight[i][~oracle_map[i]] = 0
+
+                    # print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+
+            pseudo_label = pseudo_label_oracle_consis
+            pseudo_weight = pseudo_label_oracle_consis_weight
 
         if self.l_mix_lambda > 0:
             # Apply mixing
@@ -671,8 +694,20 @@ class DACS(UDADecorator):
                 mixed_lbl,
                 seg_weight=mixed_seg_weight,
                 return_feat=False,
+                return_logits=True,
                 masking_branch=masking_branch
             )
+            mix_student_pred = torch.softmax(mix_losses['decode.logits'][0].detach(), dim=1) #indexing 0th to get the fused predictions - which is what is used in decode_head.forward_test
+            mixed_gt = torch.cat(self.get_mixed_gt(mix_masks, gt_semantic_seg, target_img_extra))
+            mix_student_pred = resize(
+                input=mix_student_pred,
+                size=mixed_gt.shape[2:],
+                mode='bilinear',
+                align_corners=self.get_model().align_corners)
+            _, mix_student_pred = torch.max(mix_student_pred, dim=1)
+            self.add_iou_metrics(mix_student_pred, mixed_gt, log_vars, name="Mixed Student")
+            del mix_losses['decode.logits'], mix_student_pred, mixed_gt
+
             seg_debug['Mix'] = self.get_model().debug_output
             mix_losses = add_prefix(mix_losses, 'mix')
             mix_loss, mix_log_vars = self._parse_losses(mix_losses)
@@ -690,8 +725,6 @@ class DACS(UDADecorator):
             masked_loss, masked_log_vars = self._parse_losses(masked_loss)
             log_vars.update(masked_log_vars)
             masked_loss.backward()
-        
-        self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars)
 
         if DEBUG:
             subplotimg(axs[2, 0], pseudo_label, "PL", cmap="cityscapes")
@@ -818,6 +851,7 @@ class DACS(UDADecorator):
                     m.training = False
             
             pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+            self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
             pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
@@ -977,7 +1011,7 @@ class DACS(UDADecorator):
                     self.init_cml_debug_metrics()
                 self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
 
-            if self.oracle_mask_add_noise or oracle_mask_remove_pix:
+            if self.oracle_mask_add_noise or self.oracle_mask_remove_pix:
                 # oracle masking
                 oracle_map = (pseudo_label == target_img_extra["gt_semantic_seg"].squeeze(1)) & (target_img_extra["gt_semantic_seg"].squeeze(1) != 255)
                 pseudo_label_oracle_consis = torch.clone(pseudo_label)
@@ -1015,19 +1049,19 @@ class DACS(UDADecorator):
                         # print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
 
                     if self.oracle_mask_remove_pix:
-                        print("Before non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
-                        num_noise = int(self.oracle_mask_noise_percent * oracle_map[i].sum().item())
+                        # print("Before non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+                        num_to_change = int(self.oracle_mask_noise_percent * oracle_map[i].sum().item())
 
                         true_indices = torch.where(oracle_map[i])
 
                         change_indices = np.random.choice(len(true_indices[0]), size=num_to_change, replace=False)
 
-                        oracle_mask[i][true_indices[0][change_indices], true_indices[1][change_indices]] = False
+                        oracle_map[i][true_indices[0][change_indices], true_indices[1][change_indices]] = False
 
-                        pseudo_label_oracle_consis[i][~oracle_map] = 255
-                        pseudo_label_oracle_consis_weight[i][~oracle_map] = 0
+                        pseudo_label_oracle_consis[i][~oracle_map[i]] = 255
+                        pseudo_label_oracle_consis_weight[i][~oracle_map[i]] = 0
 
-                        print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
+                        # print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
 
                 pseudo_label = pseudo_label_oracle_consis
                 pseudo_weight = pseudo_label_oracle_consis_weight
@@ -1047,7 +1081,19 @@ class DACS(UDADecorator):
                     mixed_lbl,
                     seg_weight=mixed_seg_weight,
                     return_feat=False,
+                    return_logits=True
                 )
+
+                mix_student_pred = torch.softmax(mix_losses['decode.logits'][0].detach(), dim=1) #indexing 0th to get the fused predictions - which is what is used in decode_head.forward_test
+                mixed_gt = torch.cat(self.get_mixed_gt(mix_masks, gt_semantic_seg, target_img_extra))
+                mix_student_pred = resize(
+                    input=mix_student_pred,
+                    size=mixed_gt.shape[2:],
+                    mode='bilinear',
+                    align_corners=self.get_model().align_corners)
+                _, mix_student_pred = torch.max(mix_student_pred, dim=1)
+                self.add_iou_metrics(mix_student_pred, mixed_gt, log_vars, name="Mixed Student")
+                del mix_losses['decode.logits'], mix_student_pred, mixed_gt
                 seg_debug['Mix'] = self.get_model().debug_output
                 mix_losses = add_prefix(mix_losses, 'mix')
                 mix_loss, mix_log_vars = self._parse_losses(mix_losses)
@@ -1066,8 +1112,6 @@ class DACS(UDADecorator):
                 log_vars.update(masked_log_vars)
                 masked_loss.backward()
 
-            self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars)
-            
 
             if DEBUG:
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
