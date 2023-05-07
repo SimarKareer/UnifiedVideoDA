@@ -697,7 +697,10 @@ class DACS(UDADecorator):
                 return_logits=True,
                 masking_branch=masking_branch
             )
-            mix_student_pred = torch.softmax(mix_losses['decode.logits'][0].detach(), dim=1) #indexing 0th to get the fused predictions - which is what is used in decode_head.forward_test
+            if isinstance(mix_losses['decode.logits'], tuple):
+                mix_student_pred = torch.softmax(mix_losses['decode.logits'][0].detach(), dim=1) #indexing 0th to get the fused predictions - which is what is used in decode_head.forward_test
+            else:
+                mix_student_pred = torch.softmax(mix_losses['decode.logits'].detach(), dim=1) #For non HRDA don't index into tuple
             mixed_gt = torch.cat(self.get_mixed_gt(mix_masks, gt_semantic_seg, target_img_extra))
             mix_student_pred = resize(
                 input=mix_student_pred,
@@ -1084,7 +1087,10 @@ class DACS(UDADecorator):
                     return_logits=True
                 )
 
-                mix_student_pred = torch.softmax(mix_losses['decode.logits'][0].detach(), dim=1) #indexing 0th to get the fused predictions - which is what is used in decode_head.forward_test
+                if isinstance(mix_losses['decode.logits'], tuple):
+                    mix_student_pred = torch.softmax(mix_losses['decode.logits'][0].detach(), dim=1) #indexing 0th to get the fused predictions - which is what is used in decode_head.forward_test
+                else:
+                    mix_student_pred = torch.softmax(mix_losses['decode.logits'].detach(), dim=1) #For non HRDA don't index into tuple
                 mixed_gt = torch.cat(self.get_mixed_gt(mix_masks, gt_semantic_seg, target_img_extra))
                 mix_student_pred = resize(
                     input=mix_student_pred,
