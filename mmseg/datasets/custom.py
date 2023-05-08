@@ -432,7 +432,9 @@ class CustomDataset(Dataset):
         if curr_seg_map.shape[0] == 1 and len(curr_seg_map.shape) == 4:
             curr_seg_map = curr_seg_map.squeeze(0).to(curr_pred.device)
 
-        flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(curr_pred.device)
+        flow = None
+        if "flow" in data:
+            flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(curr_pred.device)
         return_mask_count = "mask_count" in sub_metrics
         # breakpoint()
         if "pred_pred" in metrics:

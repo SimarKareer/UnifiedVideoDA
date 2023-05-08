@@ -725,6 +725,8 @@ class DACS(UDADecorator):
             )
             subplotimg(axs[0, 2], invNorm(img[0]), "Source IM 0")
             subplotimg(axs[0, 3], invNorm(img[1]), "Source IM 1")
+            subplotimg(axs[1, 2], invNorm(target_img[0]), "Target IM 0")
+            subplotimg(axs[1, 3], invNorm(target_img[1]), "Target IM 1")
 
         # if self.local_iter % 5 == 0:
         #     for i in range(torch.cuda.device_count()):
@@ -787,21 +789,21 @@ class DACS(UDADecorator):
 
         pseudo_label, pseudo_weight = None, None
         if not self.source_only:
-            target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
 
             for m in self.get_ema_model().modules():
                 if isinstance(m, _DropoutNd):
                     m.training = False
                 if isinstance(m, DropPath):
                     m.training = False
-            
             pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
             self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
-            pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
-            gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
-            if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
+            if self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
+                target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
+                pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+
+
 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
@@ -1005,7 +1007,7 @@ class DACS(UDADecorator):
                 masked_loss.backward()
 
 
-            if DEBUG:
+            if DEBUG and "imtk" in img_extra:
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
                 subplotimg(axs[0][1], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
                 subplotimg(axs[1][0], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
@@ -1080,11 +1082,13 @@ class DACS(UDADecorator):
                 #     warp_iou_mask.repeat(3, 1, 1) * 255, "warp iou mask"
                 # )
 
-                fig.savefig(f"work_dirs/LWarpPLAnalysis/ims{self.local_iter}.png", dpi=200)
                 # fig.close()
                 large_fig.savefig(f"work_dirs/LWarpPLAnalysis/graphs{self.local_iter}.png", dpi=200)
                 # large_fig.close()
                 # breakpoint()
+        if DEBUG:
+            fig.savefig(f"work_dirs/LWarpPLAnalysis/ims{self.local_iter}.png", dpi=200)
+
 
         self.local_iter += 1
 

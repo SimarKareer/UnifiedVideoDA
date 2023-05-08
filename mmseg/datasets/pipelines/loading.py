@@ -133,6 +133,13 @@ class LoadAnnotations(object):
                                 results['ann_info']['seg_map'])
         else:
             filename = results['ann_info']['seg_map']
+
+
+        if not os.path.exists(filename):
+            results["gt_semantic_seg"] = np.zeros((1024, 2048))
+            results["seg_fields"].append("gt_semantic_seg")
+            return results
+
         img_bytes = self.file_client.get(filename)
         gt_semantic_seg = mmcv.imfrombytes(
             img_bytes, flag='unchanged',

@@ -359,7 +359,7 @@ def multi_gpu_test(model,
             result[0] = torch.from_numpy(result[0]).to(device)
 
             result_tk = None
-            if len(metrics) > 1 or metrics[0] != "mIoU":
+            if (len(metrics) > 1 or metrics[0] != "mIoU") and "imtk" in data:
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=False, **refined_data)
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)

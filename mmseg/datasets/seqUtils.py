@@ -106,7 +106,7 @@ class SeqUtils():
             # imt_imtk_flow = self.prepare_test_img(self.img_infos, idx)
             assert(self.fut_images is not None)
             assert(self.flows is not None)
-            imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
+            imt_imtk_flow = self.prepare_train_img_singular(self.img_infos, idx)
 
             # im_tk = self.prepare_test_img(self.past_images, idx)
             # for k, v in im_tk.items():
@@ -121,11 +121,11 @@ class SeqUtils():
             else:
                 # print("flow on")
                 try:
-                    imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
+                    imt_imtk_flow = self.prepare_train_img_singular(self.img_infos, idx)
                 except FileNotFoundError as e:
                     if self.no_crash_dataset:
                         print("Skipping image due to error: ", e)
-                        imt_imtk_flow = self.prepare_train_img(self.img_infos, 0, im_tk_infos=self.fut_images, flow_infos=self.flows)
+                        imt_imtk_flow = self.prepare_train_img_singular(self.img_infos, 0)
                     else:
                         raise e
 
@@ -185,40 +185,55 @@ class SeqUtils():
         #     results['label_map'] = self.label_map
 
     
-    def prepare_train_img_no_flow(self, infos, idx, im_tk_infos):
-        """Get training data and annotations after pipeline.
-
-        Args:
-            idx (int): Index of data.
-
-        Returns:
-            dict: Training data and annotation after pipeline with new keys
-                introduced by pipeline.
-        """
-        assert False, "Broken after I made viper and cityscapes consistent"
-        img_info = infos[idx]
-        ann_info = self.get_ann_info(infos, idx)
-        results = dict(img_info=img_info, ann_info=ann_info)
-        resultsImtk = dict(img_info = im_tk_infos[idx])
+    def prepare_train_img_singular(self, infos, idx):
+        results = dict(img_info=infos[idx], ann_info=self.get_ann_info(infos, idx))
 
         self.pre_pipeline(results)
-        self.pre_pipeline(resultsImtk)
 
         ims = self.pipeline["im_load_pipeline"](results)
-        #TODO can improve performance if we only run the im_load_pipeline when we want imtk annotations
-        # imtk = self.pipeline["im_load_pipeline"](resultsImtk)
-        imtk = self.pipeline["im_load_pipeline"](resultsImtk)
-        imtk_gt = imtk["gt_semantic_seg"]
+        ims = self.pipeline["shared_pipeline"](ims)
+        finalIms = self.pipeline["im_pipeline"](ims) #add the rest of the image augs
 
-        mergedIms = self.merge(ims, imtk) #TODO: concat the ims and flows
+        for k, v in finalIms.items():
+            if isinstance(v, DataContainer):
+                finalIms[k] = v.data
 
-        mergedIms = self.pipeline["shared_pipeline"](mergedIms) #Apply the spatial aug to concatted im/flow
-        im, imtk, _ = self.unmerge(mergedIms) # separate out the ims and flows again
-        finalIms = self.pipeline["im_pipeline"](im) #add the rest of the image augs
-        finalImtk = self.pipeline["im_pipeline"](imtk) #add the rest of the image augs
-        
-        finalIms["imtk"] = finalImtk["img"]
-        finalIms["imtk_gt_semantic_seg"] = imtk_gt
+        for k, v in finalIms.items():
+            if isinstance(v, torch.Tensor):
+                finalIms[k] = [v]
+
+        for k, v in finalIms.items():
+            if isinstance(v, np.ndarray):
+                finalIms[k] = [torch.from_numpy(v)]
+
+        def get_metas(loaded_images):
+            img_metas = {}
+            for k, v in loaded_images.items():
+                if k not in ["img", "gt_semantic_seg", "img_info", "ann_info", "seg_prefix", "img_prefix", "seg_fields"]:
+                    img_metas[k] = v
+
+            img_metas["img_shape"] = (1080, 1920, 3)
+            img_metas["pad_shape"] = (1080, 1920, 3)
+            return img_metas
+        finalIms["img_metas"] = [DataContainer(get_metas(ims), cpu_only=True)]
+
+        finalIms["gt_semantic_seg"][0] = finalIms["gt_semantic_seg"][0].unsqueeze(0).long() #TODO, I shouldn't have to do this manually
+
+        # Get rid of list dim for all tensors
+        # if self.test_mode: #NOTE: eventually we should just always unpack the list and account for the difference in the test function.
+        for k, v in finalIms.items():
+            if isinstance(v, list) and isinstance(v[0], torch.Tensor):
+                finalIms[k] = v[0]
+            if k == "img_metas" or k == "imtk_metas":
+                finalIms[k] = v[0]
+
+        if self.test_mode:
+            for k, v in finalIms.items():
+                if isinstance(v, torch.Tensor):
+                    finalIms[k] = [v]
+                elif k == "img_metas" or k == "imtk_metas":
+                    finalIms[k] = [v]
+
         return finalIms
 
     def prepare_train_img(self, infos, idx, im_tk_infos=None, flow_infos=None, load_tk_gt=False):
@@ -303,7 +318,7 @@ class SeqUtils():
         finalIms["gt_semantic_seg"][0] = finalIms["gt_semantic_seg"][0].unsqueeze(0).long() #TODO, I shouldn't have to do this manually
 
         # Get rid of list dim for all tensors
-        # if self.unpack_list: #NOTE: eventually we should just always unpack the list and account for the difference in the test function.
+        # if self.test_mode: #NOTE: eventually we should just always unpack the list and account for the difference in the test function.
         for k, v in finalIms.items():
             if isinstance(v, list) and isinstance(v[0], torch.Tensor):
                 finalIms[k] = v[0]
@@ -388,7 +403,7 @@ class SeqUtils():
             raise Exception("Unknown data_type: {}".format(self.data_type))
     
 
-        if not self.unpack_list:
+        if self.test_mode:
             for k, v in finalIms.items():
                 if isinstance(v, torch.Tensor):
                     finalIms[k] = [v]
