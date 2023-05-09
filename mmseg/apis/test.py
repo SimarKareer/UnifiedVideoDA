@@ -373,7 +373,6 @@ def multi_gpu_test(model,
                 logit_result_tk = None
                 if return_logits:
                     logit_result_tk = result_tk
-                    print("Shape", logit_result_tk[0].shape)
                     result_tk = [np.argmax(logit_result_tk[0], axis=0)]
                     logit_result_tk = [torch.from_numpy(logit_result_tk[0]).to(device)]
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)

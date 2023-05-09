@@ -159,16 +159,16 @@ class CustomDataset(Dataset):
         self.init_cml_metrics()
 
     def init_cml_metrics(self):
-        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]}
+        self.cml_intersect = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "consis_confidence_filter"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.cml_union = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "consis_confidence_filter"]}
         self.mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.total_mask_counts = {k: torch.zeros(len(self.CLASSES)) for k in ["pred_pred", "gt_pred"]}
         self.cml_correct_consis = {k: torch.zeros(len(self.CLASSES)) for k in ["correct_consis", "incorrect_consis", "correct_inconsis", "incorrect_inconsis"]}
 
-        self.pixelwise_correct = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
-        self.pixelwise_total = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]}
+        self.pixelwise_correct = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "consis_confidence_filter"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.pixelwise_total = {k: torch.zeros(len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "consis_confidence_filter"]}
 
-        self.confusion_matrix = {k: torch.zeros(len(self.CLASSES), len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
+        self.confusion_matrix = {k: torch.zeros(len(self.CLASSES), len(self.CLASSES)) for k in ["mIoU", "mIoU_gt_pred", "pred_pred", "gt_pred", "M5", "M5Fixed", "M6", "M6B", "M7", "M8", "M6Sanity", "PL1", "OR_Filter", "inconsis_predt_gt", "inconsis_predtk_gt", "inconsis_predt_predtk", "consis_confidence_filter"]} #TODO: this needs to persist out of this loop for iou prints to be accurate.
     def __len__(self):
         """Total number of samples of data."""
         return len(self.img_infos)
@@ -335,7 +335,7 @@ class CustomDataset(Dataset):
                 out_str += "          "
                 out_str += f", {str(self.pixelwise_correct[metric][i].item()):15s}, {str(self.pixelwise_total[metric][i].item()):15s}"
 
-                if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5" and metric != "M5Fixed" and metric != "OR_Filter" and metric != "inconsis_predt_gt" and metric != "inconsis_predtk_gt" and metric != "inconsis_predt_predtk":
+                if "mask_count" in sub_metrics and "mIoU" not in metric and metric != "M5" and metric != "M5Fixed" and metric != "OR_Filter" and metric != "inconsis_predt_gt" and metric != "inconsis_predtk_gt" and metric != "inconsis_predt_predtk" and metric != "consis_confidence_filter":
                     # breakpoint()
                     mask_ratio = 0 if self.total_mask_counts[metric][i] == 0 else self.mask_counts[metric][i] / self.total_mask_counts[metric][i]
 
@@ -769,31 +769,61 @@ class CustomDataset(Dataset):
 
         #WIP
         if "consis_confidence_filter" in metrics:
+            
+            #skip metric if these values are None
+            if confidence_thresh is None or result_logits is None:
+                print("Fail")
+                
             pred_t = curr_pred
             pred_tk, warp_mask = backpropFlow(flow, future_pred, return_mask=True)
-            
-            # warp filter
-            pred_t_warp_masked = torch.ones_like(pred_t)*255
-            pred_t_warp_masked[warp_mask] = pred_t[warp_mask]
-            mask = (pred_t_warp_masked != pred_tk)
+
+            consis_mask = (pred_t == pred_tk)
+            # print("consis mask", consis_mask.size(), consis_mask.sum())
 
 
-            pred_tk_inconsis = torch.ones_like(pred_tk)*255
-            pred_t_inconsis = torch.ones_like(pred_t)*255
+            # print("pred Sizes", pred_t.size(), pred_tk.size())
 
-            pred_tk_inconsis[mask] = pred_tk[mask]
-            pred_t_inconsis[mask] = pred_t_warp_masked[mask]
+            pred_t_logit = result_logits[0]
+            pred_tk_logit = result_tk_logits[0]
+
+            # print("logit Sizes", pred_t_logit.size(), pred_tk_logit.size())
+
+
+            #get predictions over a max convidence 
+            max_logit_val_pred_t , _ = torch.max(pred_t_logit, dim=0)
+            # print("max logit", max_logit_val_pred_t.size())
+            max_logit_val_pred_t = max_logit_val_pred_t[:,:, None]
+
+            # print("max logit", max_logit_val_pred_t.size())
+
+
+            confidence_mask = (max_logit_val_pred_t > confidence_thresh)
+
+            # print("Conf mask", confidence_mask.size(), confidence_mask.sum())
+
+
+            consis_confidence_mask = (confidence_mask & consis_mask).squeeze(-1)
+            # print("consis_conf mask", consis_confidence_mask.sum() )
+
+            # print("Mask Size", consis_confidence_mask.size(), consis_confidence_mask.sum())
+
+            #inputs
+
+            # print("Inputs: ", "pred", pred_t.squeeze(-1).size(), "GT", curr_seg_map.squeeze(0).size())
 
             iau_miou = intersect_and_union(
-                pred_t_inconsis.squeeze(-1),
-                pred_tk_inconsis.squeeze(-1),
+                pred_t.squeeze(-1),
+                curr_seg_map.squeeze(0),
                 len(self.CLASSES),
                 self.ignore_index,
                 label_map=self.label_map,
+                custom_mask=consis_confidence_mask, #where past and future agree
                 reduce_zero_label=self.reduce_zero_label,
                 return_pixelwise_acc=return_pixelwise_acc,
                 return_confusion_matrix=return_confusion_matrix,
             )
+
+            # print("done")
 
             #NOW INSERT METRICS FOR PIXEL WISE AND CONFUSION
             if return_pixelwise_acc or return_confusion_matrix:
@@ -802,17 +832,17 @@ class CustomDataset(Dataset):
                 
                 if 'pixelwise accuracy' in other_metrics:
                     pixel_correct, pixel_total = other_metrics['pixelwise accuracy']
-                    self.pixelwise_correct["inconsis_predt_predtk"] += pixel_correct
-                    self.pixelwise_total["inconsis_predt_predtk"] += pixel_total
+                    self.pixelwise_correct["consis_confidence_filter"] += pixel_correct
+                    self.pixelwise_total["consis_confidence_filter"] += pixel_total
                 
                 if 'confusion matrix' in other_metrics:
                     confusion_matrix = other_metrics['confusion matrix']
-                    self.confusion_matrix["inconsis_predt_predtk"] += confusion_matrix
+                    self.confusion_matrix["consis_confidence_filter"] += confusion_matrix
 
             intersection, union, _, _ = iau_miou
 
-            self.cml_intersect["inconsis_predt_predtk"] += intersection
-            self.cml_union["inconsis_predt_predtk"] += union
+            self.cml_intersect["consis_confidence_filter"] += intersection
+            self.cml_union["consis_confidence_filter"] += union
 
         if "mIoU" in metrics:
             iau_miou = intersect_and_union(
