@@ -127,6 +127,7 @@ evaluation = dict(interval=3000, eval_settings={
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
+    "return_logits": True
 })
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'

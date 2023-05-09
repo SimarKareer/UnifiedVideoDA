@@ -310,7 +310,7 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
-    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"]
+    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix, return_logits, confidence_thresh = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"], eval_settings['return_logits'], eval_settings['confidence_thresh']
 
     device = model.module.model.device
     print("TESTING METRICS: ", metrics)
@@ -355,19 +355,33 @@ def multi_gpu_test(model,
                     "img_metas": data["img_metas"], 
                     "img": data["img"]
                 }
-            result = model(return_loss=False, logits=False, **refined_data)
+            result = model(return_loss=False, logits=return_logits, **refined_data)
+
+            logit_result = None
+            if return_logits:
+                logit_result = result
+                result = [np.argmax(logit_result[0], axis=0)]
+                logit_result = [torch.from_numpy(logit_result[0]).to(device)]
+                
             result[0] = torch.from_numpy(result[0]).to(device)
 
             result_tk = None
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
-                result_tk = model(return_loss=False, logits=False, **refined_data)
+                result_tk = model(return_loss=False, logits=return_logits, **refined_data)
+
+                logit_result_tk = None
+                if return_logits:
+                    logit_result_tk = result_tk
+                    print("Shape", logit_result_tk[0].shape)
+                    result_tk = [np.argmax(logit_result_tk[0], axis=0)]
+                    logit_result_tk = [torch.from_numpy(logit_result_tk[0]).to(device)]
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
-        
+
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
+            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix, result_logits=logit_result, result_tk_logits=logit_result_tk, confidence_thresh=confidence_thresh)
 
             if out_dir:
                 intersection, union, _,_  = eval_vals[0]
