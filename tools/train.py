@@ -90,6 +90,9 @@ def parse_args(args):
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--bottom-pl-fill', type=bool, default=False)
     parser.add_argument('--oracle-mask', type=bool, default=False)
+    parser.add_argument('--oracle-mask-add-noise', type=bool, default=False)
+    parser.add_argument('--oracle-mask-remove-pix', type=bool, default=False)
+    parser.add_argument('--oracle-mask-noise-percent', type=float, default=0.0)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
@@ -281,6 +284,15 @@ def main(args):
     
     if args.oracle_mask:
         cfg.uda.oracle_mask = True
+    
+    if args.oracle_mask_add_noise:
+        cfg.uda.oracle_mask_add_noise = True
+    
+    if args.oracle_mask_remove_pix:
+        cfg.uda.oracle_mask_remove_pix = True
+    
+    if args.oracle_mask_noise_percent:
+        cfg.uda.oracle_mask_noise_percent = args.oracle_mask_noise_percent
     
     if args.warp_cutmix:
         cfg.uda.warp_cutmix = True
