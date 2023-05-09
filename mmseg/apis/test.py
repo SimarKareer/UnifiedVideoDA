@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 import torchvision.transforms as transforms
+import pickle as pkl
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -310,7 +311,7 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
-    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix, return_logits, confidence_thresh = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"], eval_settings['return_logits'], eval_settings['confidence_thresh']
+    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix, return_logits, consis_confidence_thresh = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"], eval_settings['return_logits'], eval_settings['consis_confidence_thresh']
 
     device = model.module.model.device
     print("TESTING METRICS: ", metrics)
@@ -380,7 +381,7 @@ def multi_gpu_test(model,
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix, result_logits=logit_result, result_tk_logits=logit_result_tk, confidence_thresh=confidence_thresh)
+            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix, result_logits=logit_result, result_tk_logits=logit_result_tk, consis_confidence_thresh=consis_confidence_thresh)
 
             if out_dir:
                 intersection, union, _,_  = eval_vals[0]
@@ -435,6 +436,18 @@ def multi_gpu_test(model,
         dataset.confusion_matrix[met] = dataset.confusion_matrix[met].cuda()
         dist.all_reduce(dataset.confusion_matrix[met], op=dist.ReduceOp.SUM)
 
+    def dict_cpu(d1):
+        return {k: v.cpu() for k, v in d1.items()}
+
+    if rank == 0:
+        all_metrics = {"cml_intersect": dict_cpu(dataset.cml_intersect),
+                "cml_union": dict_cpu(dataset.cml_union),
+                "pixelwise_correct": dict_cpu(dataset.pixelwise_correct),
+                "pixelwise_total": dict_cpu(dataset.pixelwise_total),
+                "confusion_matrix": dict_cpu(dataset.confusion_matrix)}
+        with open(os.path.join(eval_settings['work_dir'], "eval_results.pkl"), 'wb') as f:
+            pkl.dump(all_metrics, f)
+    
     if rank == 0:
         dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
     dataset.init_cml_metrics()

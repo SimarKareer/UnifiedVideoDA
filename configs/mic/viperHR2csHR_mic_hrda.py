@@ -89,6 +89,8 @@ uda = dict(
     l_warp_lambda=1.0,
     l_mix_lambda=0.0,
     consis_filter=False,
+    consis_confidence_filter=False,
+    consis_confidence_thresh=0,
     consis_filter_rare_class=False,
     pl_fill=False,
     bottom_pl_fill=False,
@@ -131,7 +133,7 @@ evaluation = dict(interval=3000, eval_settings={
     "pixelwise accuracy": True,
     "confusion matrix": True,
     "return_logits": True,
-    "confidence_thresh": 0.99
+    "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'

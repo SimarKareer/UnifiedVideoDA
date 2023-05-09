@@ -415,7 +415,7 @@ class CustomDataset(Dataset):
         # print("HI: ", cml_sum)
         print(f"{'mean':15s}: {cml_sum*100/count:2.2f}")
     
-    def pre_eval_dataloader_consis(self, curr_preds, data, future_preds, metrics=["mIoU"], sub_metrics=[], return_pixelwise_acc=False, return_confusion_matrix=False,out_dir=None, result_logits=None, result_tk_logits=None, confidence_thresh=None):
+    def pre_eval_dataloader_consis(self, curr_preds, data, future_preds, metrics=["mIoU"], sub_metrics=[], return_pixelwise_acc=False, return_confusion_matrix=False,out_dir=None, result_logits=None, result_tk_logits=None, consis_confidence_thresh=None):
         assert(curr_preds) is not None
 
         pre_eval_results = []
@@ -771,8 +771,8 @@ class CustomDataset(Dataset):
         if "consis_confidence_filter" in metrics:
             
             #skip metric if these values are None
-            if confidence_thresh is None or result_logits is None:
-                print("Fail")
+            if consis_confidence_thresh is None or result_logits is None:
+                raise Exception("consis_confidence_thresh or result_logits is None. These are needed for the consis_confidence_filter metric")
                 
             pred_t = curr_pred
             pred_tk, warp_mask = backpropFlow(flow, future_pred, return_mask=True)
@@ -797,10 +797,9 @@ class CustomDataset(Dataset):
             # print("max logit", max_logit_val_pred_t.size())
 
 
-            confidence_mask = (max_logit_val_pred_t > confidence_thresh)
+            confidence_mask = (max_logit_val_pred_t > consis_confidence_thresh)
 
             # print("Conf mask", confidence_mask.size(), confidence_mask.sum())
-
 
             consis_confidence_mask = (confidence_mask & consis_mask).squeeze(-1)
             # print("consis_conf mask", consis_confidence_mask.sum() )

@@ -85,6 +85,8 @@ class DACS(UDADecorator):
         self.l_warp_lambda = cfg['l_warp_lambda']
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
+        self.consis_confidence_filter = cfg['consis_confidence_filter']
+        self.consis_confidence_thresh = cfg['consis_confidence_thresh']
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
         self.oracle_mask_add_noise = cfg['oracle_mask_add_noise']
         self.oracle_mask_remove_pix = cfg['oracle_mask_remove_pix']
@@ -353,7 +355,7 @@ class DACS(UDADecorator):
         grid = (grid * 255).astype(np.uint8)
         cv2.imwrite(path, grid)
 
-    def get_pl(self, target_img, target_img_metas, seg_debug, seg_debug_key, valid_pseudo_mask):
+    def get_pl(self, target_img, target_img_metas, seg_debug, seg_debug_key, valid_pseudo_mask, return_logits=False):
         ema_logits = self.get_ema_model().generate_pseudo_label(
                 target_img, target_img_metas)
         
@@ -362,12 +364,16 @@ class DACS(UDADecorator):
 
         pseudo_label, pseudo_weight = self.get_pseudo_label_and_weight(
             ema_logits)
-        del ema_logits
 
         pseudo_weight = self.filter_valid_pseudo_region(
             pseudo_weight, valid_pseudo_mask)
-        
-        return pseudo_label, pseudo_weight
+
+        if return_logits:
+            ema_softmax = torch.softmax(ema_logits.detach(), dim=1)
+            return pseudo_label, pseudo_weight, ema_softmax
+        else:
+            del ema_logits
+            return pseudo_label, pseudo_weight
     
     def fast_iou(self, pred, label, custom_mask=None, return_raw=False):
         pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
@@ -769,7 +775,7 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
         if DEBUG:
-            rows, cols = 6, 7
+            rows, cols = 7, 7
             fig, axs = plt.subplots(
                 rows,
                 cols,
@@ -853,9 +859,14 @@ class DACS(UDADecorator):
                 if isinstance(m, DropPath):
                     m.training = False
             
-            pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+            if self.consis_confidence_filter:
+                pseudo_label, pseudo_weight, logits_curr = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, return_logits=True)
+                pseudo_label_fut, pseudo_weight_fut, logits_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, return_logits=True) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+            else:
+                pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+                pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+            
             self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
-            pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
@@ -869,12 +880,20 @@ class DACS(UDADecorator):
                     pli = pseudo_label_fut[[i]].permute(1, 2, 0)
 
                     # So technically this was unnecessary bc the pseudo_weight is always just 1 number
-                    pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
+                    if self.consis_confidence_filter:
+                        pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0), logits_fut[[i]][0].permute(1,2,0)), dim=2)
+                    else:
+                        pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
                     warped_stack, mask = backpropFlow(flowi, pli_and_weight, return_mask=True, return_mask_count=False) #TODO, will need to stack pli with weights if we want warped weights
                     if DEBUG and i == 0:
                         masks.append(mask.cpu().numpy())
                         subplotimg(axs[3, 0], mask.repeat(3, 1, 1)*255, "Warping Mask")
                     pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
+
+                    if self.consis_confidence_filter:
+                        logits_warped_i = warped_stack[:, :, 2:]
+                        logits_warped_i = logits_warped_i.permute((2, 0, 1)).float()
+                    
                     pseudo_weight_warped_i = pseudo_weight_warped_i.float()
                     pseudo_weight_warped_i[~mask] = 0
                     pltki = pltki.permute((2, 0, 1)).long()
@@ -916,6 +935,46 @@ class DACS(UDADecorator):
                         pltki[0][pltki[0] != pseudo_label[i]] = 255
                         if i == 0 and DEBUG:
                             subplotimg(axs[3][5], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
+
+                    if self.consis_confidence_filter:
+                        logits_curr_i = logits_curr[[i]][0]                        
+                        pseudo_label_i = pseudo_label[i]
+
+
+                        #consis mask
+                        consis_mask = (pltki[0] == pseudo_label_i)
+                        print("Num pixles in PL consis", consis_mask.sum())
+
+                        if i == 0 and DEBUG:
+                            consistent = pltki[0].clone().detach()
+                            consistent[~consis_mask] = 255
+                            subplotimg(axs[6][0], consistent, 'Consis Filter', cmap="cityscapes")
+
+                        # logits for predicted values
+                        max_logit_val_fut , max_logit_idx_fut = torch.max(logits_warped_i, dim=0)
+                        max_logit_val_curr ,max_logit_idx_curr = torch.max(logits_curr_i, dim=0)
+
+                        # print("logits size after max value", max_logit_val_curr.size())
+
+                        # confidence mask above threshold
+                        # max_logit_val_curr = max_logit_val_curr.squeeze(0)
+                        confidence_mask = (max_logit_val_curr > self.consis_confidence_thresh)
+
+                        print("Num pixles in PL confidence", confidence_mask.sum())
+
+                        #final mask
+                        consis_confidence_mask = (consis_mask & confidence_mask)
+
+                        print("Num pixels in PL:", consis_confidence_mask.sum())
+
+                        # 255 or zero out all pixels not in mask
+                        pltki[0][~consis_confidence_mask]= 255
+                        pseudo_weight_warped_i[~consis_confidence_mask] = 0
+
+                        
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[6][1], pltki[0], 'Consis Confidence Filter', cmap="cityscapes")
+
 
                     pseudo_weight_warped.append(pseudo_weight_warped_i)
                     pseudo_label_warped.append(pltki[0])
