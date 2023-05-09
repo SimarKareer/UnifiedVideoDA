@@ -4,6 +4,7 @@
 
 import kornia
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 from mmseg.datasets.cityscapes import CityscapesDataset
@@ -106,18 +107,20 @@ def gaussian_blur(blur, data=None, target=None):
     return data, target
 
 
-def get_class_masks(labels, class_filter=None):
+def get_class_masks(labels, class_dist=None):
     class_masks = []
     for label in labels:
         classes = torch.unique(labels)
-        if class_filter:
-            # Note: I decided to not cutmix any of the ignored indices (like poles)
-            for cls in np.unique(class_filter + CityscapesDataset.ignore_index):
-                classes = classes[classes != cls]
+        classes = classes[classes != 255]
+        weights = None
+        if class_dist is not None:
+            weights = [class_dist[cls] for cls in classes]
         nclasses = classes.shape[0]
-        class_choice = np.random.choice(
-            nclasses, int((nclasses + nclasses % 2) / 2), replace=False)
-        classes = classes[torch.Tensor(class_choice).long()]
+        classes = random.choices(classes, weights, k = int((nclasses + nclasses % 2) / 2))
+        # class_choice = np.random.choice(
+        #     nclasses, size=int((nclasses + nclasses % 2) / 2), p=weights, replace=False)
+        # classes = classes[torch.Tensor(class_choice).long()]
+        classes = torch.Tensor(classes).to(labels.device)
         class_masks.append(generate_class_mask(label, classes).unsqueeze(0))
     return class_masks
 

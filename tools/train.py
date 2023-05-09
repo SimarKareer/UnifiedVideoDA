@@ -97,6 +97,7 @@ def parse_args(args):
 
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
+    parser.add_argument("--cutmix-weights", type=str, default=None, choices=["no-large"])
 
     # parser.add_argument("--modality", type=str, default=None)
     parser.add_argument("--imnet-feature-dist-lambda", type=float, default=None)
@@ -326,6 +327,9 @@ def main(args):
     
     if args.modality_dropout_weights is not None:
         cfg.uda.modality_dropout_weights = args.modality_dropout_weights
+
+    if args.cutmix_weights is not None:
+        cfg.uda.cutmix_weights = args.cutmix_weights
     
     # if args.modality:
     #     cfg.uda.multimodal = True
