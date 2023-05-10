@@ -106,7 +106,7 @@ uda = dict(
     modality="rgb",
     modality_dropout_weights=None,
     cutmix_weights=None,
-    min_pixels_target_cutmix=100,
+    min_pixels_target_cutmix=1000,
     num_target_cutmix=None,
     target_cutmix_warmup=500
 )

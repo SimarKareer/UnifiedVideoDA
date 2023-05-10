@@ -24,6 +24,7 @@ import mmcv
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+import pickle as pkl
 from timm.models.layers import DropPath
 from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
@@ -41,6 +42,7 @@ from mmseg.ops import resize
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.datasets.cityscapes import CityscapesDataset
+from mmcv.runner import get_dist_info
 from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter, invNorm
 import torchvision
 from torchvision.utils import save_image
@@ -117,6 +119,8 @@ class DACS(UDADecorator):
         self.multimodal = cfg["modality"] != "rgb"
         self.modality = cfg["modality"]
         self.modality_dropout_weights = cfg["modality_dropout_weights"]
+
+        self.work_dir = cfg["work_dir"]
         assert self.mix == 'class'
 
         self.debug_fdist_mask = None
@@ -158,7 +162,7 @@ class DACS(UDADecorator):
         # rarity_order = [3, 5, 12, 16, 18, 17, 7, 6, 15, 4, 11, 14, 9, 8, 1, 2, 10, 13, 0]
         rare_classes = [CityscapesDataset.CLASSES.index(class_name) for class_name in ["traffic light", "truck", "bus", "traffic sign", "fence", "terrain"]]
 
-        self.target_memory_bank = {class_num: deque(maxlen=100) for class_num in rare_classes}
+        self.target_memory_bank = {class_num: deque(maxlen=10) for class_num in rare_classes}
 
 
         self.init_cml_debug_metrics()
@@ -353,7 +357,7 @@ class DACS(UDADecorator):
         pseudo_weight = torch.sum(ps_large_p).item() / ps_size
         pseudo_weight = pseudo_weight * torch.ones(
             pseudo_prob.shape, device=logits.device)
-        return pseudo_label, pseudo_weight
+        return pseudo_label, pseudo_weight, pseudo_prob
 
     def filter_valid_pseudo_region(self, pseudo_weight, valid_pseudo_mask):
         if self.psweight_ignore_top > 0:
@@ -383,14 +387,14 @@ class DACS(UDADecorator):
         if seg_debug:
             seg_debug[seg_debug_key] = self.get_ema_model().debug_output
 
-        pseudo_label, pseudo_weight = self.get_pseudo_label_and_weight(
+        pseudo_label, pseudo_weight, pseudo_prob = self.get_pseudo_label_and_weight(
             ema_logits)
         del ema_logits
 
         pseudo_weight = self.filter_valid_pseudo_region(
             pseudo_weight, valid_pseudo_mask)
         
-        return pseudo_label, pseudo_weight
+        return pseudo_label, pseudo_weight, pseudo_prob
     
     def fast_iou(self, pred, label, custom_mask=None, return_raw=False):
         pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
@@ -411,17 +415,30 @@ class DACS(UDADecorator):
         else:
             return iou, miou, mask
     
-    def update_target_memory_bank(self, pseudo_label, target_img):
+    def update_target_memory_bank(self, pseudo_label, target_img, pseudo_prob, valid_pseudo_mask):
         batch_size = target_img.shape[0]
         for cls in self.target_memory_bank.keys():
             target_img_mask = torch.zeros_like(target_img)
-            pl_mask = (pseudo_label.unsqueeze(1) == cls).repeat(1, 3, 1, 1)
+            pl_mask = ((pseudo_label.unsqueeze(1) == cls)*valid_pseudo_mask.unsqueeze(1)).repeat(1, 3, 1, 1)
             target_img_mask[pl_mask] = target_img[pl_mask]
-            target_img_mask = [target_img_mask[i].cpu() for i in range(batch_size) if (target_img_mask != 0).sum() > self.min_pixels_target_cutmix]
+            target_img_mask = [target_img_mask[i].cpu() for i in range(batch_size) if (target_img_mask[i] != 0).sum() > 3*self.min_pixels_target_cutmix and pseudo_prob[(pseudo_label == cls)].mean() > 0.9]
             self.target_memory_bank[cls].extend(target_img_mask)
+        if self.local_iter % 500 == 0:
+            self.visualize_memory_bank()
         return 
-            
-    def get_target_mixed_im(self, mixed_img, mixed_lbl, mixed_seg_weight):
+
+    def visualize_memory_bank(self):
+        rank, _ = get_dist_info()
+        fig, axs = plt.subplots(10, 10, figsize=(20, 20))
+        for i, (k, v) in enumerate(self.target_memory_bank.items()):
+            for j, target_ims in enumerate(list(v)[-10:]):
+                subplotimg(axs[i, j], invNorm(target_ims), f"{CityscapesDataset.CLASSES[k]}-{j}")
+        [axi.set_axis_off() for axi in axs.ravel()]
+        fig.savefig(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.png"))
+        pkl.dump(self.target_memory_bank, open(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.pkl"), "wb"))
+        plt.close()
+
+    def get_target_mixed_im(self, mixed_img, mixed_lbl):
         batch_size = mixed_img.shape[0]
         for i in range(batch_size):
             for _ in range(self.num_target_cutmix):
@@ -432,7 +449,6 @@ class DACS(UDADecorator):
                 mask = (rare_pixels != 0).all(dim=0)
                 mixed_img[i, :, mask] = rare_pixels[:, mask]
                 mixed_lbl[i, :, mask] = rare_class
-                mixed_seg_weight[i][mask] = 1
         return mixed_img, mixed_lbl
 
     def get_mixed_im(self, pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds):
@@ -662,7 +678,7 @@ class DACS(UDADecorator):
                 m.training = False
             if isinstance(m, DropPath):
                 m.training = False
-        pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+        pseudo_label, pseudo_weight, _ = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
         self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
         gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
@@ -846,9 +862,9 @@ class DACS(UDADecorator):
                 if isinstance(m, DropPath):
                     m.training = False
             
-            pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+            pseudo_label, pseudo_weight, pseudo_prob = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
             self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
-            pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+            pseudo_label_fut, pseudo_weight_fut, _ = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
@@ -1011,8 +1027,8 @@ class DACS(UDADecorator):
                 # Apply mixing
                 mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
                 if self.num_target_cutmix is not None and self.num_target_cutmix > 0 and self.local_iter > self.target_cutmix_warmup:
-                    self.update_target_memory_bank(pseudo_label, target_img)
-                    mixed_img, mixed_lbl = self.get_target_mixed_im(mixed_img, mixed_lbl, mixed_seg_weight)
+                    self.update_target_memory_bank(pseudo_label, target_img, pseudo_prob, valid_pseudo_mask)
+                    mixed_img, mixed_lbl = self.get_target_mixed_im(mixed_img, mixed_lbl)
                 if DEBUG:
                     subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
                     subplotimg(axs[1, 4], invNorm(mixed_img[1]), "Mixed Im with CutMix")
