@@ -98,6 +98,9 @@ def parse_args(args):
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--cutmix-weights", type=str, default=None, choices=["no-large"])
+    parser.add_argument("--min-pixels-target-cutmix", type=float, default=None)
+    parser.add_argument("--num-target-cutmix", type=int, default=None)
+    parser.add_argument("--target-cutmix-warmup", type=int, default=None)
 
     # parser.add_argument("--modality", type=str, default=None)
     parser.add_argument("--imnet-feature-dist-lambda", type=float, default=None)
@@ -330,6 +333,15 @@ def main(args):
 
     if args.cutmix_weights is not None:
         cfg.uda.cutmix_weights = args.cutmix_weights
+    
+    if args.min_pixels_target_cutmix is not None:
+        cfg.uda.min_pixels_target_cutmix = args.min_pixels_target_cutmix
+    
+    if args.num_target_cutmix is not None:
+        cfg.uda.num_target_cutmix = args.num_target_cutmix
+
+    if args.target_cutmix_warmup is not None:
+        cfg.uda.target_cutmix_warmup = args.target_cutmix_warmup
     
     # if args.modality:
     #     cfg.uda.multimodal = True

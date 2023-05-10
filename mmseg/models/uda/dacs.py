@@ -46,6 +46,8 @@ import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
 import cv2
+from collections import deque
+
 
 def _params_equal(ema_model, model):
     for ema_param, param in zip(ema_model.named_parameters(),
@@ -97,6 +99,9 @@ class DACS(UDADecorator):
         self.class_mask_warp = cfg["class_mask_warp"]
         self.class_mask_cutmix = cfg["class_mask_cutmix"]
         self.cutmix_weights = cfg["cutmix_weights"]
+        self.min_pixels_target_cutmix = cfg["min_pixels_target_cutmix"]
+        self.num_target_cutmix = cfg["num_target_cutmix"]
+        self.target_cutmix_warmup = cfg["target_cutmix_warmup"]
 
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
@@ -148,6 +153,13 @@ class DACS(UDADecorator):
         cutmix_class_dist = torch.tensor([cutmix_class_dist[class_name] for class_name in CityscapesDataset.CLASSES])
         
         self.cutmix_class_dist = cutmix_class_dist
+
+        # rare_classes = ["fence", "traffic light", ""]
+        # rarity_order = [3, 5, 12, 16, 18, 17, 7, 6, 15, 4, 11, 14, 9, 8, 1, 2, 10, 13, 0]
+        rare_classes = [CityscapesDataset.CLASSES.index(class_name) for class_name in ["traffic light", "truck", "bus", "traffic sign", "fence", "terrain"]]
+
+        self.target_memory_bank = {class_num: deque(maxlen=100) for class_num in rare_classes}
+
 
         self.init_cml_debug_metrics()
         self.class_probs = {}
@@ -398,6 +410,30 @@ class DACS(UDADecorator):
             return pl_warp_intersect, pl_warp_union, mask
         else:
             return iou, miou, mask
+    
+    def update_target_memory_bank(self, pseudo_label, target_img):
+        batch_size = target_img.shape[0]
+        for cls in self.target_memory_bank.keys():
+            target_img_mask = torch.zeros_like(target_img)
+            pl_mask = (pseudo_label.unsqueeze(1) == cls).repeat(1, 3, 1, 1)
+            target_img_mask[pl_mask] = target_img[pl_mask]
+            target_img_mask = [target_img_mask[i] for i in range(batch_size) if (target_img_mask != 0).sum() > self.min_pixels_target_cutmix]
+            self.target_memory_bank[cls].extend(target_img_mask)
+        return 
+            
+    def get_target_mixed_im(self, mixed_img, mixed_lbl, mixed_seg_weight):
+        batch_size = mixed_img.shape[0]
+        for i in range(batch_size):
+            for _ in range(self.num_target_cutmix):
+                rare_class = random.choice(list(self.target_memory_bank.keys()))
+                if len(self.target_memory_bank[rare_class]) == 0:
+                    continue
+                rare_pixels = random.choice(self.target_memory_bank[rare_class])
+                mask = (rare_pixels != 0).all(dim=0)
+                mixed_img[i, :, mask] = rare_pixels[:, mask]
+                mixed_lbl[i, :, mask] = rare_class
+                mixed_seg_weight[i][mask] = 1
+        return mixed_img, mixed_lbl
 
     def get_mixed_im(self, pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds):
         strong_parameters = {
@@ -816,7 +852,7 @@ class DACS(UDADecorator):
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
-            if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
+            if self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
@@ -974,10 +1010,16 @@ class DACS(UDADecorator):
             if self.l_mix_lambda > 0:
                 # Apply mixing
                 mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
+                if self.num_target_cutmix is not None and self.num_target_cutmix > 0 and self.local_iter > self.target_cutmix_warmup:
+                    self.update_target_memory_bank(pseudo_label, target_img)
+                    mixed_img, mixed_lbl = self.get_target_mixed_im(mixed_img, mixed_lbl, mixed_seg_weight)
                 if DEBUG:
                     subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
+                    subplotimg(axs[1, 4], invNorm(mixed_img[1]), "Mixed Im with CutMix")
                     subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
+                    subplotimg(axs[1, 5], mixed_lbl[1], "Mixed lbl with CutMix", cmap="cityscapes")
                     subplotimg(axs[0, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
+                    subplotimg(axs[1, 6], mixed_seg_weight[1].repeat(3, 1, 1)*255)
                 # Train on mixed images
                 mix_losses = self.model(
                     mixed_img,
@@ -1019,8 +1061,11 @@ class DACS(UDADecorator):
                 log_vars.update(masked_log_vars)
                 masked_loss.backward()
 
+            if DEBUG and self.l_mix_lambda > 0:
+                fig.savefig(f"work_dirs/improveCutmix/ims{self.local_iter}.png", dpi=200)
 
-            if DEBUG:
+
+            if DEBUG and self.l_warp_lambda > 0:
                 subplotimg(axs[0][0], invNorm(target_img_extra["img"][0]), 'Current Img batch 0')
                 subplotimg(axs[0][1], invNorm(target_img_extra["imtk"][0]), 'Future Imtk batch 0')
                 subplotimg(axs[1][0], pseudo_label_warped[0], 'PL Warped', cmap="cityscapes")
