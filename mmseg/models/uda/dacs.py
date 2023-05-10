@@ -943,37 +943,41 @@ class DACS(UDADecorator):
 
                         #consis mask
                         consis_mask = (pltki[0] == pseudo_label_i)
-                        print("Num pixles in PL consis", consis_mask.sum())
-
-                        if i == 0 and DEBUG:
-                            consistent = pltki[0].clone().detach()
-                            consistent[~consis_mask] = 255
-                            subplotimg(axs[6][0], consistent, 'Consis Filter', cmap="cityscapes")
 
                         # logits for predicted values
+
                         max_logit_val_fut , max_logit_idx_fut = torch.max(logits_warped_i, dim=0)
                         max_logit_val_curr ,max_logit_idx_curr = torch.max(logits_curr_i, dim=0)
 
-                        # print("logits size after max value", max_logit_val_curr.size())
-
                         # confidence mask above threshold
-                        # max_logit_val_curr = max_logit_val_curr.squeeze(0)
+                        # print("Num pixles in PL consis", consis_mask.sum())
+
                         confidence_mask = (max_logit_val_curr > self.consis_confidence_thresh)
 
-                        print("Num pixles in PL confidence", confidence_mask.sum())
+                        # print("Num pixles in PL confidence", confidence_mask.sum())
 
                         #final mask
                         consis_confidence_mask = (consis_mask & confidence_mask)
 
-                        print("Num pixels in PL:", consis_confidence_mask.sum())
+                        # print("Num pixels in PL AFTER BOTH MASK:", consis_confidence_mask.sum())
 
+                        if i == 0 and DEBUG:
+                            consistent = pltki[0].clone().detach()
+                            consistent[~consis_mask] = 255
+
+                            confidence = pltki[0].clone().detach()
+                            confidence[~confidence_mask] = 255
+
+                            subplotimg(axs[6][0], consistent, 'Consis Filter', cmap="cityscapes")
+                            subplotimg(axs[6][1], confidence, 'Confidence Filter', cmap="cityscapes")
                         # 255 or zero out all pixels not in mask
+                    
                         pltki[0][~consis_confidence_mask]= 255
                         pseudo_weight_warped_i[~consis_confidence_mask] = 0
 
                         
                         if i == 0 and DEBUG:
-                            subplotimg(axs[6][1], pltki[0], 'Consis Confidence Filter', cmap="cityscapes")
+                            subplotimg(axs[6][2], pltki[0], 'Consis Confidence Filter', cmap="cityscapes")
 
 
                     pseudo_weight_warped.append(pseudo_weight_warped_i)

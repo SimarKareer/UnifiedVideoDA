@@ -276,7 +276,7 @@ def main(args):
         cfg.uda.consis_confidence_filter = True
     
     if args.consis_confidence_thresh is not None:
-        cfg.uda.consis_confidence_filter = args.consis_confidence_thresh
+        cfg.uda.consis_confidence_thresh = args.consis_confidence_thresh
         cfg.evaluation.eval_settings.consis_confidence_thresh = args.consis_confidence_thresh
     
     if args.consis_filter_rare_class:
