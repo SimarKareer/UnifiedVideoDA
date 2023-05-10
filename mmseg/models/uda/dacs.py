@@ -417,7 +417,7 @@ class DACS(UDADecorator):
             target_img_mask = torch.zeros_like(target_img)
             pl_mask = (pseudo_label.unsqueeze(1) == cls).repeat(1, 3, 1, 1)
             target_img_mask[pl_mask] = target_img[pl_mask]
-            target_img_mask = [target_img_mask[i] for i in range(batch_size) if (target_img_mask != 0).sum() > self.min_pixels_target_cutmix]
+            target_img_mask = [target_img_mask[i].cpu() for i in range(batch_size) if (target_img_mask != 0).sum() > self.min_pixels_target_cutmix]
             self.target_memory_bank[cls].extend(target_img_mask)
         return 
             
@@ -428,7 +428,7 @@ class DACS(UDADecorator):
                 rare_class = random.choice(list(self.target_memory_bank.keys()))
                 if len(self.target_memory_bank[rare_class]) == 0:
                     continue
-                rare_pixels = random.choice(self.target_memory_bank[rare_class])
+                rare_pixels = random.choice(self.target_memory_bank[rare_class]).to(mixed_img.device)
                 mask = (rare_pixels != 0).all(dim=0)
                 mixed_img[i, :, mask] = rare_pixels[:, mask]
                 mixed_lbl[i, :, mask] = rare_class
