@@ -41,7 +41,7 @@ from mmseg.ops import resize
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.datasets.cityscapes import CityscapesDataset
-from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter, invNorm
+from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter, invNorm, CircularTensor
 import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
@@ -87,6 +87,7 @@ class DACS(UDADecorator):
         self.consis_filter = cfg['consis_filter']
         self.consis_confidence_filter = cfg['consis_confidence_filter']
         self.consis_confidence_thresh = cfg['consis_confidence_thresh']
+        self.consis_confidence_per_class_thresh = cfg['consis_confidence_per_class_thresh']
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
         self.oracle_mask_add_noise = cfg['oracle_mask_add_noise']
         self.oracle_mask_remove_pix = cfg['oracle_mask_remove_pix']
@@ -139,6 +140,11 @@ class DACS(UDADecorator):
         else:
             self.relevant_classes_cutmix = list(CityscapesDataset.ALL_IDX)
             self.masked_classes_cutmix = []
+
+
+        self.per_class_confidence_thresh = None
+        if self.consis_confidence_per_class_thresh:
+            self.per_class_confidence_thresh = {i: CircularTensor(1000) for i in range(self.num_classes)}
 
         self.init_cml_debug_metrics()
         self.class_probs = {}
@@ -952,8 +958,33 @@ class DACS(UDADecorator):
                         # confidence mask above threshold
                         # print("Num pixles in PL consis", consis_mask.sum())
 
-                        confidence_mask = (max_logit_val_curr > self.consis_confidence_thresh)
+                        if self.consis_confidence_per_class_thresh:
+                            # cummulative mask from all classes
+                            confidence_mask = None
 
+                            for i in range(self.num_classes):
+
+                                #get mask for predictions for the current class
+                                class_mask = (max_logit_idx_curr == i)
+
+                                # set to all False
+                                class_confidence_mask_i = torch.zeros(max_logit_val_curr.size(), dtype=torch.bool).to(dev)
+
+                                # if mean is not higher than self.consis_confidence_thresh, use that as default thresh
+                                thresh = max(self.per_class_confidence_thresh[i].get_mean(), self.consis_confidence_thresh)
+
+                                # print("Class,", i, ",thresh, ", thresh)
+                                # put true in appropriate places
+
+                                class_confidence_mask_i[class_mask] = (max_logit_val_curr[class_mask] > thresh)
+
+                                if confidence_mask is not None:
+                                    confidence_mask = confidence_mask | class_confidence_mask_i
+                                else:
+                                    confidence_mask = class_confidence_mask_i
+                        else:
+                            confidence_mask = (max_logit_val_curr > self.consis_confidence_thresh) 
+                        
                         # print("Num pixles in PL confidence", confidence_mask.sum())
 
                         #final mask
@@ -979,6 +1010,35 @@ class DACS(UDADecorator):
                         if i == 0 and DEBUG:
                             subplotimg(axs[6][2], pltki[0], 'Consis Confidence Filter', cmap="cityscapes")
 
+
+
+                        # populate Circular Tensors
+
+                        if self.consis_confidence_per_class_thresh:
+
+                            # update buffers per class
+                            for i in range(self.num_classes):
+                                
+                                class_mask = (pltki[0] == i)
+
+                                num_preds_class_i = class_mask.sum().item()
+
+                                # we will choose 50 pixels from each class to get logit values from
+                                random_sample_num = min(num_preds_class_i, 50)
+
+                                #if no samples in PL
+                                if random_sample_num == 0:
+                                    continue
+
+                                true_indices = torch.where(class_mask)
+
+                                change_indices = np.random.choice(len(true_indices[0]), size=random_sample_num, replace=False)
+
+                                samples = max_logit_val_curr[true_indices[0][change_indices], true_indices[1][change_indices]]
+                                
+                                # print("Before", self.per_class_confidence_thresh[i].get_mean())
+                                self.per_class_confidence_thresh[i].append(samples)
+                                # print("After", self.per_class_confidence_thresh[i].get_mean())
 
                     pseudo_weight_warped.append(pseudo_weight_warped_i)
                     pseudo_label_warped.append(pltki[0])

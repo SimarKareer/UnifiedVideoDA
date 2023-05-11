@@ -91,6 +91,7 @@ uda = dict(
     consis_filter=False,
     consis_confidence_filter=False,
     consis_confidence_thresh=0,
+    consis_confidence_per_class_thresh=False,
     consis_filter_rare_class=False,
     pl_fill=False,
     bottom_pl_fill=False,
