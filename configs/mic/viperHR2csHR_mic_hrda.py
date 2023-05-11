@@ -105,10 +105,9 @@ uda = dict(
     exclusive_warp_cutmix=False,
     modality="rgb",
     modality_dropout_weights=None,
-    cutmix_weights=None,
-    min_pixels_target_cutmix=100,
+    min_pixels_target_cutmix=1000,
     num_target_cutmix=None,
-    target_cutmix_warmup=500
+    target_cutmix_warmup=1000
 )
 # Optimizer Hyperparameters
 optimizer_config = None
