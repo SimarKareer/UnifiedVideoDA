@@ -153,6 +153,7 @@ class DACS(UDADecorator):
         self.target_pl_frequency = {class_num: 0 for class_num in self.rare_classes}
 
         self.init_cml_debug_metrics()
+        self.cml_debug_reset_rate = 500
         self.class_probs = {}
         ema_cfg = deepcopy(cfg['model'])
         if not self.source_only:
@@ -167,13 +168,20 @@ class DACS(UDADecorator):
 
     def init_cml_debug_metrics(self):
         
-        self.cml_debug_metrics = {k: torch.zeros(19) for k in [
-            "warp_cml_intersect", "plain_cml_intersect", "plain_mask_cml_intersect", 
-            "warp_cml_pixel_hit", "plain_cml_pixel_hit", "plain_mask_cml_pixel_hit", 
-            "warp_cml_union", "plain_cml_union", "plain_mask_cml_union", 
-            "warp_cml_pixel_total", "plain_cml_pixel_total", "plain_mask_cml_pixel_total",
-            "warp_cml_mask_hit", 
-            "warp_cml_mask_total"]}  
+        self.cml_debug_metrics = {}
+        
+        for k1 in ["PL Target-only", "Mixed Student", "Warp"]:
+            self.cml_debug_metrics[k1] = {
+                metric_name: torch.zeros(19) for metric_name in [
+                    "warp_cml_intersect", "plain_cml_intersect", "plain_mask_cml_intersect", 
+                    "warp_cml_pixel_hit", "plain_cml_pixel_hit", "plain_mask_cml_pixel_hit", 
+                    "warp_cml_union", "plain_cml_union", "plain_mask_cml_union", 
+                    "warp_cml_pixel_total", "plain_cml_pixel_total", "plain_mask_cml_pixel_total",
+                    "warp_cml_mask_hit", 
+                    "warp_cml_mask_total"
+                ]
+            }
+
 
     def get_ema_model(self):
         return get_module(self.ema_model)
@@ -508,65 +516,65 @@ class DACS(UDADecorator):
                                 target=torch.stack((gt_semantic_seg[i][0], target_img_extra["gt_semantic_seg"][i][0])))
         return mixed_gt
 
-    def add_training_debug_metrics(self, pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars):
+    def add_training_debug_metrics(self, pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars, name):
         pl_warp = pseudo_label_warped[0]
         pw_warp = pseudo_weight_warped[0]
         gt_sem_seg = target_img_extra["gt_semantic_seg"][0, 0]
 
         # All IoU Metrics
         warp_iou = self.fast_iou(pl_warp.cpu().numpy(), gt_sem_seg.cpu().numpy(), custom_mask=pw_warp.cpu().bool().numpy(), return_raw=True)
-        self.cml_debug_metrics["warp_cml_intersect"] += warp_iou[0]
-        self.cml_debug_metrics["warp_cml_union"] += warp_iou[1]
+        self.cml_debug_metrics[name]["warp_cml_intersect"] += warp_iou[0]
+        self.cml_debug_metrics[name]["warp_cml_union"] += warp_iou[1]
 
         plain_iou_mask = self.fast_iou(pseudo_label[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), custom_mask=pw_warp.cpu().bool().numpy(), return_raw=True)
-        self.cml_debug_metrics["plain_mask_cml_intersect"] += plain_iou_mask[0]
-        self.cml_debug_metrics["plain_mask_cml_union"] += plain_iou_mask[1]
+        self.cml_debug_metrics[name]["plain_mask_cml_intersect"] += plain_iou_mask[0]
+        self.cml_debug_metrics[name]["plain_mask_cml_union"] += plain_iou_mask[1]
 
         plain_iou = self.fast_iou(pseudo_label[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), return_raw=True)
-        self.cml_debug_metrics["plain_cml_intersect"] += plain_iou[0]
-        self.cml_debug_metrics["plain_cml_union"] += plain_iou[1]
+        self.cml_debug_metrics[name]["plain_cml_intersect"] += plain_iou[0]
+        self.cml_debug_metrics[name]["plain_cml_union"] += plain_iou[1]
 
         # All Pixel Accuracy Metrics
         warp_pixel_acc = per_class_pixel_accuracy(pl_warp, gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
-        self.cml_debug_metrics["warp_cml_pixel_hit"] += warp_pixel_acc.diagonal()
-        self.cml_debug_metrics["warp_cml_pixel_total"] += warp_pixel_acc.sum(axis=1)
+        self.cml_debug_metrics[name]["warp_cml_pixel_hit"] += warp_pixel_acc.diagonal()
+        self.cml_debug_metrics[name]["warp_cml_pixel_total"] += warp_pixel_acc.sum(axis=1)
 
         plain_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
-        self.cml_debug_metrics["plain_cml_pixel_hit"] += plain_pixel_acc.diagonal()
-        self.cml_debug_metrics["plain_cml_pixel_total"] += plain_pixel_acc.sum(axis=1)
+        self.cml_debug_metrics[name]["plain_cml_pixel_hit"] += plain_pixel_acc.diagonal()
+        self.cml_debug_metrics[name]["plain_cml_pixel_total"] += plain_pixel_acc.sum(axis=1)
 
         plain_mask_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True, mask=pw_warp.bool()).cpu()
-        self.cml_debug_metrics["plain_mask_cml_pixel_hit"] += plain_mask_pixel_acc.diagonal()
-        self.cml_debug_metrics["plain_mask_cml_pixel_total"] += plain_mask_pixel_acc.sum(axis=1)
+        self.cml_debug_metrics[name]["plain_mask_cml_pixel_hit"] += plain_mask_pixel_acc.diagonal()
+        self.cml_debug_metrics[name]["plain_mask_cml_pixel_total"] += plain_mask_pixel_acc.sum(axis=1)
 
         # Mask Counts Per Class
         # breakpoint()
         total_counts = pseudo_label[0][pseudo_label[0] != 255].unique(return_counts=True)
         mask_counts = pseudo_label[0][(pseudo_label[0] != 255) & ~pw_warp.bool()].unique(return_counts=True)
-        self.cml_debug_metrics["warp_cml_mask_total"][total_counts[0].cpu()] += total_counts[1].cpu()
-        self.cml_debug_metrics["warp_cml_mask_hit"][mask_counts[0].cpu()] += mask_counts[1].cpu()
+        self.cml_debug_metrics[name]["warp_cml_mask_total"][total_counts[0].cpu()] += total_counts[1].cpu()
+        self.cml_debug_metrics[name]["warp_cml_mask_hit"][mask_counts[0].cpu()] += mask_counts[1].cpu()
 
         for i, class_name in enumerate(CityscapesDataset.CLASSES):
-            log_vars[f"Warp PL IoU {class_name}"] = self.cml_debug_metrics["warp_cml_intersect"][i] / self.cml_debug_metrics["warp_cml_union"][i]
-            log_vars[f"Plain PL IoU {class_name}"] = self.cml_debug_metrics["plain_cml_intersect"][i] / self.cml_debug_metrics["plain_cml_union"][i]
-            # log_vars[f"Plain PL Mask IoU {class_name}"] = self.cml_debug_metrics["plain_mask_cml_intersect"][i] / self.cml_debug_metrics["plain_mask_cml_union"][i]
+            log_vars[f"[{name}] Warp PL IoU {class_name}"] = self.cml_debug_metrics[name]["warp_cml_intersect"][i] / self.cml_debug_metrics[name]["warp_cml_union"][i]
+            log_vars[f"[{name}] Plain PL IoU {class_name}"] = self.cml_debug_metrics[name]["plain_cml_intersect"][i] / self.cml_debug_metrics[name]["plain_cml_union"][i]
+            # log_vars[f"[{name}] Plain PL Mask IoU {class_name}"] = self.cml_debug_metrics[name]["plain_mask_cml_intersect"][i] / self.cml_debug_metrics[name]["plain_mask_cml_union"][i]
 
-            log_vars["Warp PL mIoU"] = np.nanmean((self.cml_debug_metrics["warp_cml_intersect"] / self.cml_debug_metrics["warp_cml_union"]).numpy())
-            log_vars["Plain PL mIoU"] = np.nanmean((self.cml_debug_metrics["plain_cml_intersect"] / self.cml_debug_metrics["plain_cml_union"]).numpy())
-            # log_vars["Plain PL Mask mIoU"] = np.nanmean((self.cml_debug_metrics["plain_mask_cml_intersect"] / self.cml_debug_metrics["plain_mask_cml_union"]).numpy())
+            log_vars[f"[{name}] Warp PL mIoU"] = np.nanmean((self.cml_debug_metrics[name]["warp_cml_intersect"] / self.cml_debug_metrics[name]["warp_cml_union"]).numpy())
+            log_vars[f"[{name}] Plain PL mIoU"] = np.nanmean((self.cml_debug_metrics[name]["plain_cml_intersect"] / self.cml_debug_metrics[name]["plain_cml_union"]).numpy())
+            # log_vars[f"[{name}] Plain PL Mask mIoU"] = np.nanmean((self.cml_debug_metrics[name]["plain_mask_cml_intersect"] / self.cml_debug_metrics[name]["plain_mask_cml_union"]).numpy())
 
-            log_vars[f"Warp PL Pixel Acc {class_name}"] = self.cml_debug_metrics["warp_cml_pixel_hit"][i] / self.cml_debug_metrics["warp_cml_pixel_total"][i]
-            log_vars[f"Plain PL Pixel Acc {class_name}"] = self.cml_debug_metrics["plain_cml_pixel_hit"][i] / self.cml_debug_metrics["plain_cml_pixel_total"][i]
-            # log_vars[f"Plain PL Mask Pixel Acc {class_name}"] = self.cml_debug_metrics["plain_mask_cml_pixel_hit"][i] / self.cml_debug_metrics["plain_mask_cml_pixel_total"][i]
+            log_vars[f"[{name}] Warp PL Pixel Acc {class_name}"] = self.cml_debug_metrics[name]["warp_cml_pixel_hit"][i] / self.cml_debug_metrics[name]["warp_cml_pixel_total"][i]
+            log_vars[f"[{name}] Plain PL Pixel Acc {class_name}"] = self.cml_debug_metrics[name]["plain_cml_pixel_hit"][i] / self.cml_debug_metrics[name]["plain_cml_pixel_total"][i]
+            # log_vars[f"[{name}] Plain PL Mask Pixel Acc {class_name}"] = self.cml_debug_metrics[name]["plain_mask_cml_pixel_hit"][i] / self.cml_debug_metrics[name]["plain_mask_cml_pixel_total"][i]
 
-            log_vars[f"Diff Pixel Acc {class_name}"] = log_vars[f"Warp PL Pixel Acc {class_name}"] - log_vars[f"Plain PL Pixel Acc {class_name}"]
-            # log_vars[f"Diff Mask Pixel Acc {class_name}"] = log_vars[f"Warp PL Pixel Acc {class_name}"] - log_vars[f"Plain PL Mask Pixel Acc {class_name}"]
-            log_vars[f"Diff IoU {class_name}"] = log_vars[f"Warp PL IoU {class_name}"] - log_vars[f"Plain PL IoU {class_name}"]
-            # log_vars[f"Diff Mask IoU {class_name}"] = log_vars[f"Warp PL IoU {class_name}"] - log_vars[f"Plain PL Mask IoU {class_name}"]
-            log_vars["Diff mIoU"] = log_vars["Warp PL mIoU"] - log_vars["Plain PL mIoU"]
-            # log_vars["Diff Mask mIoU"] = log_vars["Warp PL mIoU"] - log_vars["Plain PL Mask mIoU"]
+            log_vars[f"[{name}] Diff Pixel Acc {class_name}"] = log_vars[f"[{name}] Warp PL Pixel Acc {class_name}"] - log_vars[f"[{name}] Plain PL Pixel Acc {class_name}"]
+            # log_vars[f"[{name}] Diff Mask Pixel Acc {class_name}"] = log_vars[f"[{name}] Warp PL Pixel Acc {class_name}"] - log_vars[f"[{name}] Plain PL Mask Pixel Acc {class_name}"]
+            log_vars[f"[{name}] Diff IoU {class_name}"] = log_vars[f"[{name}] Warp PL IoU {class_name}"] - log_vars[f"[{name}] Plain PL IoU {class_name}"]
+            # log_vars[f"[{name}] Diff Mask IoU {class_name}"] = log_vars[f"[{name}] Warp PL IoU {class_name}"] - log_vars[f"[{name}] Plain PL Mask IoU {class_name}"]
+            log_vars[f"[{name}] Diff mIoU"] = log_vars[f"[{name}] Warp PL mIoU"] - log_vars[f"[{name}] Plain PL mIoU"]
+            # log_vars[f"[{name}] Diff Mask mIoU"] = log_vars[f"[{name}] Warp PL mIoU"] - log_vars[f"[{name}] Plain PL Mask mIoU"]
 
-            log_vars[f"Mask Percentage {class_name}"] = self.cml_debug_metrics["warp_cml_mask_hit"][i] / self.cml_debug_metrics["warp_cml_mask_total"][i]
+            log_vars[f"[{name}] Mask Percentage {class_name}"] = self.cml_debug_metrics[name]["warp_cml_mask_hit"][i] / self.cml_debug_metrics[name]["warp_cml_mask_total"][i]
     
     def add_iou_metrics(self, pred, gt_sem_seg, log_vars, name):
         """
@@ -576,13 +584,13 @@ class DACS(UDADecorator):
         """
         gt_sem_seg = gt_sem_seg[0, 0]
         plain_iou = self.fast_iou(pred[0].cpu().numpy(), gt_sem_seg.cpu().numpy(), return_raw=True)
-        self.cml_debug_metrics["plain_cml_intersect"] += plain_iou[0]
-        self.cml_debug_metrics["plain_cml_union"] += plain_iou[1]
+        self.cml_debug_metrics[name]["plain_cml_intersect"] += plain_iou[0]
+        self.cml_debug_metrics[name]["plain_cml_union"] += plain_iou[1]
 
         for i, class_name in enumerate(CityscapesDataset.CLASSES):
-            log_vars[f"Plain {name} IoU {class_name}"] = self.cml_debug_metrics["plain_cml_intersect"][i] / self.cml_debug_metrics["plain_cml_union"][i]
+            log_vars[f"[{name}] Plain IoU {class_name}"] = self.cml_debug_metrics[name]["plain_cml_intersect"][i] / self.cml_debug_metrics[name]["plain_cml_union"][i]
 
-        log_vars[f"Plain {name} mIoU"] = np.nanmean((self.cml_debug_metrics["plain_cml_intersect"] / self.cml_debug_metrics["plain_cml_union"]).numpy())
+        log_vars[f"[{name}] Plain mIoU"] = np.nanmean((self.cml_debug_metrics[name]["plain_cml_intersect"] / self.cml_debug_metrics[name]["plain_cml_union"]).numpy())
         
         return log_vars
 
@@ -742,7 +750,7 @@ class DACS(UDADecorator):
             fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/multimodal/debug{self.local_iter}.png")
 
         
-        if self.local_iter % 100 == 0:
+        if self.local_iter % self.cml_debug_reset_rate == 0:
             self.init_cml_debug_metrics()
         self.local_iter += 1
         return log_vars
@@ -1018,9 +1026,7 @@ class DACS(UDADecorator):
 
                 warped_pl_loss.backward() #NOTE: do we need to retain graph?
 
-                if self.local_iter % 100 == 0:
-                    self.init_cml_debug_metrics()
-                self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
+                self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars, name="Warp")
 
             if self.l_mix_lambda > 0:
                 # Apply mixing
@@ -1160,6 +1166,8 @@ class DACS(UDADecorator):
                 large_fig.savefig(f"work_dirs/LWarpPLAnalysis/graphs{self.local_iter}.png", dpi=200)
                 # large_fig.close()
                 # breakpoint()
+        if self.local_iter % self.cml_debug_reset_rate == 0:
+            self.init_cml_debug_metrics()
 
         self.local_iter += 1
 
