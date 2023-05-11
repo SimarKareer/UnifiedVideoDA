@@ -103,6 +103,7 @@ class DACS(UDADecorator):
         self.min_pixels_target_cutmix = cfg["min_pixels_target_cutmix"]
         self.num_target_cutmix = cfg["num_target_cutmix"]
         self.target_cutmix_warmup = cfg["target_cutmix_warmup"]
+        self.cutmix_weights = cfg["cutmix_weights"]
 
         self.fdist_classes = cfg['imnet_feature_dist_classes']
         self.fdist_scale_min_ratio = cfg['imnet_feature_dist_scale_min_ratio']
@@ -151,6 +152,17 @@ class DACS(UDADecorator):
 
         self.target_memory_bank = {class_num: deque(maxlen=10) for class_num in rare_classes}
 
+        if self.cutmix_weights == "no-large":
+            cutmix_class_dist = {'road':0, 'sidewalk': 1, 'building': 0, 'wall': 0, 'fence': 1, 'pole': 0, 'traffic light': 1,
+                       'traffic sign': 1, 'vegetation': 1, 'terrain': 1, 'sky': 0, 'person': 1, 'rider': 0, 'car': 1,
+                       'truck': 1, 'bus': 1, 'train': 0, 'motorcycle': 1, 'bicycle': 1}
+        else:
+            cutmix_class_dist = {'road':1, 'sidewalk': 1, 'building': 1, 'wall': 0, 'fence': 1, 'pole': 0, 'traffic light': 1,
+                'traffic sign': 1, 'vegetation': 1, 'terrain': 1, 'sky': 1, 'person': 1, 'rider': 0, 'car': 1,
+                'truck': 1, 'bus': 1, 'train': 0, 'motorcycle': 1, 'bicycle': 1}
+        cutmix_class_dist = torch.tensor([cutmix_class_dist[class_name] for class_name in CityscapesDataset.CLASSES])
+        
+        self.cutmix_class_dist = cutmix_class_dist
 
         self.init_cml_debug_metrics()
         self.cml_debug_reset_rate = 500
@@ -462,8 +474,7 @@ class DACS(UDADecorator):
 
         mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
         mixed_seg_weight = pseudo_weight.clone()
-        class_filter = self.masked_classes_cutmix
-        mix_masks = get_class_masks(gt_semantic_seg, class_filter=class_filter)
+        mix_masks = get_class_masks(gt_semantic_seg, class_dist=self.cutmix_class_dist)
 
         # fig, axs = plt.subplots(5, 8, figsize=(15, 15))
         # subplotimg(axs[0, 0], img[:, 5], "Img before", cmap="Greys")
