@@ -147,10 +147,10 @@ class DACS(UDADecorator):
 
         # rare_classes = ["fence", "traffic light", ""]
         # rarity_order = [3, 5, 12, 16, 18, 17, 7, 6, 15, 4, 11, 14, 9, 8, 1, 2, 10, 13, 0]
-        rare_classes = [CityscapesDataset.CLASSES.index(class_name) for class_name in ["traffic light", "truck", "bus", "traffic sign", "fence", "terrain"]]
+        self.rare_classes = [CityscapesDataset.CLASSES.index(class_name) for class_name in ["traffic light", "truck", "bus", "traffic sign", "fence", "terrain", "motorcycle", "bicycle"]]
 
-        self.target_memory_bank = {class_num: deque(maxlen=10) for class_num in rare_classes}
-
+        self.target_memory_bank = {class_num: deque(maxlen=10) for class_num in self.rare_classes}
+        self.target_pl_frequency = {class_num: 0 for class_num in self.rare_classes}
 
         self.init_cml_debug_metrics()
         self.class_probs = {}
@@ -401,8 +401,19 @@ class DACS(UDADecorator):
             return pl_warp_intersect, pl_warp_union, mask
         else:
             return iou, miou, mask
-    
+
+    def get_target_prob_rare_cls(self, temperature=0.01):        
+        freq = torch.tensor([self.target_pl_frequency[cls] for cls in self.rare_classes])
+        freq = freq / torch.sum(freq)
+        freq = 1 - freq
+        freq = torch.softmax(freq / temperature, dim=-1)
+        return {cls:freq[i] for i, cls in enumerate(self.rare_classes)}
+
     def update_target_memory_bank(self, pseudo_label, target_img, pseudo_prob, valid_pseudo_mask):
+        unq = torch.unique(pseudo_label[valid_pseudo_mask == 1], return_counts=True)
+        counts = {k.item():v.item() for k, v in zip(unq[0], unq[1])}
+        for cls in self.target_pl_frequency:
+            self.target_pl_frequency[cls] += counts.get(cls, 0)
         batch_size = target_img.shape[0]
         for cls in self.target_memory_bank.keys():
             target_img_mask = torch.zeros_like(target_img)
@@ -422,14 +433,16 @@ class DACS(UDADecorator):
                 subplotimg(axs[i, j], invNorm(target_ims), f"{CityscapesDataset.CLASSES[k]}-{j}")
         [axi.set_axis_off() for axi in axs.ravel()]
         fig.savefig(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.png"))
-        pkl.dump(self.target_memory_bank, open(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.pkl"), "wb"))
+        pkl.dump((self.target_memory_bank, self.target_pl_frequency), open(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.pkl"), "wb"))
         plt.close()
 
     def get_target_mixed_im(self, mixed_img, mixed_lbl):
+        prob_rare_cls = self.get_target_prob_rare_cls(temperature=0.01)
+        prob_rare_cls = [prob_rare_cls[i] for i in self.rare_classes]
         batch_size = mixed_img.shape[0]
         for i in range(batch_size):
             for _ in range(self.num_target_cutmix):
-                rare_class = random.choice(list(self.target_memory_bank.keys()))
+                rare_class = random.choices(list(self.rare_classes), weights = prob_rare_cls, k = 1)[0]
                 if len(self.target_memory_bank[rare_class]) == 0:
                     continue
                 rare_pixels = random.choice(self.target_memory_bank[rare_class]).to(mixed_img.device)
