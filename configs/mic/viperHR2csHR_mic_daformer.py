@@ -89,7 +89,7 @@ uda = dict(
     modality_dropout_weights=None,
     min_pixels_target_cutmix=100,
     num_target_cutmix=None,
-    target_cutmix_warmup=500
+    target_cutmix_warmup=1000,
     modality_dropout_weights=None
 )
 # Optimizer Hyperparameters
