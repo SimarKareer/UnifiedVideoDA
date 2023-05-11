@@ -100,7 +100,6 @@ class DACS(UDADecorator):
         self.l_warp_begin = cfg['l_warp_begin']
         self.class_mask_warp = cfg["class_mask_warp"]
         self.class_mask_cutmix = cfg["class_mask_cutmix"]
-        self.cutmix_weights = cfg["cutmix_weights"]
         self.min_pixels_target_cutmix = cfg["min_pixels_target_cutmix"]
         self.num_target_cutmix = cfg["num_target_cutmix"]
         self.target_cutmix_warmup = cfg["target_cutmix_warmup"]
@@ -145,18 +144,6 @@ class DACS(UDADecorator):
         else:
             self.relevant_classes_cutmix = list(CityscapesDataset.ALL_IDX)
             self.masked_classes_cutmix = []
-
-        if self.cutmix_weights == "no-large":
-            cutmix_class_dist = {'road':0, 'sidewalk': 1, 'building': 0, 'wall': 0, 'fence': 1, 'pole': 0, 'traffic light': 1,
-                       'traffic sign': 1, 'vegetation': 1, 'terrain': 1, 'sky': 0, 'person': 1, 'rider': 0, 'car': 1,
-                       'truck': 1, 'bus': 1, 'train': 0, 'motorcycle': 1, 'bicycle': 1}
-        else:
-            cutmix_class_dist = {'road':1, 'sidewalk': 1, 'building': 1, 'wall': 0, 'fence': 1, 'pole': 0, 'traffic light': 1,
-                'traffic sign': 1, 'vegetation': 1, 'terrain': 1, 'sky': 1, 'person': 1, 'rider': 0, 'car': 1,
-                'truck': 1, 'bus': 1, 'train': 0, 'motorcycle': 1, 'bicycle': 1}
-        cutmix_class_dist = torch.tensor([cutmix_class_dist[class_name] for class_name in CityscapesDataset.CLASSES])
-        
-        self.cutmix_class_dist = cutmix_class_dist
 
         # rare_classes = ["fence", "traffic light", ""]
         # rarity_order = [3, 5, 12, 16, 18, 17, 7, 6, 15, 4, 11, 14, 9, 8, 1, 2, 10, 13, 0]
@@ -467,9 +454,8 @@ class DACS(UDADecorator):
 
         mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
         mixed_seg_weight = pseudo_weight.clone()
-        # class_filter = self.masked_classes_cutmix
-
-        mix_masks = get_class_masks(gt_semantic_seg, class_dist=self.cutmix_class_dist)
+        class_filter = self.masked_classes_cutmix
+        mix_masks = get_class_masks(gt_semantic_seg, class_filter=class_filter)
 
         # fig, axs = plt.subplots(5, 8, figsize=(15, 15))
         # subplotimg(axs[0, 0], img[:, 5], "Img before", cmap="Greys")
