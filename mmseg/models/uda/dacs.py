@@ -102,6 +102,7 @@ class DACS(UDADecorator):
         self.class_mask_cutmix = cfg["class_mask_cutmix"]
         self.min_pixels_target_cutmix = cfg["min_pixels_target_cutmix"]
         self.num_target_cutmix = cfg["num_target_cutmix"]
+        self.invfreq_target_cutmix = cfg['invfreq_target_cutmix']
         self.target_cutmix_warmup = cfg["target_cutmix_warmup"]
 
         self.fdist_classes = cfg['imnet_feature_dist_classes']
@@ -445,8 +446,12 @@ class DACS(UDADecorator):
         plt.close()
 
     def get_target_mixed_im(self, mixed_img, mixed_lbl):
-        prob_rare_cls = self.get_target_prob_rare_cls(temperature=0.01)
-        prob_rare_cls = [prob_rare_cls[i] for i in self.rare_classes]
+        if self.invfreq_target_cutmix:
+            prob_rare_cls = self.get_target_prob_rare_cls(temperature=0.01)
+            prob_rare_cls = [prob_rare_cls[i] for i in self.rare_classes]
+        else:
+            prob_rare_cls = None
+
         batch_size = mixed_img.shape[0]
         for i in range(batch_size):
             for _ in range(self.num_target_cutmix):
