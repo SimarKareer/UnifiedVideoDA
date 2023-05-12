@@ -22,5 +22,5 @@ set -x
 
 #change begin to 1500
 # LOAD_FROM="/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth"
-srun -u python -u ./tools/train.py configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --imnet-feature-dist-lambda 0 --l-warp-lambda=1 --l-warp-begin=1500 --l-mix-lambda=0 --warp-cutmix True --bottom-pl-fill True --consis-confidence-filter True --consis-confidence-thresh 0.95 --consis-confidence-per-class-thresh True --optimizer adamw --lr-schedule poly_10_warm --lr 24e-5 --total-iters=15000 --work-dir="./work_dirs/consis_confidence_filter_train/$1$T" --wandbid $1$T
+srun -u python -u ./tools/train.py configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1 --l-warp-begin=1500 --l-mix-lambda=0 --warp-cutmix True --bottom-pl-fill True --consis-confidence-filter True --consis-confidence-thresh 0.95 --consis-confidence-per-class-thresh True --optimizer adamw --lr-schedule poly_10_warm --lr 6e-5 --total-iters=40000 --work-dir="./work_dirs/consis_confidence_filter_train/$1$T" --wandbid $1$T
 # --wandbid $1$T
