@@ -430,7 +430,7 @@ class DACS(UDADecorator):
             target_img_mask[pl_mask] = target_img[pl_mask]
             target_img_mask = [target_img_mask[i].cpu() for i in range(batch_size) if (target_img_mask[i] != 0).sum() > 3*self.min_pixels_target_cutmix and pseudo_prob[(pseudo_label == cls)].mean() > 0.9]
             self.target_memory_bank[cls].extend(target_img_mask)
-        if self.local_iter % 500 == 0:
+        if self.local_iter % 1000 == 0:
             self.visualize_memory_bank()
         return 
 
