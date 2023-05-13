@@ -1023,8 +1023,8 @@ class DACS(UDADecorator):
 
                                 num_preds_class_i = class_mask.sum().item()
 
-                                # we will choose 50 pixels from each class to get logit values from
-                                random_sample_num = min(num_preds_class_i, 50)
+                                # we will choose 10 pixels from each class to get logit values from
+                                random_sample_num = min(num_preds_class_i, 10)
 
                                 #if no samples in PL
                                 if random_sample_num == 0:
@@ -1073,69 +1073,8 @@ class DACS(UDADecorator):
                         pseudo_label_warped[pseudo_label_warped == thing_class] = 255
                         pseudo_weight_warped[pseudo_label_warped == thing_class] = 0
 
-                if self.warp_cutmix:
-                    mixed_im_warp, mixed_lbl_warp, mixed_seg_weight_warp, _ = self.get_mixed_im(pseudo_weight_warped, pseudo_label_warped, img, target_img, gt_semantic_seg, means, stds)
-
-                    if DEBUG:
-                        subplotimg(axs[1, 4], invNorm(mixed_im_warp[0]), "Warped Im with CutMix")
-                        # subplotimg(axs[1, 5], mixed_im[0])
-                        subplotimg(axs[1, 5], mixed_lbl_warp[0], "Warped Label with CutMix", cmap="cityscapes")
-                        subplotimg(axs[1, 6], mixed_seg_weight_warp[0].repeat(3, 1, 1)*255)
-
-                    B, C, H, W = target_img_extra["imtk"].shape
-                    custom_loss = self.model(
-                        mixed_im_warp,
-                        target_img_metas, #NOTE: is this the correct metas to pass
-                        mixed_lbl_warp.view(B, 1, H, W),
-                        seg_weight=mixed_seg_weight_warp
-                    )                
-                elif self.exclusive_warp_cutmix:
-                    # choice = np.random.choice([0, 1], p=[0.5, 0.5])
-                    choice = 0 if random.uniform(0, 1) > 0.5 else 1
-                    if choice == 0: # Warp but no cutmix
-                        B, C, H, W = target_img_extra["imtk"].shape
-                        custom_loss = self.model(
-                            target_img,
-                            target_img_metas,
-                            pseudo_label_warped.view(B, 1, H, W),
-                            seg_weight=pseudo_weight_warped
-                        )
-                    elif choice == 1: # Cutmix but no warp
-                        mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
-                        if DEBUG:
-                            subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
-                            subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
-                            subplotimg(axs[0, 6], mixed_seg_weight[0].repeat(3, 1, 1)*255)
-                        # Train on mixed images
-                        custom_loss = self.model(
-                            mixed_img,
-                            img_metas,
-                            mixed_lbl,
-                            seg_weight=mixed_seg_weight,
-                            return_feat=False,
-                        )
-                        # seg_debug['Mix'] = self.get_model().debug_output
-                        # mix_losses = add_prefix(mix_losses, 'mix')
-                        # mix_loss, mix_log_vars = self._parse_losses(mix_losses)
-                        # log_vars.update(mix_log_vars)
-                        # (mix_loss * self.l_mix_lambda).backward()
-                else:
-                    B, C, H, W = target_img_extra["imtk"].shape
-                    custom_loss = self.model(
-                        target_img,
-                        target_img_metas,
-                        pseudo_label_warped.view(B, 1, H, W),
-                        seg_weight=pseudo_weight_warped
-                    )
-                warped_pl_loss, warped_pl_log_vars = self._parse_losses(custom_loss)
-                warped_pl_loss = warped_pl_loss * self.l_warp_lambda
-                log_vars["L_warp"] = warped_pl_log_vars["loss"]
-
-                warped_pl_loss.backward() #NOTE: do we need to retain graph?
-
-                if self.local_iter % 100 == 0:
-                    self.init_cml_debug_metrics()
-                self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
+                pseudo_label = pseudo_label_warped
+                pseudo_weight = pseudo_weight_warped
 
             if self.oracle_mask_add_noise or self.oracle_mask_remove_pix:
                 # oracle masking
