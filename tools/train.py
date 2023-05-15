@@ -354,6 +354,7 @@ def main(args):
 
     if args.target_cutmix_warmup is not None:
         cfg.uda.target_cutmix_warmup = args.target_cutmix_warmup
+    cfg.uda.ignore_index = cfg.ignore_index
     
     # if args.modality:
     #     cfg.uda.multimodal = True

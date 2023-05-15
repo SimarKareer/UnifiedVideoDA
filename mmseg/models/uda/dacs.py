@@ -124,6 +124,7 @@ class DACS(UDADecorator):
         self.modality_dropout_weights = cfg["modality_dropout_weights"]
 
         self.work_dir = cfg["work_dir"]
+        self.ignore_index = cfg["ignore_index"]
         assert self.mix == 'class'
 
         self.debug_fdist_mask = None
@@ -401,7 +402,7 @@ class DACS(UDADecorator):
             label,
             19,
             # [5, 3, 16, 12, 201, 255],
-            CityscapesDataset.ignore_index + self.masked_classes_warp,
+            self.ignore_index + self.masked_classes_warp,
             label_map=None,
             reduce_zero_label=False,
             custom_mask = custom_mask,
@@ -557,17 +558,17 @@ class DACS(UDADecorator):
         self.cml_debug_metrics[name]["plain_cml_union"] += plain_iou[1]
 
         # All Pixel Accuracy Metrics
-        warp_pixel_acc = per_class_pixel_accuracy(pl_warp, gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
-        self.cml_debug_metrics[name]["warp_cml_pixel_hit"] += warp_pixel_acc.diagonal()
-        self.cml_debug_metrics[name]["warp_cml_pixel_total"] += warp_pixel_acc.sum(axis=1)
+        warp_pixel_acc = per_class_pixel_accuracy(pl_warp, gt_sem_seg, ignore_index=self.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
+        self.cml_debug_metrics["warp_cml_pixel_hit"] += warp_pixel_acc.diagonal()
+        self.cml_debug_metrics["warp_cml_pixel_total"] += warp_pixel_acc.sum(axis=1)
 
-        plain_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
-        self.cml_debug_metrics[name]["plain_cml_pixel_hit"] += plain_pixel_acc.diagonal()
-        self.cml_debug_metrics[name]["plain_cml_pixel_total"] += plain_pixel_acc.sum(axis=1)
+        plain_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=self.ignore_index + self.masked_classes_warp, return_raw=True).cpu()
+        self.cml_debug_metrics["plain_cml_pixel_hit"] += plain_pixel_acc.diagonal()
+        self.cml_debug_metrics["plain_cml_pixel_total"] += plain_pixel_acc.sum(axis=1)
 
-        plain_mask_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=CityscapesDataset.ignore_index + self.masked_classes_warp, return_raw=True, mask=pw_warp.bool()).cpu()
-        self.cml_debug_metrics[name]["plain_mask_cml_pixel_hit"] += plain_mask_pixel_acc.diagonal()
-        self.cml_debug_metrics[name]["plain_mask_cml_pixel_total"] += plain_mask_pixel_acc.sum(axis=1)
+        plain_mask_pixel_acc = per_class_pixel_accuracy(pseudo_label[0], gt_sem_seg, ignore_index=self.ignore_index + self.masked_classes_warp, return_raw=True, mask=pw_warp.bool()).cpu()
+        self.cml_debug_metrics["plain_mask_cml_pixel_hit"] += plain_mask_pixel_acc.diagonal()
+        self.cml_debug_metrics["plain_mask_cml_pixel_total"] += plain_mask_pixel_acc.sum(axis=1)
 
         # Mask Counts Per Class
         # breakpoint()
