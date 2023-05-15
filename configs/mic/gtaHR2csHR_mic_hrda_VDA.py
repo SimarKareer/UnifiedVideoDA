@@ -105,6 +105,10 @@ uda = dict(
     exclusive_warp_cutmix=False,
     modality="rgb",
     modality_dropout_weights=None,
+    min_pixels_target_cutmix=1000,
+    num_target_cutmix=None,
+    invfreq_target_cutmix=False,
+    target_cutmix_warmup=1000,
     oracle_mask_add_noise=False,
     oracle_mask_remove_pix=False,
     oracle_mask_noise_percent=0.0,
@@ -124,8 +128,8 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=3000, max_keep_ckpts=2)
-evaluation = dict(interval=3000, eval_settings={
+checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=2)
+evaluation = dict(interval=4000, eval_settings={
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
