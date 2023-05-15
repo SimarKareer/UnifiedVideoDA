@@ -312,6 +312,9 @@ def main(args):
     
     if args.total_iters:
         cfg.runner.max_iters = args.total_iters
+        if not args.pre_exp_check:
+            cfg.checkpoint_config.interval = cfg.runner.max_iters//5
+            cfg.evaluation.interval = cfg.runner.max_iters//5
     
     if args.class_mask_warp:
         cfg.uda.class_mask_warp = args.class_mask_warp
