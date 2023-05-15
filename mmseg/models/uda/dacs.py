@@ -418,7 +418,7 @@ class DACS(UDADecorator):
         freq = torch.softmax(freq / temperature, dim=-1)
         return {cls:freq[i] for i, cls in enumerate(self.rare_classes)}
 
-    def update_target_memory_bank(self, pseudo_label, target_img, pseudo_prob, valid_pseudo_mask):
+    def update_target_memory_bank(self, pseudo_label, pseudo_prob, valid_pseudo_mask, target_img, target_gt, log_vars):
         unq = torch.unique(pseudo_label[valid_pseudo_mask == 1], return_counts=True)
         counts = {k.item():v.item() for k, v in zip(unq[0], unq[1])}
         for cls in self.target_pl_frequency:
@@ -426,24 +426,38 @@ class DACS(UDADecorator):
         batch_size = target_img.shape[0]
         for cls in self.target_memory_bank.keys():
             target_img_mask = torch.zeros_like(target_img)
-            pl_mask = ((pseudo_label.unsqueeze(1) == cls)*valid_pseudo_mask.unsqueeze(1)).repeat(1, 3, 1, 1)
+            target_masked_pred = torch.zeros_like(target_gt) + 255
+            pl_mask = ((pseudo_label.unsqueeze(1) == cls)*valid_pseudo_mask.unsqueeze(1))
+            target_masked_pred[pl_mask] = cls
+            pl_mask = pl_mask.repeat(1, 3, 1, 1)
             target_img_mask[pl_mask] = target_img[pl_mask]
-            target_img_mask = [target_img_mask[i].cpu() for i in range(batch_size) if (target_img_mask[i] != 0).sum() > 3*self.min_pixels_target_cutmix and pseudo_prob[(pseudo_label == cls)].mean() > 0.9]
-            self.target_memory_bank[cls].extend(target_img_mask)
+            update_to_bank = []
+            for i in range(batch_size):
+                if (target_img_mask[i] != 0).sum() > 3*self.min_pixels_target_cutmix and pseudo_prob[(pseudo_label == cls)].mean() > 0.9:
+                    intersection, union, _ = self.fast_iou(target_masked_pred[i, 0], target_gt[i, 0], return_raw=True)
+                    update_to_bank.append((target_img_mask[i].cpu(), intersection[cls], union[cls]))
+            self.target_memory_bank[cls].extend(update_to_bank)
         if self.local_iter % 1000 == 0:
-            self.visualize_memory_bank()
+            self.visualize_memory_bank(log_vars)
         return 
 
-    def visualize_memory_bank(self):
+    def visualize_memory_bank(self, log_vars):
         rank, _ = get_dist_info()
         fig, axs = plt.subplots(10, 10, figsize=(20, 20))
         for i, (k, v) in enumerate(self.target_memory_bank.items()):
-            for j, target_ims in enumerate(list(v)[-10:]):
+            for j, (target_ims, _, _) in enumerate(list(v)[-10:]):
                 subplotimg(axs[i, j], invNorm(target_ims), f"{CityscapesDataset.CLASSES[k]}-{j}")
         [axi.set_axis_off() for axi in axs.ravel()]
         fig.savefig(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.png"))
-        pkl.dump((self.target_memory_bank, self.target_pl_frequency), open(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.pkl"), "wb"))
         plt.close()
+        pkl.dump((self.target_memory_bank, self.target_pl_frequency), open(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.pkl"), "wb"))
+        for cls in self.target_memory_bank.keys(): #calculate iou per class from intersection and union inside target_memory_bank
+            if len(self.target_memory_bank[cls]) == 0:
+                continue
+            intersection = sum([self.target_memory_bank[cls][i][1] for i in range(len(self.target_memory_bank[cls]))])
+            union = sum([self.target_memory_bank[cls][i][2] for i in range(len(self.target_memory_bank[cls]))])
+            iou = (intersection / union).numpy()
+            log_vars[f"[Memory bank] Plain IoU {CityscapesDataset.CLASSES[cls]}"] = iou
 
     def get_target_mixed_im(self, mixed_img, mixed_lbl):
         if self.invfreq_target_cutmix:
@@ -458,7 +472,7 @@ class DACS(UDADecorator):
                 rare_class = random.choices(list(self.rare_classes), weights = prob_rare_cls, k = 1)[0]
                 if len(self.target_memory_bank[rare_class]) == 0:
                     continue
-                rare_pixels = random.choice(self.target_memory_bank[rare_class]).to(mixed_img.device)
+                rare_pixels = random.choice(self.target_memory_bank[rare_class])[0].to(mixed_img.device)
                 mask = (rare_pixels != 0).all(dim=0)
                 mixed_img[i, :, mask] = rare_pixels[:, mask]
                 mixed_lbl[i, :, mask] = rare_class
@@ -1037,7 +1051,7 @@ class DACS(UDADecorator):
                 # Apply mixing
                 mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
                 if self.num_target_cutmix is not None and self.num_target_cutmix > 0 and self.local_iter > self.target_cutmix_warmup:
-                    self.update_target_memory_bank(pseudo_label, target_img, pseudo_prob, valid_pseudo_mask)
+                    self.update_target_memory_bank(pseudo_label, pseudo_prob, valid_pseudo_mask, target_img, target_img_extra['gt_semantic_seg'], log_vars)
                     mixed_img, mixed_lbl = self.get_target_mixed_im(mixed_img, mixed_lbl)
                 if DEBUG:
                     subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
