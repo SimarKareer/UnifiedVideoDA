@@ -339,6 +339,8 @@ def main(args):
     if args.modality_dropout_weights is not None:
         cfg.uda.modality_dropout_weights = args.modality_dropout_weights
     
+    cfg.uda.ignore_index = cfg.ignore_index
+    
     # if args.modality:
     #     cfg.uda.multimodal = True
     #     cfg.data.train.source.data_type = args.modality
