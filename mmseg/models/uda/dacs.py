@@ -20,6 +20,7 @@ import os
 import random
 from copy import deepcopy
 
+import json
 import mmcv
 import numpy as np
 import torch
@@ -105,6 +106,7 @@ class DACS(UDADecorator):
         self.class_mask_cutmix = cfg["class_mask_cutmix"]
         self.min_pixels_target_cutmix = cfg["min_pixels_target_cutmix"]
         self.num_target_cutmix = cfg["num_target_cutmix"]
+        self.exclusive_cutmix = cfg['exclusive_cutmix']
         self.invfreq_target_cutmix = cfg['invfreq_target_cutmix']
         self.target_cutmix_warmup = cfg["target_cutmix_warmup"]
 
@@ -152,8 +154,8 @@ class DACS(UDADecorator):
 
         # rare_classes = ["fence", "traffic light", ""]
         # rarity_order = [3, 5, 12, 16, 18, 17, 7, 6, 15, 4, 11, 14, 9, 8, 1, 2, 10, 13, 0]
-        self.rare_classes = [CityscapesDataset.CLASSES.index(class_name) for class_name in ["traffic light", "truck", "bus", "traffic sign", "fence", "terrain", "motorcycle", "bicycle"]]
-
+        self.rare_classes = [CityscapesDataset.CLASSES.index(class_name) for class_name in ["traffic light", "truck", "bus", "traffic sign", "fence", "terrain", "motorcycle", "bicycle", "train", "pole", "person", "wall", "rider"]]
+        self.rare_classes = list(set(self.rare_classes) - set(self.ignore_index))
         self.target_memory_bank = {class_num: deque(maxlen=10) for class_num in self.rare_classes}
         self.target_pl_frequency = {class_num: 0 for class_num in self.rare_classes}
 
@@ -454,7 +456,9 @@ class DACS(UDADecorator):
         [axi.set_axis_off() for axi in axs.ravel()]
         fig.savefig(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.png"))
         plt.close()
-        pkl.dump((self.target_memory_bank, self.target_pl_frequency), open(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.pkl"), "wb"))
+        pkl.dump(self.target_memory_bank, open(os.path.join(self.work_dir, f"memory_bank_{self.local_iter}_{rank}.pkl"), "wb"))
+        with open(os.path.join(self.work_dir, f"target_pl_freq_{self.local_iter}_{rank}.json"), "w") as fp:
+            json.dump(self.target_pl_frequency, fp)
         for cls in self.target_memory_bank.keys(): #calculate iou per class from intersection and union inside target_memory_bank
             if len(self.target_memory_bank[cls]) == 0:
                 continue
@@ -463,7 +467,7 @@ class DACS(UDADecorator):
             iou = (intersection / union).numpy()
             log_vars[f"[Memory bank] Plain IoU {CityscapesDataset.CLASSES[cls]}"] = iou
 
-    def get_target_mixed_im(self, mixed_img, mixed_lbl):
+    def get_target_mixed_im(self, mixed_img, mixed_lbl, gt_semantic_seg, means, stds, mix_only):
         if self.invfreq_target_cutmix:
             prob_rare_cls = self.get_target_prob_rare_cls(temperature=0.01)
             prob_rare_cls = [prob_rare_cls[i] for i in self.rare_classes]
@@ -480,9 +484,26 @@ class DACS(UDADecorator):
                 mask = (rare_pixels != 0).all(dim=0)
                 mixed_img[i, :, mask] = rare_pixels[:, mask]
                 mixed_lbl[i, :, mask] = rare_class
+        if mix_only:
+            return mixed_img, mixed_lbl
+        strong_parameters = {
+            'mix': None,
+            'color_jitter': random.uniform(0, 1),
+            'color_jitter_s': self.color_jitter_s,
+            'color_jitter_p': self.color_jitter_p,
+            'blur': random.uniform(0, 1) if self.blur else 0,
+            'mean': means[0].unsqueeze(0),  # assume same normalization
+            'std': stds[0].unsqueeze(0)
+           }
+        for i in range(batch_size):
+            mixed_img[i], mixed_lbl[i] = strong_transform(
+                strong_parameters,
+                data=mixed_img[i].unsqueeze(0),
+                target=mixed_lbl[i].unsqueeze(0),
+                mix_only=mix_only)
         return mixed_img, mixed_lbl
 
-    def get_mixed_im(self, pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds):
+    def get_mixed_im(self, pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, mix_only=False):
         strong_parameters = {
             'mix': None,
             'color_jitter': random.uniform(0, 1),
@@ -514,11 +535,11 @@ class DACS(UDADecorator):
                 strong_parameters,
                 data=torch.stack((img[i], target_img[i])),
                 target=torch.stack(
-                    (gt_semantic_seg[i][0], pseudo_label[i])))
+                    (gt_semantic_seg[i][0], pseudo_label[i])), mix_only=mix_only)
             _, mixed_seg_weight[i] = strong_transform(
                 strong_parameters,
-                target=torch.stack((gt_pixel_weight[i], pseudo_weight[i])))
-        del gt_pixel_weight
+                target=torch.stack((gt_pixel_weight[i], pseudo_weight[i])), mix_only=False)
+        del gt_pixel_weight  
         mixed_img = torch.cat(mixed_img)
         mixed_lbl = torch.cat(mixed_lbl)
 
@@ -1164,10 +1185,39 @@ class DACS(UDADecorator):
 
             if self.l_mix_lambda > 0:
                 # Apply mixing
-                mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
                 if self.num_target_cutmix is not None and self.num_target_cutmix > 0 and self.local_iter > self.target_cutmix_warmup:
+                    do_source_cutmix, do_target_cutmix = True, True
+                    if self.exclusive_cutmix:
+                        if np.random.uniform() >= float(self.local_iter)/self.max_iters:
+                            do_target_cutmix = False
+                        else:
+                            do_source_cutmix = False
+                    if DEBUG:
+                        subplotimg(axs[2, 0], invNorm(img[0]), "Source image")
+                        subplotimg(axs[2, 1], invNorm(target_img[0]), "Target image")
+                        subplotimg(axs[2, 2], gt_semantic_seg[0], "Source Image GT", cmap="cityscapes")
+                        subplotimg(axs[2, 3], pseudo_label[0].unsqueeze(0), "Pseudo label", cmap="cityscapes")
+                        subplotimg(axs[2, 4], target_img_extra['gt_semantic_seg'][0], "Target GT", cmap="cityscapes")
+                    if do_source_cutmix:
+                        mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, mix_only=True)
+                    else:
+                        mixed_img = target_img
+                        mixed_lbl = pseudo_label
+                        mixed_seg_weight = pseudo_weight
+
+                    if DEBUG:
+                        subplotimg(axs[3, 0], invNorm(mixed_img[0]), "Source Cutmixed image")
+                        subplotimg(axs[3, 1], mixed_lbl[0], "Source Cutmixed label", cmap="cityscapes")
+
                     self.update_target_memory_bank(pseudo_label, pseudo_prob, valid_pseudo_mask, target_img, target_img_extra['gt_semantic_seg'], log_vars)
-                    mixed_img, mixed_lbl = self.get_target_mixed_im(mixed_img, mixed_lbl)
+                    if do_target_cutmix:
+                        mixed_img, mixed_lbl = self.get_target_mixed_im(mixed_img, mixed_lbl, gt_semantic_seg, means, stds, mix_only=False)
+
+                    if DEBUG:
+                        subplotimg(axs[4, 0], invNorm(mixed_img[0]), "Target Cutmixed image")
+                        subplotimg(axs[4, 1], mixed_lbl[0], "Target mixed label", cmap="cityscapes")
+                else:
+                    mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, mix_only=False)
                 if DEBUG:
                     subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
                     subplotimg(axs[1, 4], invNorm(mixed_img[1]), "Mixed Im with CutMix")

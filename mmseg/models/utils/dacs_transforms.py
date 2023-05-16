@@ -9,12 +9,12 @@ import torch.nn as nn
 from mmseg.datasets.cityscapes import CityscapesDataset
 
 
-def strong_transform(param, data=None, target=None):
+def strong_transform(param, data=None, target=None, mix_only=False):
     if data is None or len(data.shape) != 4 or data.shape[1] != 6:
-        return _strong_transform(param, data=data, target=target)
+        return _strong_transform(param, data=data, target=target, mix_only=mix_only)
 
     rgb_data, flow_data = data[:, :3], data[:, 3:]
-    rgb_transform = _strong_transform(param, data=rgb_data, target=target)
+    rgb_transform = _strong_transform(param, data=rgb_data, target=target, mix_only=mix_only)
     flow_transform = _strong_transform(param, data=flow_data, target=target, mix_only=True)
 
     merged_transform = torch.cat([rgb_transform[0], flow_transform[0]], dim=1)

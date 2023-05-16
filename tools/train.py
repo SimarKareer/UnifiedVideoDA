@@ -102,6 +102,7 @@ def parse_args(args):
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--min-pixels-target-cutmix", type=float, default=None)
     parser.add_argument("--num-target-cutmix", type=int, default=None)
+    parser.add_argument("--exclusive-cutmix", type=bool, default=False)
     parser.add_argument("--invfreq-target-cutmix", type=bool, default=False)
     parser.add_argument("--target-cutmix-warmup", type=int, default=None)
 
@@ -351,6 +352,9 @@ def main(args):
     
     if args.num_target_cutmix is not None:
         cfg.uda.num_target_cutmix = args.num_target_cutmix
+
+    if args.exclusive_cutmix is not None:
+        cfg.uda.exclusive_cutmix = args.exclusive_cutmix
     
     if args.invfreq_target_cutmix is not None:
         cfg.uda.invfreq_target_cutmix = args.invfreq_target_cutmix

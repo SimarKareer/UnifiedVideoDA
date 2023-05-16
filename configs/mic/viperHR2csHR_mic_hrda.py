@@ -107,6 +107,7 @@ uda = dict(
     modality_dropout_weights=None,
     min_pixels_target_cutmix=1000,
     num_target_cutmix=None,
+    exclusive_cutmix=False,
     invfreq_target_cutmix=False,
     target_cutmix_warmup=1000,
     oracle_mask_add_noise=False,
