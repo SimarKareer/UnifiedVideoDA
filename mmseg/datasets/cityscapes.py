@@ -37,11 +37,11 @@ class CityscapesDataset(CustomDataset):
                [0, 80, 100], [0, 0, 230], [119, 11, 32]]
 
     # ignore_index = [CLASSES.index(ignore) for ignore in ["pole", "wall", "train", "rider"]] + [201, 255]
-    ignore_index = [5, 3, 16, 12, 201, 255] # for some reason the above line doesn't work, but I want this to be a class variable so I hard coded it
 
 
     def __init__(self,
                  split,
+                 ignore_index,
                  img_suffix='_leftImg8bit.png',
                  seg_map_suffix='_gtFine_labelTrainIds.png',
                  crop_pseudo_margins=None,
@@ -62,7 +62,7 @@ class CityscapesDataset(CustomDataset):
         #for synthia ignore indices:
         # keep bicycle or rider (bike --> rider)
         # self.ignore_index = [self.CLASSES.index(ignore) for ignore in ["wall", "fence", "terrain", "truck", "bus", "train", "motorcycle", "bicycle"]] + [201, 255]
-        self.ignore_index = CityscapesDataset.ignore_index #I don't love this, I'm setting it twice bc sometimes it's accessed from the class and soemtimes the instance
+        self.ignore_index = ignore_index
         print("For Cityscapes, ignore_index is: ", self.ignore_index)
 
     def pre_pipeline(self, results):
