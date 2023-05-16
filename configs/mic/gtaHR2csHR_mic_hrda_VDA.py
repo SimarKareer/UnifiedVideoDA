@@ -8,9 +8,9 @@ _base_ = [
     # DAFormer Network Architecture
     '../_base_/models/daformer_sepaspp_mitb5.py',
     # GTA->Cityscapes High-Resolution Data Loading
-    '../_base_/datasets/uda_viper_CSSeq.py',
+    '../_base_/datasets/uda_gta_CSSeq.py',
     # DAFormer Self-Training
-    '../_base_/uda/dacs_a999_fdthings_viper.py',
+    '../_base_/uda/dacs_a999_fdthings.py',
     # AdamW Optimizer
     '../_base_/schedules/adamw.py',
     # Linear Learning Rate Warmup with Subsequent Linear Decay
@@ -132,9 +132,9 @@ evaluation = dict(interval=3000, eval_settings={
     "confusion matrix": True,
 })
 # Meta Information for Result Analysis
-name = 'viperHR2csHR_mic_hrda_s2'
+name = 'gtaHR2csHR_mic_hrda_s2'
 exp = 'basic'
-name_dataset = 'viperHR2cityscapesHR_1024x1024'
+name_dataset = 'gtaHR2cityscapesHR_1024x1024'
 name_architecture = 'hrda1-512-0.1_daformer_sepaspp_sl_mitb5'
 name_encoder = 'mitb5'
 name_decoder = 'hrda1-512-0.1_daformer_sepaspp_sl'
