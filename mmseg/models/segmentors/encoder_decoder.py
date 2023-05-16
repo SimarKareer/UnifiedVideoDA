@@ -224,13 +224,17 @@ class EncoderDecoder(BaseSegmentor):
         losses.update(add_prefix(loss_decode, 'decode'))
         return losses
 
-    def _decode_head_forward_test(self, x, img_metas):
+    def _decode_head_forward_test(self, x, img_metas, masking_branch=None):
         """Run forward function and calculate loss for decode head in
         inference."""
         if self.multimodal:
             #x[:, i] = x[low/highres, segformer_layer]
             seg_logits = [self.decode_head.forward_test(x[i], img_metas, self.test_cfg) for i in range(self.backbone.num_parallel)]
-            seg_logits = self._get_ensemble_logits(seg_logits)
+            if masking_branch is not None:
+                branch = masking_branch["select"]
+                seg_logits = seg_logits[branch]
+            else:
+                seg_logits = self._get_ensemble_logits(seg_logits)
         else:
             seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
         return seg_logits

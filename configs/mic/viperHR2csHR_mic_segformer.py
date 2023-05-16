@@ -82,10 +82,22 @@ uda = dict(
     class_mask_cutmix=None,
     exclusive_warp_cutmix=False,
     modality="rgb",
-    modality_dropout_weights=None
+    modality_dropout_weights=None,
+    oracle_mask_add_noise=False,
+    oracle_mask_remove_pix=False,
+    oracle_mask_noise_percent=0.0,
 )
 # Optimizer Hyperparameters
 optimizer_config = None
+optimizer = dict(
+    lr = 1e-4,
+    weight_decay=1e-4,
+    paramwise_cfg=dict(
+        custom_keys=dict(
+            head=dict(lr_mult=3.0),
+        )
+    )
+)
 # optimizer = dict(
 #     lr=6e-05,
 #     paramwise_cfg=dict(
