@@ -368,7 +368,7 @@ def multi_gpu_test(model,
                 ).to(device)
                 mm_preds = {"no_rgb": result_no_rgb, "no_flow": result_no_flow}
             
-            if "branch_consis" in metrics:
+            if "branch_consis" in metrics or "branch1_miou" in metrics or "branch2_miou" in metrics:
                 masking_branch = {"masking": None, "select": 0}
                 result_branch1 = torch.from_numpy(
                     model(return_loss=False, logits=False, masking_branch=masking_branch, **refined_data)[0]
