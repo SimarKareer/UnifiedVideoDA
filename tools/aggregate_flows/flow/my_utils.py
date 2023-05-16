@@ -568,6 +568,14 @@ class CircularTensor:
             if self.idx == 0:
                 return 0
             return torch.mean(self.buffer[:self.idx])
+    def get_std(self):
+        
+        if self.full:
+            return torch.std(self.buffer)
+        else:
+            if self.idx == 0:
+                return 0
+            return torch.std(self.buffer[:self.idx])
     
     def get_buffer(self):
         return self.buffer

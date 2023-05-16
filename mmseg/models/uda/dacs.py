@@ -942,10 +942,11 @@ class DACS(UDADecorator):
                         if i == 0 and DEBUG:
                             subplotimg(axs[3][5], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
 
+                    log_vars["Percent Total Pixels Filtered"] = 0
                     if self.consis_confidence_filter:
                         logits_curr_i = logits_curr[[i]][0]                        
                         pseudo_label_i = pseudo_label[i]
-
+                        pseudo_weight_i = pseudo_weight[i]
 
                         #consis mask
                         consis_mask = (pltki[0] == pseudo_label_i)
@@ -963,21 +964,30 @@ class DACS(UDADecorator):
                             confidence_mask = None
 
                             for i in range(self.num_classes):
-
+                                
                                 #get mask for predictions for the current class
                                 class_mask = (max_logit_idx_curr == i)
 
                                 # set to all False
                                 class_confidence_mask_i = torch.zeros(max_logit_val_curr.size(), dtype=torch.bool).to(dev)
 
-                                # if mean is not higher than self.consis_confidence_thresh, use that as default thresh
-                                thresh = max(self.per_class_confidence_thresh[i].get_mean(), self.consis_confidence_thresh)
+                                # get class mean and std
+                                class_mean_thresh = self.per_class_confidence_thresh[i].get_mean()
+                                class_std = self.per_class_confidence_thresh[i].get_std()
 
-                                # print("Class,", i, ",thresh, ", thresh)
-                                # put true in appropriate places
 
-                                class_confidence_mask_i[class_mask] = (max_logit_val_curr[class_mask] > thresh)
+                                # if mean - std is above thresh, just take all pixels
+                                if class_mean_thresh - class_std > self.consis_confidence_thresh:
+                                    class_confidence_mask_i = class_mask
 
+                                else:
+                                    #otherwise, just use the mean if > 0.5
+                                    # if mean is not higher than 0.5, use that as default thresh
+                                    thresh = max(self.per_class_confidence_thresh[i].get_mean(), 0.5)
+
+                                    class_confidence_mask_i[class_mask] = (max_logit_val_curr[class_mask] > thresh)
+
+                                # take the class_confidence_mask
                                 if confidence_mask is not None:
                                     confidence_mask = confidence_mask | class_confidence_mask_i
                                 else:
@@ -990,9 +1000,22 @@ class DACS(UDADecorator):
                         #final mask
                         consis_confidence_mask = (consis_mask & confidence_mask)
 
-                        # print("Num pixels in PL AFTER BOTH MASK:", consis_confidence_mask.sum())
+                        for i in range(self.num_classes):
+                            #orig PL
+                            class_mask = (max_logit_idx_curr == i)
+                            class_num_pix_before_filter = class_mask.sum().item()
 
-                        if i == 0 and DEBUG:
+                            # filtered PL
+                            class_num_pix_after_filter= (class_mask & consis_confidence_mask).sum().item()
+
+                            class_pix_filtered_str = "%s: Percent Pixels Filtered"%(CityscapesDataset.CLASSES[i])
+                            if class_num_pix_before_filter != 0:
+                                log_vars[class_pix_filtered_str] = (class_num_pix_before_filter - class_num_pix_after_filter) / float(class_num_pix_before_filter)
+                                # print(i, class_pix_filtered_str, log_vars[class_pix_filtered_str])
+
+
+                        # print("Num pixels in PL AFTER BOTH MASK:", consis_confidence_mask.sum())
+                        if DEBUG:
                             consistent = pltki[0].clone().detach()
                             consistent[~consis_mask] = 255
 
@@ -1001,21 +1024,32 @@ class DACS(UDADecorator):
 
                             subplotimg(axs[6][0], consistent, 'Consis Filter', cmap="cityscapes")
                             subplotimg(axs[6][1], confidence, 'Confidence Filter', cmap="cityscapes")
-                        # 255 or zero out all pixels not in mask
-                    
-                        pltki[0][~consis_confidence_mask]= 255
-                        pseudo_weight_warped_i[~consis_confidence_mask] = 0
 
-                        
-                        if i == 0 and DEBUG:
+                        # total pix in warp PL
+                        num_pix_before_filter = (pltki[0] != 255).sum().item()
+
+                        print("NUM BEFORE", num_pix_before_filter)
+
+                        # 255 or zero out all pixels not in mask
+                        pltki[0][~consis_confidence_mask]= 255
+                        # use the PL from curr frame (since we thresh on those logits)
+                        pseudo_weight_warped_i[~consis_confidence_mask] = 0
+                        pseudo_weight_warped_i[consis_confidence_mask] = pseudo_weight_i[consis_confidence_mask]
+
+
+                        #total pixels filtered
+                        num_pix_after_filter = (pltki[0] != 255).sum().item()
+
+                        print("NUM AFTER", num_pix_before_filter)
+                        log_vars["Percent Total Pixels Filtered"] = (num_pix_before_filter - num_pix_after_filter) / float(num_pix_before_filter)
+
+                        print("PERCENT FILTERED", (num_pix_before_filter - num_pix_after_filter) / float(num_pix_before_filter))
+
+                        if DEBUG:
                             subplotimg(axs[6][2], pltki[0], 'Consis Confidence Filter', cmap="cityscapes")
 
-
-
                         # populate Circular Tensors
-
                         if self.consis_confidence_per_class_thresh:
-
                             # update buffers per class
                             for i in range(self.num_classes):
                                 
@@ -1073,8 +1107,14 @@ class DACS(UDADecorator):
                         pseudo_label_warped[pseudo_label_warped == thing_class] = 255
                         pseudo_weight_warped[pseudo_label_warped == thing_class] = 0
 
-                pseudo_label = pseudo_label_warped
-                pseudo_weight = pseudo_weight_warped
+                pseudo_label_mix = pseudo_label_warped
+                pseudo_weight_mix = pseudo_weight_warped
+                
+            else:
+                #for passing into l_mix
+                pseudo_label_mix = pseudo_label
+                pseudo_weight_mix = pseudo_weight
+                
 
             if self.oracle_mask_add_noise or self.oracle_mask_remove_pix:
                 # oracle masking
@@ -1128,13 +1168,14 @@ class DACS(UDADecorator):
 
                         # print("after non zero", (pseudo_label_oracle_consis[i] != 255).sum().item())
 
-                pseudo_label = pseudo_label_oracle_consis
-                pseudo_weight = pseudo_label_oracle_consis_weight
+                #for passing into l_mix
+                pseudo_label_mix = pseudo_label_oracle_consis
+                pseudo_weight_mix = pseudo_label_oracle_consis_weight
 
 
             if self.l_mix_lambda > 0:
                 # Apply mixing
-                mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
+                mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight_mix, pseudo_label_mix, img, target_img, gt_semantic_seg, means, stds)
                 if DEBUG:
                     subplotimg(axs[0, 4], invNorm(mixed_img[0]), "Mixed Im with CutMix")
                     subplotimg(axs[0, 5], mixed_lbl[0], "Mixed lbl with CutMix", cmap="cityscapes")
@@ -1193,9 +1234,9 @@ class DACS(UDADecorator):
 
                 target_img_gt_semantic_seg = target_img_extra["gt_semantic_seg"][0, 0]
 
-                tolog = f"L_warp: {warped_pl_loss.item():.2f}\n"
+                tolog = ""
                 if self.l_mix_lambda > 0:
-                    tolog += f"L_mix: {mix_loss.item():.2f}\n"
+                    tolog = f"L_mix: {mix_loss.item():.2f}\n"
 
                 warp_iou, warp_miou, warp_iou_mask = self.fast_iou(pseudo_label_warped[0].cpu().numpy(), target_img_gt_semantic_seg.cpu().numpy(), custom_mask=pseudo_weight_warped[0].cpu().bool().numpy())
                 tolog += f"Warp PL miou: {warp_miou:.2f}\n"
