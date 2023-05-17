@@ -443,13 +443,13 @@ class DACS(UDADecorator):
                     intersection, union, _ = self.fast_iou(target_masked_pred[i, 0], target_gt[i, 0], return_raw=True)
                     update_to_bank.append((target_img_mask[i].cpu(), intersection[cls], union[cls]))
             self.target_memory_bank[cls].extend(update_to_bank)
-        if self.local_iter % 1000 == 0:
+        if self.local_iter % 2000 == 0:
             self.visualize_memory_bank(log_vars)
         return 
 
     def visualize_memory_bank(self, log_vars):
         rank, _ = get_dist_info()
-        fig, axs = plt.subplots(10, 10, figsize=(20, 20))
+        fig, axs = plt.subplots(15, 10, figsize=(20, 20))
         for i, (k, v) in enumerate(self.target_memory_bank.items()):
             for j, (target_ims, _, _) in enumerate(list(v)[-10:]):
                 subplotimg(axs[i, j], invNorm(target_ims), f"{CityscapesDataset.CLASSES[k]}-{j}")
@@ -1185,7 +1185,7 @@ class DACS(UDADecorator):
 
             if self.l_mix_lambda > 0:
                 # Apply mixing
-                if self.num_target_cutmix is not None and self.num_target_cutmix > 0 and self.local_iter > self.target_cutmix_warmup:
+                if self.num_target_cutmix is not None and self.num_target_cutmix > 0 and self.local_iter >= self.target_cutmix_warmup:
                     do_source_cutmix, do_target_cutmix = True, True
                     if self.exclusive_cutmix:
                         if np.random.uniform() >= float(self.local_iter)/self.max_iters:
@@ -1199,10 +1199,10 @@ class DACS(UDADecorator):
                         subplotimg(axs[2, 3], pseudo_label[0].unsqueeze(0), "Pseudo label", cmap="cityscapes")
                         subplotimg(axs[2, 4], target_img_extra['gt_semantic_seg'][0], "Target GT", cmap="cityscapes")
                     if do_source_cutmix:
-                        mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, mix_only=True)
+                        mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, mix_only=do_target_cutmix)
                     else:
                         mixed_img = target_img
-                        mixed_lbl = pseudo_label
+                        mixed_lbl = pseudo_label.unsqueeze(1)
                         mixed_seg_weight = pseudo_weight
 
                     if DEBUG:
