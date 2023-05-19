@@ -5,6 +5,7 @@ FRAME_OFFSET = 1
 DATA_TYPE = "rgb" # --multi-modal will set this to rgb+depth
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
+gta_data_root = '/srv/share4/datasets/GTA5DA/'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
 cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
 cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
@@ -127,6 +128,50 @@ def get_viper_val(get_dict=False):
         )
 
     return viper
+
+
+def get_gta_val():
+    gta_train_pipeline = {
+        "im_load_pipeline": [
+            dict(type='LoadImageFromFile'),
+            dict(type='LoadAnnotations'),
+        ],
+        "load_no_ann_pipeline": [
+            dict(type='LoadImageFromFile'),
+        ],
+        "load_flow_pipeline": [
+            dict(type='LoadFlowFromFile'),
+        ],
+        "shared_pipeline": [
+            dict(type='Resize', keep_ratio=True, img_scale=(1914, 1052)),
+            # dict(type='RandomCrop', crop_size=(1024, 2048)),
+            dict(type='RandomFlip', prob=0.0),
+        ],
+        "im_pipeline": [
+            # dict(type='PhotoMetricDistortion'),
+            dict(type='Normalize', **img_norm_cfg),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type='Collect', keys=['img', 'gt_semantic_seg']),
+        ],
+        "flow_pipeline": [
+            dict(type='DefaultFormatBundle'), #I don't know what this is
+            dict(type='Collect', keys=['img', 'gt_semantic_seg']),
+        ]
+    }
+
+
+    gta = dict(
+            type='ViperSeqDataset',
+            data_root=gta_data_root,
+            img_dir='images',
+            ann_dir='labels',
+            split='small.txt',
+            pipeline=gta_train_pipeline,
+            frame_offset=1,
+            flow_dir=None,
+        )
+    
+    return gta
 
 
 def get_csseq_train():
