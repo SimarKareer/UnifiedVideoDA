@@ -24,6 +24,10 @@ _base_ = [
 seed = 2  # seed with median performance
 # HRDA Configuration
 model = dict(
+    decode_head=dict(
+        type='SegFormerHeadHarsh',
+        decoder_params=dict(embed_dim=256),
+    ),
     test_cfg=dict(
         mode='slide',
         batched_slide=True,

@@ -38,6 +38,8 @@ def parse_args(args):
     parser.add_argument(
         '--load-from', help='the checkpoint file to load weights from', type=str, default=None)
     parser.add_argument(
+        '--load-from-custom', help='load from with key matching', type=str, default=None)
+    parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(
         '--no-validate',
@@ -110,6 +112,22 @@ def parse_args(args):
 
     return args
 
+def rename_dict(state_dict, revise_dict, invert_dict=False):
+
+    if invert_dict:
+        revise_dict = {v: k for k, v in revise_dict.items()}
+
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        for old_name, new_name in revise_dict.items():
+            if old_name in k:
+                k = k.replace(old_name, new_name)
+                break
+        new_state_dict[k] = v
+        # state_dict = {re.sub(p, r, k): v for k, v in state_dict.items()}
+
+    return new_state_dict
+
 def load_checkpoint(model,
                     filename,
                     map_location=None,
@@ -142,38 +160,44 @@ def load_checkpoint(model,
     # get state_dict from checkpoint
     if 'state_dict' in checkpoint:
         state_dict = checkpoint['state_dict']
+    if "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
     else:
         state_dict = checkpoint
     # strip prefix of state_dict
-    # breakpoint()
 
-    print("Loaded state dict has keys: ", summarize_keys(state_dict.keys(), split=1))
 
-    print("Target State Dict has keys: ", summarize_keys(model.state_dict().keys(), split=2))
 
+
+
+    # revise_dict = {
+    #     "ema_backbone": "ema_model.backbone",
+    #     "imnet_backbone": 'imnet_model.backbone',
+    #     "decode_head": "model.decode_head",
+    #     "imnet_decode_head": "imnet_model.decode_head",
+    #     "backbone": "model.backbone",
+    #     "ema_decode_head": "ema_model.decode_head",
+    # }
 
 
     revise_dict = {
-        "ema_backbone": "ema_model.backbone",
-        "imnet_backbone": 'imnet_model.backbone',
-        "decode_head": "model.decode_head",
-        "imnet_decode_head": "imnet_model.decode_head",
-        "backbone": "model.backbone",
-        "ema_decode_head": "ema_model.decode_head",
+        # "linear_c1": "linear_c.0",
+        # "linear_c2": "linear_c.1",
+        # "linear_c3": "linear_c.2",
+        # "linear_c4": "linear_c.3"
     }
-    if invert_dict:
-        revise_dict = {v: k for k, v in revise_dict.items()}
+    new_state_dict = rename_dict(state_dict, revise_dict)
+    revise_dict = {
+        "encoder": "model.backbone",
+        "decoder": "model.decode_head",
+        "alpha": "model.alpha"
+    }
+    new_state_dict = rename_dict(new_state_dict, revise_dict)
+    
+    print("Loaded state dict has keys: ", sorted(list(summarize_keys(new_state_dict.keys(), split=3))))
 
-    new_state_dict = state_dict
-    if revise_keys:
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            for old_name, new_name in revise_dict.items():
-                if old_name in k:
-                    k = k.replace(old_name, new_name)
-                    break
-            new_state_dict[k] = v
-            # state_dict = {re.sub(p, r, k): v for k, v in state_dict.items()}
+    print("Target State Dict has keys: ", sorted([l for l in summarize_keys(model.state_dict().keys(), split=3) if "ema" not in l and "imnet" not in l]))
+
 
     # load state_dict
     load_state_dict(model, new_state_dict, strict, logger)
@@ -401,15 +425,14 @@ def main(args):
     # ema_model.backbone.patch_embed3.proj.bias vs ema_backbone.block3.34.attn.norm.bias
     # imnet_model.backbone.block3.26.norm1.weight vs imnet_backbone.block1.1.norm1.bias
     # ? vs imnet_decode_head.scale_attention.fuse_layer.bn.weight
-    # if cfg.load_from:
-    #     checkpoint = load_checkpoint(
-    #         model,
-    #         # "work_dirs/local-basic/230123_1434_viperHR2csHR_mic_hrda_s2_072ca/iter_28000.pth",
-    #         cfg.load_from,
-    #         map_location='cpu',
-    #         revise_keys=False,
-    #         invert_dict=False)
-    #     print("LOADED A CHECKPOINT")
+    if args.load_from_custom:
+        checkpoint = load_checkpoint(
+            model,
+            args.load_from_custom,
+            map_location='cpu',
+            revise_keys=True,
+            invert_dict=False)
+        print("LOADED A CHECKPOINT")
         
 
     logger.info(model)
