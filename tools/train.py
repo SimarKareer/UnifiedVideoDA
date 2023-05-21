@@ -89,6 +89,7 @@ def parse_args(args):
     parser.add_argument('--consis-confidence-filter', type=bool, default=False)
     parser.add_argument('--consis-confidence-thresh', type=float, default=None)
     parser.add_argument('--consis-confidence-per-class-thresh', type=bool, default=False)
+    parser.add_argument('--consis-confidence-per-class-thresh-less-strict', type=bool, default=False)
     parser.add_argument('--consis-filter-rare-class', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--bottom-pl-fill', type=bool, default=False)
@@ -281,7 +282,10 @@ def main(args):
         cfg.evaluation.eval_settings.consis_confidence_thresh = args.consis_confidence_thresh
     
     if args.consis_confidence_per_class_thresh is not None:
-        cfg.uda.consis_confidence_per_class_thresh = args.consis_confidence_per_class_thresh    
+        cfg.uda.consis_confidence_per_class_thresh = args.consis_confidence_per_class_thresh
+
+    if args.consis_confidence_per_class_thresh_less_strict is not None:
+        cfg.uda.consis_confidence_per_class_thresh_less_strict = args.consis_confidence_per_class_thresh_less_strict      
     
     if args.consis_filter_rare_class:
         cfg.uda.consis_filter_rare_class = True

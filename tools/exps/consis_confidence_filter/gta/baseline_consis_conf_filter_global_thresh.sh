@@ -21,5 +21,6 @@ cd /coc/scratch/vvijaykumar6/mmseg
 set -x
 
 #change begin to 1500
-srun -u python -u ./tools/train.py configs/mic/viperHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1 --l-warp-begin=1500 --l-mix-lambda=0 --warp-cutmix True --bottom-pl-fill True --consis-confidence-filter True --consis-confidence-thresh 0.975 --optimizer adamw --lr-schedule poly_10_warm --lr 24e-5 --total-iters=15000 --work-dir="./work_dirs/consis_confidence_filter_train/$1$T" --wandbid $1$T
+# LOAD_FROM="work_dirs/consis_confidence_filter_train/mic_rgb_dacs_cleaned_consis_conf_filter_corr05-13-16-53-54/iter_12000.pth"
+srun -u python -u ./tools/train.py configs/mic/gtaHR2csHR_mic_hrda_VDA.py --launcher="slurm" --l-warp-lambda=1 --l-mix-lambda=1 --bottom-pl-fill True --consis-confidence-filter True --consis-confidence-thresh 0.98 --lr 27e-5 --total-iters=10000 --seed 1 --deterministic --work-dir="./work_dirs/gta_cs/consis_confidence_filter_train/$1$T" --wandbid $1$T
 # --wandbid $1$T

@@ -89,6 +89,10 @@ uda = dict(
     l_warp_lambda=1.0,
     l_mix_lambda=0.0,
     consis_filter=False,
+    consis_confidence_filter=False,
+    consis_confidence_thresh=0,
+    consis_confidence_per_class_thresh=False,
+    consis_confidence_per_class_thresh_less_strict=False,
     consis_filter_rare_class=False,
     pl_fill=False,
     bottom_pl_fill=False,
@@ -119,17 +123,23 @@ optimizer_config = None
 #             pos_block=dict(decay_mult=0.0),
 #             norm=dict(decay_mult=0.0))))
 # lr_config=None turns off LR schedule
+lr_config = dict(
+    warmup_iters = 375
+)
+
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=15000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=3000, max_keep_ckpts=2)
-evaluation = dict(interval=3000, eval_settings={
+checkpoint_config = dict(by_epoch=False, interval=2000, max_keep_ckpts=2)
+evaluation = dict(interval=2000, eval_settings={
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
+    "return_logits": True,
+    "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
 name = 'gtaHR2csHR_mic_hrda_s2'

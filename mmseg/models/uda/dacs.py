@@ -88,6 +88,7 @@ class DACS(UDADecorator):
         self.consis_confidence_filter = cfg['consis_confidence_filter']
         self.consis_confidence_thresh = cfg['consis_confidence_thresh']
         self.consis_confidence_per_class_thresh = cfg['consis_confidence_per_class_thresh']
+        self.consis_confidence_per_class_thresh_less_strict = cfg['consis_confidence_per_class_thresh_less_strict']
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
         self.oracle_mask_add_noise = cfg['oracle_mask_add_noise']
         self.oracle_mask_remove_pix = cfg['oracle_mask_remove_pix']
@@ -977,16 +978,19 @@ class DACS(UDADecorator):
                                 class_mean_thresh = self.per_class_confidence_thresh[i].get_mean()
                                 class_std = self.per_class_confidence_thresh[i].get_std()
 
+                                if self.consis_confidence_per_class_thresh_less_strict:
+                                    # if mean - std is above thresh, just take all pixels
+                                    if class_mean_thresh - class_std > self.consis_confidence_thresh:
+                                        class_confidence_mask_i = class_mask
 
-                                # if mean - std is above thresh, just take all pixels
-                                if class_mean_thresh - class_std > self.consis_confidence_thresh:
-                                    class_confidence_mask_i = class_mask
+                                    else:
+                                        #otherwise, just use the mean if > 0.5
+                                        # if mean is not higher than 0.5, use that as default thresh
+                                        thresh = max(self.per_class_confidence_thresh[i].get_mean(), 0.5)
 
+                                        class_confidence_mask_i[class_mask] = (max_logit_val_curr[class_mask] > thresh)
                                 else:
-                                    #otherwise, just use the mean if > 0.5
-                                    # if mean is not higher than 0.5, use that as default thresh
-                                    thresh = max(self.per_class_confidence_thresh[i].get_mean(), 0.5)
-
+                                    thresh = max(self.per_class_confidence_thresh[i].get_mean(), self.consis_confidence_thresh)
                                     class_confidence_mask_i[class_mask] = (max_logit_val_curr[class_mask] > thresh)
 
                                 # take the class_confidence_mask
@@ -1010,6 +1014,8 @@ class DACS(UDADecorator):
                             # filtered PL
                             class_num_pix_after_filter= (class_mask & consis_confidence_mask).sum().item()
 
+                            # print(i, class_num_pix_after_filter, class_num_pix_before_filter, (1 - class_num_pix_after_filter/ float(class_num_pix_before_filter)) * 100)
+
                             class_pix_filtered_str = "%s: Percent Pixels Filtered"%(CityscapesDataset.CLASSES[i])
                             if class_num_pix_before_filter != 0:
                                 log_vars[class_pix_filtered_str] = (class_num_pix_before_filter - class_num_pix_after_filter) / float(class_num_pix_before_filter)
@@ -1030,7 +1036,7 @@ class DACS(UDADecorator):
                         # total pix in warp PL
                         num_pix_before_filter = (pltki[0] != 255).sum().item()
 
-                        print("NUM BEFORE", num_pix_before_filter)
+                        # print("NUM BEFORE", num_pix_before_filter)
 
                         # 255 or zero out all pixels not in mask
                         pltki[0][~consis_confidence_mask]= 255
@@ -1042,10 +1048,10 @@ class DACS(UDADecorator):
                         #total pixels filtered
                         num_pix_after_filter = (pltki[0] != 255).sum().item()
 
-                        print("NUM AFTER", num_pix_before_filter)
+                        # print("NUM AFTER", num_pix_before_filter)
                         log_vars["Percent Total Pixels Filtered"] = (num_pix_before_filter - num_pix_after_filter) / float(num_pix_before_filter)
 
-                        print("PERCENT FILTERED", (num_pix_before_filter - num_pix_after_filter) / float(num_pix_before_filter))
+                        # print("PERCENT FILTERED", (num_pix_before_filter - num_pix_after_filter) / float(num_pix_before_filter))
 
                         if DEBUG:
                             subplotimg(axs[6][2], pltki[0], 'Consis Confidence Filter', cmap="cityscapes")
@@ -1111,6 +1117,9 @@ class DACS(UDADecorator):
 
                 pseudo_label_mix = pseudo_label_warped
                 pseudo_weight_mix = pseudo_weight_warped
+
+                #debug metrics
+                self.add_training_debug_metrics(pseudo_label, pseudo_label_warped, pseudo_weight_warped, target_img_extra, log_vars)
                 
             else:
                 #for passing into l_mix
