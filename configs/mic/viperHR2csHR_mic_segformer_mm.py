@@ -34,7 +34,7 @@ data = dict(
         data_type=FLOW_TYPE
     )
 )
-evaluation = dict(interval=3000, eval_settings={
+evaluation = dict(interval=4000, eval_settings={
     # "metrics": ["mIoU", "multimodalM5", "MM_v1", "MM_v2", "MM_v3"],
     "metrics": ["mIoU", "branch_consis", "branch1_miou", "branch2_miou"],
     "sub_metrics": ["mask_count"],

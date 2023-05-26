@@ -24,6 +24,7 @@ from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
 import torchvision.transforms as transforms
 import pickle as pkl
+from mmseg.utils.custom_utils import next_available_file
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -343,43 +344,49 @@ def multi_gpu_test(model,
     eval_metrics = [met for met in metrics if "PL" not in met]
     pl_metrics = [met for met in metrics if "PL" in met]
 
+    model.eval()
     it = 0
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
             if "flowVis" in data and model.module.multimodal:
                 refined_data = {
                     "img_metas": data["img_metas"], 
-                    "img": [torch.cat([data["img"][0], three_channel_flow(data["flowVis"][0])], dim=1)]
+                    # "img": [torch.cat([data["img"][0], three_channel_flow(data["flowVis"][0])], dim=1)]
+                    "img": [data["img"][0], three_channel_flow(data["flowVis"][0])]
                 }
             else:
                 refined_data = {
                     "img_metas": data["img_metas"], 
                     "img": data["img"]
                 }
-            result = model(return_loss=False, logits=False, **refined_data)
-            result[0] = torch.from_numpy(result[0]).to(device)
-            if "multimodalM5" in metrics:
-                result_no_rgb = torch.from_numpy(
-                    model(return_loss=False, logits=False, masking_branch=[0], **refined_data)[0]
-                ).to(device)
 
-                result_no_flow = torch.from_numpy(
-                    model(return_loss=False, logits=False, masking_branch=[1], **refined_data)[0]
-                ).to(device)
-                mm_preds = {"no_rgb": result_no_rgb, "no_flow": result_no_flow}
+            # result = model(return_loss=False, logits=False, **refined_data)
+            result = model.module.model.forward(refined_data["img"], argmax=True)
+            mm_preds = {"branch1": result[0].squeeze(0), "branch2": result[1].squeeze(0)}
+            result = [result[2].squeeze(0)]
+            # result[0] = torch.from_numpy(result[0]).to(device)
+            # if "multimodalM5" in metrics:
+            #     result_no_rgb = torch.from_numpy(
+            #         model(return_loss=False, logits=False, masking_branch=[0], **refined_data)[0]
+            #     ).to(device)
+
+            #     result_no_flow = torch.from_numpy(
+            #         model(return_loss=False, logits=False, masking_branch=[1], **refined_data)[0]
+            #     ).to(device)
+            #     mm_preds = {"no_rgb": result_no_rgb, "no_flow": result_no_flow}
             
-            if "branch_consis" in metrics or "branch1_miou" in metrics or "branch2_miou" in metrics:
-                masking_branch = {"masking": None, "select": 0}
-                result_branch1 = torch.from_numpy(
-                    model(return_loss=False, logits=False, masking_branch=masking_branch, **refined_data)[0]
-                ).to(device)
+            # if "branch_consis" in metrics or "branch1_miou" in metrics or "branch2_miou" in metrics:
+            #     masking_branch = {"masking": None, "select": 0}
+            #     result_branch1 = torch.from_numpy(
+            #         model(return_loss=False, logits=False, masking_branch=masking_branch, **refined_data)[0]
+            #     ).to(device)
 
-                masking_branch = {"masking": None, "select": 1}
-                result_branch2 = torch.from_numpy(
-                    model(return_loss=False, logits=False, masking_branch=masking_branch, **refined_data)[0]
-                ).to(device)
+            #     masking_branch = {"masking": None, "select": 1}
+            #     result_branch2 = torch.from_numpy(
+            #         model(return_loss=False, logits=False, masking_branch=masking_branch, **refined_data)[0]
+            #     ).to(device)
 
-                mm_preds = {"branch1": result_branch1, "branch2": result_branch2}
+            #     mm_preds = {"branch1": result_branch1, "branch2": result_branch2}
             
 
 
@@ -459,7 +466,8 @@ def multi_gpu_test(model,
                 "pixelwise_correct": dict_cpu(dataset.pixelwise_correct),
                 "pixelwise_total": dict_cpu(dataset.pixelwise_total),
                 "confusion_matrix": dict_cpu(dataset.confusion_matrix)}
-        with open(os.path.join(eval_settings['work_dir'], "eval_results.pkl"), 'wb') as f:
+        fname = next_available_file(os.path.join(eval_settings['work_dir'], "eval_results"), extension=".pkl")
+        with open(fname, 'wb') as f:
             pkl.dump(all_metrics, f)
 
     if rank == 0:

@@ -29,7 +29,7 @@ import configs._base_.schedules.poly10warm as poly10warm
 import configs._base_.schedules.poly10 as poly10
 import configs._base_.schedules.adamw as adamw
 import configs._base_.schedules.sgd as sgd
-
+from vdamm.models.segmentation_models.linearfuse.segformer import WeTrLinearFusion
 
 def parse_args(args):
     parser = argparse.ArgumentParser(description='Train a segmentor')
@@ -420,6 +420,12 @@ def main(args):
         cfg, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
     model.init_weights()
 
+
+    # breakpoint()
+    config = {'root_dir': '/srv/flash1/hmaheshwari7/VideoDA/video-da-multi-modal/', 'bn_eps': 1e-05, 'bn_momentum': 0.1, 'n_sup_epochs': 12, 'n_unsup_epochs': 0, 'optim': 'adamw', 'lr_warm_up_epoch': 0, 'base_lr': [0.0001, 0.0001, 0.0003], 'lr_power': 0.9, 'momentum': 0.9, 'weight_decay': [0.0001, 0, 0.0001], 'data': 'IGNORE', 'modalities': ['rgb', 'flowxynorm'], 'data_image_height': 'IGNORE', 'data_image_width': 'IGNORE', 'data_root': 'IGNORE', 'train_source': 'IGNORE', 'labeled_ratio': 1, 'eval_source': 'IGNORE', 'test_source': 'IGNORE', 'image_height': 1024, 'image_width': 1024, 'train_scale_array': 'IGNORE', 'batch_size': 4, 'val_batch_size': 8, 'num_workers': 4, 'num_classes': 19, 'num_eval_imgs': 'IGNORE', 'total_train_imgs': 13367, 'eval_flip': False, 'sliding_eval': False, 'stride_rate': 0.33, 'seg_model': 'linearfusion', 'base_model': 'mit_b5', 'ratio': 0.8, 'freeze_bn': True, 'restart': False, 'ssl_framework': 'mmsegsuponly', 'world_size': 4, 'snapshot_epoch': 3, 'snapshot_iter': 300, 'run_suffix': 'viper_gen_flow_mitb5', 'val_dataset': 'viper', 'train_dataset': 'viper', 'verbose': 'iter', 'num_train_imgs': 13367, 'num_unsup_imgs': 0, 'max_samples': 13367, 'niters_per_epoch': 3341, 'wandb_project': "VIDEODA_IGNORE_['rgb', 'flowxynorm']_mmsegsuponly_linearfusion_mit_b5_1024_1024_1", 'run_name': 'lr=[0.0001, 0.0001, 0.0003]_ssl=mmsegsuponly_batchsize=4_GPU=4_viper_gen_flow_mitb5', 'snapshot_dir': '/srv/flash1/hmaheshwari7/VideoDA/video-da-multi-modal//snapshots/rgb+flowxynorm/IGNORE/mmsegsuponly/1-1/linearfusion/mit_b5/lr=[0.0001, 0.0001, 0.0003]_ssl=mmsegsuponly_batchsize=4_GPU=4_viper_gen_flow_mitb5'}
+
+
+    model.model = WeTrLinearFusion("mit_b5", config)
     # breakpoint()
     # model.backbone.patch_embed1.proj.weight vs backbone.patch_embed1.proj.weight
     # ema_model.backbone.patch_embed3.proj.bias vs ema_backbone.block3.34.attn.norm.bias

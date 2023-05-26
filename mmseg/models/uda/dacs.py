@@ -226,6 +226,7 @@ class DACS(UDADecorator):
 
         optimizer.zero_grad()
         log_vars = self(**data_batch)
+        # print(self.model.module.encoder.block1[0].mlp.fc1.module.weight)
         optimizer.step()
 
         log_vars.pop('loss', None)  # remove the unnecessary 'loss'
@@ -526,10 +527,26 @@ class DACS(UDADecorator):
         return log_vars
 
     def get_grad_magnitude(self):
-        params = self.get_model().backbone.parameters()
-        seg_grads = [
-            p.grad.detach().clone() for p in params if p.grad is not None
-        ]
+        # params = self.get_model().backbone.parameters()
+        params = self.model.module.encoder.parameters()
+
+        seg_grads = []
+        zero_grads = 0
+        non_zero_grads = 0
+        for p in params:
+            if p.grad is not None:
+                seg_grads.append(p.grad.detach().clone())
+                if torch.sum(p.grad) == 0:
+                    zero_grads += 1
+                    # print("ZERO GRAD ON", p)
+                else:
+                    non_zero_grads += 1
+        
+        print(f"Zero Grads: {zero_grads}, Non Zero Grads: {non_zero_grads}")
+        # seg_grads = [
+        #     p.grad.detach().clone() for p in params if p.grad is not None
+        # ]
+
         grad_mag = calc_grad_magnitude(seg_grads)
         return grad_mag
     
@@ -555,6 +572,8 @@ class DACS(UDADecorator):
         assert(len(img_extra["flowVis"].shape) == 4)
         img = torch.cat([img, three_channel_flow(img_extra["flowVis"].clone())], dim=1)
         target_img = torch.cat([target_img, three_channel_flow(target_img_extra["flowVis"].clone())], dim=1)
+        B, C, H, W, = img.shape
+        assert(C == 6)
 
         # Assign other important variables used throughout function.  Try not to edit the dictionary anywhere
         gt_semantic_seg, valid_pseudo_mask = img_extra["gt_semantic_seg"], target_img_extra["valid_pseudo_mask"]
@@ -570,36 +589,49 @@ class DACS(UDADecorator):
             # subplotimg(axs[1, 1], img_extra["flowVis"][1], "Source flow 1")
             subplotimg(axs[1, 2], target_img_extra["flowVis"][0], "Target flow 0")
             # subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 1")
-
-        if self.local_iter == 0:
-            self._init_ema_weights()
-            # assert _params_equal(self.get_ema_model(), self.get_model())
-
-        if self.local_iter > 0:
-            self._update_ema(self.local_iter)
-            # assert not _params_equal(self.get_ema_model(), self.get_model())
-            # assert self.get_ema_model().training
-        if self.mic is not None:
-            self.mic.update_weights(self.get_model(), self.local_iter)
         
+        if not self.source_only2:
+            if self.local_iter == 0:
+                self._init_ema_weights()
+                # assert _params_equal(self.get_ema_model(), self.get_model())
+
+            if self.local_iter > 0:
+                self._update_ema(self.local_iter)
+                # assert not _params_equal(self.get_ema_model(), self.get_model())
+                # assert self.get_ema_model().training
+            if self.mic is not None:
+                self.mic.update_weights(self.get_model(), self.local_iter)
+            
         self.update_debug_state()
         seg_debug = {}
         means, stds = get_mean_std(img_metas, dev)
 
         # Train on source images
-        clean_losses = self.model(img, img_metas, gt_semantic_seg, return_feat=True)
-        src_feat = clean_losses.pop('features')
-        seg_debug['Source'] = self.get_model().debug_output
-        clean_loss, clean_log_vars = self._parse_losses(clean_losses)
-        log_vars.update(clean_log_vars)
+        # def forward(self, data, get_sup_loss = False, gt = None, criterion = None):
+        
+        img = img.view(B, 2, 3, H, W).transpose(0, 1)
+        _, clean_loss = self.model(img, get_sup_loss=True, gt=gt_semantic_seg.squeeze(1))
+        # src_feat = clean_losses.pop('features')
+        # seg_debug['Source'] = self.get_model().debug_output
+        # clean_loss, clean_log_vars = self._parse_losses(clean_losses)
+        # log_vars.update(clean_log_vars)
+        # breakpoint()
+        log_vars["Multimodal Linfus Loss"] = clean_loss.item()
         clean_loss.backward(retain_graph=self.enable_fdist)
+        # breakpoint()
+        # print("norm 1", (self.model.module.backbone.norm4.ln_0.weight != self.model.module.backbone.norm4.ln_1.weight).sum())
+        # print("norm 2", (self.model.module.backbone.norm3.ln_0.weight != self.model.module.backbone.norm3.ln_1.weight).sum())
+        # print("norm 3", (self.model.module.backbone.norm2.ln_0.weight != self.model.module.backbone.norm2.ln_1.weight).sum())
+        # print("norm 4", (self.model.module.backbone.norm1.ln_0.weight != self.model.module.backbone.norm1.ln_1.weight).sum())
+        # if self.print_grad_magnitude:
+        mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
+
         if self.source_only2:
-            del src_feat, clean_loss
+            del clean_loss
             del seg_debug
             return log_vars
 
-        if self.print_grad_magnitude:
-            mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
+
 
         
         # if self.enable_fdist:
