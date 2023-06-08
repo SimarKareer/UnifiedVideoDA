@@ -533,14 +533,16 @@ class DACS(UDADecorator):
         seg_grads = []
         zero_grads = 0
         non_zero_grads = 0
-        for p in params:
+        for name, p in self.model.named_parameters():
             if p.grad is not None:
                 seg_grads.append(p.grad.detach().clone())
-                if torch.sum(p.grad) == 0:
+                if torch.sum(torch.abs(p.grad)) == 0:
                     zero_grads += 1
-                    # print("ZERO GRAD ON", p)
+                    # print("ZERO GRAD ON", name)
                 else:
                     non_zero_grads += 1
+            else:
+                print("NONE GRAD ON: ", name)
         
         print(f"Zero Grads: {zero_grads}, Non Zero Grads: {non_zero_grads}")
         # seg_grads = [
@@ -562,6 +564,7 @@ class DACS(UDADecorator):
         return feat_loss
 
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
+        breakpoint()
         log_vars = {}
         batch_size = img.shape[0]
         dev = img.device
