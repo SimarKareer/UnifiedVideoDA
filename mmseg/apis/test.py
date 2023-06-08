@@ -421,8 +421,8 @@ def multi_gpu_test(model,
                     os.makedirs(directory)
                 plt.savefig(out_file, dpi=300)
             
-            if it % 10 == 0:
-                dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
+            # if it % 10 == 0:
+            #     dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
 
 
         results.extend(eval_vals)
