@@ -564,7 +564,6 @@ class DACS(UDADecorator):
         return feat_loss
 
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
-        breakpoint()
         log_vars = {}
         batch_size = img.shape[0]
         dev = img.device
@@ -613,7 +612,13 @@ class DACS(UDADecorator):
         # def forward(self, data, get_sup_loss = False, gt = None, criterion = None):
         
         img = img.view(B, 2, 3, H, W).transpose(0, 1)
-        _, clean_loss = self.model(img, get_sup_loss=True, gt=gt_semantic_seg.squeeze(1))
+        img = torch.ones_like(img).to(img.device)
+        img = [torch.ones(1, 3, 1024, 1024).to(img.device) for d in range(2)]
+        gt_semantic_seg = torch.ones_like(gt_semantic_seg).to(gt_semantic_seg.device)
+        print("DEBUG SUM", self.model.module.decoder.linear_c4.proj.weight.sum())
+        pred_sup, clean_loss = self.model(img, get_sup_loss=True, gt=gt_semantic_seg.squeeze(1))
+        print("PRED", pred_sup[0][0][0][0])
+        print("LOSS", clean_loss)
         # src_feat = clean_losses.pop('features')
         # seg_debug['Source'] = self.get_model().debug_output
         # clean_loss, clean_log_vars = self._parse_losses(clean_losses)
@@ -627,8 +632,8 @@ class DACS(UDADecorator):
         # print("norm 3", (self.model.module.backbone.norm2.ln_0.weight != self.model.module.backbone.norm2.ln_1.weight).sum())
         # print("norm 4", (self.model.module.backbone.norm1.ln_0.weight != self.model.module.backbone.norm1.ln_1.weight).sum())
         # if self.print_grad_magnitude:
-        mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
-
+        # mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
+        # breakpoint()
         if self.source_only2:
             del clean_loss
             del seg_debug

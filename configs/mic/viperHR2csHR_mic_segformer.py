@@ -21,7 +21,7 @@ _base_ = [
 # resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
 # resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
-seed = 2  # seed with median performance
+seed = 0  # seed with median performance
 # HRDA Configuration
 model = dict(
     decode_head=dict(
