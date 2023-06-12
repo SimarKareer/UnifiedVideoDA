@@ -564,7 +564,6 @@ class DACS(UDADecorator):
         return feat_loss
 
     def forward_train_multimodal(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
-        breakpoint()
         log_vars = {}
         batch_size = img.shape[0]
         dev = img.device
@@ -613,6 +612,10 @@ class DACS(UDADecorator):
         # def forward(self, data, get_sup_loss = False, gt = None, criterion = None):
         
         img = img.view(B, 2, 3, H, W).transpose(0, 1)
+        for module in self.model.modules():
+            if isinstance(module, torch.nn.BatchNorm2d):
+                # module.eval()
+                module.training = False
         _, clean_loss = self.model(img, get_sup_loss=True, gt=gt_semantic_seg.squeeze(1))
         # src_feat = clean_losses.pop('features')
         # seg_debug['Source'] = self.get_model().debug_output
@@ -627,7 +630,7 @@ class DACS(UDADecorator):
         # print("norm 3", (self.model.module.backbone.norm2.ln_0.weight != self.model.module.backbone.norm2.ln_1.weight).sum())
         # print("norm 4", (self.model.module.backbone.norm1.ln_0.weight != self.model.module.backbone.norm1.ln_1.weight).sum())
         # if self.print_grad_magnitude:
-        mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
+        # mmcv.print_log(f'Seg. Grad.: {self.get_grad_magnitude()}', 'mmseg')
 
         if self.source_only2:
             del clean_loss
