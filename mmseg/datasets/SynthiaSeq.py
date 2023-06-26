@@ -16,7 +16,7 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
     """Synthia Seq dataset with options for loading flow and neightboring frames.
     """
 
-    def __init__(self, split, img_suffix='.png', seg_map_suffix='_labelTrainIds_updated.png', frame_offset=1, flow_dir=None, **kwargs):
+    def __init__(self, split, img_suffix='.png', seg_map_suffix='_labelTrainIds_updated.png', frame_offset=1, flow_dir=None, data_type="rgb", **kwargs):
         SynthiaDataset.__init__(
             self, #must explicitly pass self
             split=split,
@@ -28,13 +28,13 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
         
         self.flow_dir = flow_dir
         self.fut_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=-1)    #forward flow
-        # self.fut_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=1)   #backward flow
         self.img_infos = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
         self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
+
+        self.data_type = data_type
 
 
         self.unpack_list = "train" in split
 
 
-        self.palette_to_id = [(k, i) for i, k in enumerate(self.PALETTE)]
 

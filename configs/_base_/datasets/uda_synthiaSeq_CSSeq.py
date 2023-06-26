@@ -1,16 +1,25 @@
 # dataset settings
+FRAME_OFFSET = -1
 dataset_type = 'SynthiaSeqDataset'
 synthia_data_root = '/srv/share4/datasets/SynthiaSeq/SYNTHIA-SEQS-04-DAWN'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-cs_train_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/train'
 
 synthia_train_flow_dir = '/srv/share4/datasets/SynthiaSeq_Flow/frame_dist_1/forward/train/RGB/Stereo_Left/Omni_F'
-cs_val_flow_dir = '/srv/share4/datasets/cityscapes-seq_Flow/flow/forward/val'
+
+#backward flow 
+cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
+cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
+
+#forward flow
+cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
+cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
 crop_size = (1024, 1024)
+ignore_index = [5, 3, 16, 12, 201, 255] #need to edit
+
 
 synthia_train_pipeline = {
     "im_load_pipeline": [
@@ -21,10 +30,10 @@ synthia_train_pipeline = {
         dict(type='LoadImageFromFile'),
     ],
     "load_flow_pipeline": [
-        dict(type='LoadFlowFromFileStub'),
+        dict(type='LoadFlowFromFile'),
     ],
     "shared_pipeline": [
-        dict(type='Resize', img_scale=(2560, 1520)), 
+        dict(type='Resize', img_scale=(2560, 1520)),
         dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
         dict(type='RandomFlip', prob=0.5),
     ],
@@ -43,18 +52,6 @@ synthia_train_pipeline = {
     ]
 }
 
-# cityscapes_train_pipeline = [
-#     dict(type='LoadImageFromFile'),
-#     dict(type='LoadAnnotations'),
-#     dict(type='Resize', img_scale=(2048, 1024)),
-#     dict(type='RandomCrop', crop_size=crop_size),
-#     dict(type='RandomFlip', prob=0.5),
-#     # dict(type='PhotoMetricDistortion'),  # is applied later in dacs.py
-#     dict(type='Normalize', **img_norm_cfg),
-#     dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
-#     dict(type='DefaultFormatBundle'),
-#     dict(type='Collect', keys=['img', 'gt_semantic_seg']),
-# ]
 
 cityscapes_train_pipeline = {
     "im_load_pipeline": [
@@ -87,24 +84,6 @@ cityscapes_train_pipeline = {
     ]
 }
 
-# test_pipeline = [
-#     dict(type='LoadImageFromFile'),
-#     dict(
-#         type='MultiScaleFlipAug',
-#         img_scale=(2048, 1024),
-#         # MultiScaleFlipAug is disabled by not providing img_ratios and
-#         # setting flip=False
-#         # img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-#         flip=False,
-#         transforms=[
-#             dict(type='Resize', keep_ratio=True),
-#             dict(type='RandomFlip'),
-#             dict(type='Normalize', **img_norm_cfg),
-#             dict(type='ImageToTensor', keys=['img']),
-#             dict(type='Collect', keys=['img']),
-#         ])
-# ]
-
 test_pipeline = {
     "im_load_pipeline": [
         dict(type='LoadImageFromFile'),
@@ -136,10 +115,7 @@ test_pipeline = {
     ]
 }
 
-
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=4,
     train=dict(
         type='UDADataset',
         source=dict(
@@ -159,8 +135,9 @@ data = dict(
             ann_dir='gtFine/train',
             split='splits/train.txt',
             pipeline=cityscapes_train_pipeline,
-            frame_offset=1,
+            frame_offset=FRAME_OFFSET,
             flow_dir=cs_train_flow_dir,
+            ignore_index=ignore_index
         )
     ),
     val=dict(
@@ -170,8 +147,9 @@ data = dict(
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
-        frame_offset=1,
-        flow_dir=cs_val_flow_dir
+        frame_offset=FRAME_OFFSET,
+        flow_dir=cs_val_flow_dir,
+        ignore_index=ignore_index
     ),
     test=dict(
         type='CityscapesSeqDataset',
@@ -180,7 +158,8 @@ data = dict(
         ann_dir='gtFine/val',
         split='splits/val.txt',
         pipeline=test_pipeline,
-        frame_offset=1,
-        flow_dir=cs_val_flow_dir
+        frame_offset=FRAME_OFFSET,
+        flow_dir=cs_val_flow_dir,
+        ignore_index=ignore_index
     )
 )
