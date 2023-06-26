@@ -98,6 +98,8 @@ def parse_args(args):
     parser.add_argument('--oracle-mask-noise-percent', type=float, default=0.0)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
+    parser.add_argument('--TPS-warp-pl-confidence', type=bool, default=False)
+    parser.add_argument('--TPS-warp-pl-confidence-thresh', type=float, default=0.0)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
 
@@ -312,6 +314,10 @@ def main(args):
 
     if args.exclusive_warp_cutmix:
         cfg.uda.exclusive_warp_cutmix = True
+
+    if args.TPS_warp_pl_confidence:
+        cfg.uda.TPS_warp_pl_confidence = True
+        cfg.uda.TPS_warp_pl_confidence_thresh = args.TPS_warp_pl_confidence_thresh
 
     if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin
