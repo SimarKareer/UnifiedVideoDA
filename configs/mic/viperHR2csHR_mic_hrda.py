@@ -122,9 +122,9 @@ optimizer_config = None
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
-runner = dict(type='IterBasedRunner', max_iters=15000)
+runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=3000, max_keep_ckpts=2)
+checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=3000, eval_settings={
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
     "sub_metrics": ["mask_count"],

@@ -928,7 +928,7 @@ class DACS(UDADecorator):
                     subplotimg(axs[1][6], pseudo_label_warped[0], 'Original PL Warped', cmap="cityscapes")
 
                 if self.consis_filter_rare_class:
-                    pseudo_label_warped = rare_class_or_filter(pseudo_label, pseudo_label_warped)
+                    pseudo_label_warped = rare_class_or_filter(pseudo_label, pseudo_label_warped, rare_common_compare=True)
                     pseudo_weight_warped[pseudo_label_warped == 255] = 0
 
                 if self.oracle_mask:
