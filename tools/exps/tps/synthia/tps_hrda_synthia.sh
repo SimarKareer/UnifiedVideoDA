@@ -21,5 +21,4 @@ cd /coc/scratch/vvijaykumar6/mmseg
 set -x
 
 #change begin to 1500
-srun -u python -u ./tools/train.py configs/mic/synthiaSeqHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1 --l-mix-lambda=0 --l-warp-begin=0 --bottom-pl-fill True --no-masking True --TPS-warp-pl-confidence True --TPS-warp-pl-confidence-thresh 0.0 --lr 6e-5 --total-iters=40000 --seed 604 --deterministic --work-dir="./work_dirs/synthia_cs/tps_exp/$1$T" --nowandb True
-    #    --wandbid $1$T
+srun -u python -u ./tools/train.py configs/mic/synthiaSeqHR2csHR_mic_hrda.py --launcher="slurm" --l-warp-lambda=1 --l-mix-lambda=0 --l-warp-begin=1500 --bottom-pl-fill True --no-masking True --TPS-warp-pl-confidence True --TPS-warp-pl-confidence-thresh 0.0 --lr 6e-5 --total-iters=40000 --seed 2 --deterministic --work-dir="./work_dirs/synthia_cs/tps_exp/$1$T" --wandbid $1$T

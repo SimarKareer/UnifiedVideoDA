@@ -1,5 +1,5 @@
 # dataset settings
-FRAME_OFFSET = -1
+FRAME_OFFSET = 1
 dataset_type = 'SynthiaSeqDataset'
 synthia_data_root = '/srv/share4/datasets/SynthiaSeq/SYNTHIA-SEQS-04-DAWN'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
@@ -7,8 +7,8 @@ cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
 synthia_train_flow_dir = '/srv/share4/datasets/SynthiaSeq_Flow/frame_dist_1/forward/train/RGB/Stereo_Left/Omni_F'
 
 #backward flow 
-cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
-cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
+# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
+# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
 
 #forward flow
 cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
@@ -18,7 +18,7 @@ img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
 crop_size = (1024, 1024)
-ignore_index = [5, 3, 16, 12, 201, 255] #need to edit
+ignore_index = [3, 4, 9, 14, 15, 16, 17, 18, 201, 255] 
 
 
 synthia_train_pipeline = {
