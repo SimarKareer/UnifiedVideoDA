@@ -6,7 +6,7 @@
 _base_ = [
     '../_base_/default_runtime.py',
     # DAFormer Network Architecture
-    '../_base_/models/daformer_sepaspp_mitb5.py',
+    '../_base_/models/deeplabv2red_r50-d8.py',
     # GTA->Cityscapes High-Resolution Data Loading
     '../_base_/datasets/uda_viper_CSSeq.py',
     # DAFormer Self-Training
@@ -23,35 +23,27 @@ _base_ = [
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
-model = dict(
-    type='HRDAEncoderDecoder',
-
+model=dict(
+    pretrained='open-mmlab://resnet101_v1c',
+    backbone=dict(
+        depth=101),
     decode_head=dict(
+        single_scale_head='DLV2Head',
         type='HRDAHead',
-        # Use the DAFormer decoder for each scale.
-        single_scale_head='DAFormerHead',
-        # Learn a scale attention for each class channel of the prediction.
         attention_classwise=True,
-        # Set the detail loss weight $\lambda_d=0.1$.
         hr_loss_weight=0.1),
-    # Use the full resolution for the detail crop and half the resolution for
-    # the context crop.
+    type='HRDAEncoderDecoder',
     scales=[1, 0.5],
-    # Use a relative crop size of 0.5 (=512/1024) for the detail crop.
     hr_crop_size=(512, 512),
-    # Use LR features for the Feature Distance as in the original DAFormer.
     feature_scale=0.5,
-    # Make the crop coordinates divisible by 8 (output stride = 4,
-    # downscale factor = 2) to ensure alignment during fusion.
     crop_coord_divisible=8,
-    # Use overlapping slide inference for detail crops for pseudo-labels.
     hr_slide_inference=True,
-    # Use overlapping slide inference for fused crops during test time.
     test_cfg=dict(
         mode='slide',
         batched_slide=True,
         stride=[512, 512],
         crop_size=[1024, 1024]))
+
 data = dict(
     train=dict(
         # Rare Class Sampling
@@ -89,9 +81,6 @@ uda = dict(
     l_warp_lambda=1.0,
     l_mix_lambda=0.0,
     consis_filter=False,
-    consis_confidence_filter=False,
-    consis_confidence_thresh=0,
-    consis_confidence_per_class_thresh=False,
     consis_filter_rare_class=False,
     pl_fill=False,
     bottom_pl_fill=False,
@@ -111,8 +100,6 @@ uda = dict(
     oracle_mask_add_noise=False,
     oracle_mask_remove_pix=False,
     oracle_mask_noise_percent=0.0,
-    TPS_warp_pl_confidence=False,
-    TPS_warp_pl_confidence_thresh=0.0,
 )
 # Optimizer Hyperparameters
 optimizer_config = None
@@ -129,16 +116,12 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-
 checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=8000, eval_settings={
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
-
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
-    "return_logits": True,
-    "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
