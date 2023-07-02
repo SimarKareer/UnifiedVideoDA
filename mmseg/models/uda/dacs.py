@@ -41,7 +41,7 @@ from mmseg.ops import resize
 from mmseg.utils.utils import downscale_label_ratio
 from mmseg.utils.custom_utils import three_channel_flow
 from mmseg.datasets.cityscapes import CityscapesDataset
-from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter, invNorm
+from tools.aggregate_flows.flow.my_utils import errorVizClasses, multiBarChart, backpropFlow, backpropFlowNoDup, visFlow, tensor_map, rare_class_or_filter, invNorm, CircularTensor
 import torchvision
 from torchvision.utils import save_image
 import torchvision.transforms as transforms
@@ -85,10 +85,15 @@ class DACS(UDADecorator):
         self.l_warp_lambda = cfg['l_warp_lambda']
         self.l_mix_lambda = cfg['l_mix_lambda']
         self.consis_filter = cfg['consis_filter']
+        self.consis_confidence_filter = cfg['consis_confidence_filter']
+        self.consis_confidence_thresh = cfg['consis_confidence_thresh']
+        self.consis_confidence_per_class_thresh = cfg['consis_confidence_per_class_thresh']
         self.consis_filter_rare_class = cfg["consis_filter_rare_class"]
         self.oracle_mask_add_noise = cfg['oracle_mask_add_noise']
         self.oracle_mask_remove_pix = cfg['oracle_mask_remove_pix']
         self.oracle_mask_noise_percent = cfg['oracle_mask_noise_percent']
+        self.TPS_warp_pl_confidence = cfg['TPS_warp_pl_confidence']
+        self.TPS_warp_pl_confidence_thresh = cfg['TPS_warp_pl_confidence_thresh']
 
         self.pl_fill = cfg['pl_fill']
         self.bottom_pl_fill = cfg['bottom_pl_fill']
@@ -139,6 +144,11 @@ class DACS(UDADecorator):
         else:
             self.relevant_classes_cutmix = list(CityscapesDataset.ALL_IDX)
             self.masked_classes_cutmix = []
+
+
+        self.per_class_confidence_thresh = None
+        if self.consis_confidence_per_class_thresh:
+            self.per_class_confidence_thresh = {i: CircularTensor(1000) for i in range(self.num_classes)}
 
         self.init_cml_debug_metrics()
         self.class_probs = {}
@@ -355,7 +365,7 @@ class DACS(UDADecorator):
         grid = (grid * 255).astype(np.uint8)
         cv2.imwrite(path, grid)
 
-    def get_pl(self, target_img, target_img_metas, seg_debug, seg_debug_key, valid_pseudo_mask):
+    def get_pl(self, target_img, target_img_metas, seg_debug, seg_debug_key, valid_pseudo_mask, return_logits=False):
         ema_logits = self.get_ema_model().generate_pseudo_label(
                 target_img, target_img_metas)
         
@@ -364,12 +374,16 @@ class DACS(UDADecorator):
 
         pseudo_label, pseudo_weight = self.get_pseudo_label_and_weight(
             ema_logits)
-        del ema_logits
 
         pseudo_weight = self.filter_valid_pseudo_region(
             pseudo_weight, valid_pseudo_mask)
-        
-        return pseudo_label, pseudo_weight
+
+        if return_logits:
+            ema_softmax = torch.softmax(ema_logits.detach(), dim=1)
+            return pseudo_label, pseudo_weight, ema_softmax
+        else:
+            del ema_logits
+            return pseudo_label, pseudo_weight
     
     def fast_iou(self, pred, label, custom_mask=None, return_raw=False):
         pl_warp_intersect, pl_warp_union, _, _, mask = intersect_and_union(
@@ -771,7 +785,7 @@ class DACS(UDADecorator):
         DEBUG = self.debug_mode
 
         if DEBUG:
-            rows, cols = 6, 7
+            rows, cols = 7, 7
             fig, axs = plt.subplots(
                 rows,
                 cols,
@@ -855,9 +869,14 @@ class DACS(UDADecorator):
                 if isinstance(m, DropPath):
                     m.training = False
             
-            pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+            if self.consis_confidence_filter or self.TPS_warp_pl_confidence:
+                pseudo_label, pseudo_weight, logits_curr = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, return_logits=True)
+                pseudo_label_fut, pseudo_weight_fut, logits_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, return_logits=True) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+            else:
+                pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask)
+                pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+            
             self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
-            pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
@@ -871,12 +890,20 @@ class DACS(UDADecorator):
                     pli = pseudo_label_fut[[i]].permute(1, 2, 0)
 
                     # So technically this was unnecessary bc the pseudo_weight is always just 1 number
-                    pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
+                    if self.consis_confidence_filter or self.TPS_warp_pl_confidence:
+                        pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0), logits_fut[[i]][0].permute(1,2,0)), dim=2)
+                    else:
+                        pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
                     warped_stack, mask = backpropFlow(flowi, pli_and_weight, return_mask=True, return_mask_count=False) #TODO, will need to stack pli with weights if we want warped weights
                     if DEBUG and i == 0:
                         masks.append(mask.cpu().numpy())
                         subplotimg(axs[3, 0], mask.repeat(3, 1, 1)*255, "Warping Mask")
                     pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
+
+                    if self.consis_confidence_filter or self.TPS_warp_pl_confidence:
+                        logits_warped_i = warped_stack[:, :, 2:]
+                        logits_warped_i = logits_warped_i.permute((2, 0, 1)).float()
+                    
                     pseudo_weight_warped_i = pseudo_weight_warped_i.float()
                     pseudo_weight_warped_i[~mask] = 0
                     pltki = pltki.permute((2, 0, 1)).long()
@@ -918,6 +945,114 @@ class DACS(UDADecorator):
                         pltki[0][pltki[0] != pseudo_label[i]] = 255
                         if i == 0 and DEBUG:
                             subplotimg(axs[3][5], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
+
+                    if self.TPS_warp_pl_confidence:
+                        # logits for predicted values
+                        max_logit_val_fut , max_logit_idx_fut = torch.max(logits_warped_i, dim=0)
+
+                        # only take the warped pixels which have a confidence > threshold
+                        pltki[0][max_logit_val_fut < self.TPS_warp_pl_confidence_thresh] = 255
+                        pseudo_weight_warped_i[max_logit_val_fut < self.TPS_warp_pl_confidence_thresh] = 0
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[6][3], pltki[0], "TPS tk confidence",  cmap="cityscapes")
+                        
+                    if self.consis_confidence_filter:
+                        logits_curr_i = logits_curr[[i]][0]                        
+                        pseudo_label_i = pseudo_label[i]
+
+
+                        #consis mask
+                        consis_mask = (pltki[0] == pseudo_label_i)
+
+                        # logits for predicted values
+
+                        max_logit_val_fut , max_logit_idx_fut = torch.max(logits_warped_i, dim=0)
+                        max_logit_val_curr ,max_logit_idx_curr = torch.max(logits_curr_i, dim=0)
+
+                        # confidence mask above threshold
+                        # print("Num pixles in PL consis", consis_mask.sum())
+
+                        if self.consis_confidence_per_class_thresh:
+                            # cummulative mask from all classes
+                            confidence_mask = None
+
+                            for i in range(self.num_classes):
+
+                                #get mask for predictions for the current class
+                                class_mask = (max_logit_idx_curr == i)
+
+                                # set to all False
+                                class_confidence_mask_i = torch.zeros(max_logit_val_curr.size(), dtype=torch.bool).to(dev)
+
+                                # if mean is not higher than self.consis_confidence_thresh, use that as default thresh
+                                thresh = max(self.per_class_confidence_thresh[i].get_mean(), self.consis_confidence_thresh)
+
+                                # print("Class,", i, ",thresh, ", thresh)
+                                # put true in appropriate places
+
+                                class_confidence_mask_i[class_mask] = (max_logit_val_curr[class_mask] > thresh)
+
+                                if confidence_mask is not None:
+                                    confidence_mask = confidence_mask | class_confidence_mask_i
+                                else:
+                                    confidence_mask = class_confidence_mask_i
+                        else:
+                            confidence_mask = (max_logit_val_curr > self.consis_confidence_thresh) 
+                        
+                        # print("Num pixles in PL confidence", confidence_mask.sum())
+
+                        #final mask
+                        consis_confidence_mask = (consis_mask & confidence_mask)
+
+                        # print("Num pixels in PL AFTER BOTH MASK:", consis_confidence_mask.sum())
+
+                        if i == 0 and DEBUG:
+                            consistent = pltki[0].clone().detach()
+                            consistent[~consis_mask] = 255
+
+                            confidence = pltki[0].clone().detach()
+                            confidence[~confidence_mask] = 255
+
+                            subplotimg(axs[6][0], consistent, 'Consis Filter', cmap="cityscapes")
+                            subplotimg(axs[6][1], confidence, 'Confidence Filter', cmap="cityscapes")
+                        # 255 or zero out all pixels not in mask
+                    
+                        pltki[0][~consis_confidence_mask]= 255
+                        pseudo_weight_warped_i[~consis_confidence_mask] = 0
+
+                        
+                        if i == 0 and DEBUG:
+                            subplotimg(axs[6][2], pltki[0], 'Consis Confidence Filter', cmap="cityscapes")
+
+
+
+                        # populate Circular Tensors
+
+                        if self.consis_confidence_per_class_thresh:
+
+                            # update buffers per class
+                            for i in range(self.num_classes):
+                                
+                                class_mask = (pltki[0] == i)
+
+                                num_preds_class_i = class_mask.sum().item()
+
+                                # we will choose 50 pixels from each class to get logit values from
+                                random_sample_num = min(num_preds_class_i, 50)
+
+                                #if no samples in PL
+                                if random_sample_num == 0:
+                                    continue
+
+                                true_indices = torch.where(class_mask)
+
+                                change_indices = np.random.choice(len(true_indices[0]), size=random_sample_num, replace=False)
+
+                                samples = max_logit_val_curr[true_indices[0][change_indices], true_indices[1][change_indices]]
+                                
+                                # print("Before", self.per_class_confidence_thresh[i].get_mean())
+                                self.per_class_confidence_thresh[i].append(samples)
+                                # print("After", self.per_class_confidence_thresh[i].get_mean())
 
                     pseudo_weight_warped.append(pseudo_weight_warped_i)
                     pseudo_label_warped.append(pltki[0])

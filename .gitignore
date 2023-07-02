@@ -193,7 +193,8 @@ tools/exps/mic_viper/mic_viper_v3a2.sh
 tools/exps/mic_viper/mic_viper_v3overcap.sh
 tools/exps/lwarp2
 tools/exps/lwarp
-*_4.sh
-*_6.sh
-*_1.sh
-*_*.sh
+*4.sh
+*6.sh
+*1.sh
+*5.sh
+# *_*.sh

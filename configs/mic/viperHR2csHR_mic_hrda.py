@@ -89,6 +89,9 @@ uda = dict(
     l_warp_lambda=1.0,
     l_mix_lambda=0.0,
     consis_filter=False,
+    consis_confidence_filter=False,
+    consis_confidence_thresh=0,
+    consis_confidence_per_class_thresh=False,
     consis_filter_rare_class=False,
     pl_fill=False,
     bottom_pl_fill=False,
@@ -108,6 +111,8 @@ uda = dict(
     oracle_mask_add_noise=False,
     oracle_mask_remove_pix=False,
     oracle_mask_noise_percent=0.0,
+    TPS_warp_pl_confidence=False,
+    TPS_warp_pl_confidence_thresh=0.0,
 )
 # Optimizer Hyperparameters
 optimizer_config = None
@@ -124,12 +129,16 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
+
 checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=8000, eval_settings={
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
+
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
+    "return_logits": True,
+    "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'

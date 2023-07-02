@@ -538,3 +538,49 @@ invNorm = transforms.Compose([
     transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
     transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
 ])
+
+class CircularTensor:
+    def __init__(self, max_length):
+        self.max_length = max_length
+        self.buffer = torch.zeros(max_length, dtype=torch.double)
+        self.idx = 0
+        self.full = False
+    def append(self, data):
+        if data.ndim > 1:
+            raise Exception("Passed in data does not have ndim = 1")
+        
+        if data.size()[0] > self.max_length:
+            raise Exception("Data length is greater than max_length")
+        
+        # now dealign with adding to list
+        
+        idx_start = self.idx % self.max_length
+        idx_end = (self.idx + data.size()[0]) % self.max_length
+
+        if idx_start >= idx_end:
+            if not self.full:
+                self.full = True
+
+            len1 = self.max_length - idx_start
+            self.buffer[idx_start: self.max_length] = data[:len1]
+            self.buffer[:idx_end] = data[len1:]
+        else:
+            self.buffer[idx_start: idx_end] = data
+        
+        self.idx = idx_end
+    
+    def get_mean(self):
+        
+        if self.full:
+            return torch.mean(self.buffer)
+        else:
+            if self.idx == 0:
+                return 0
+            return torch.mean(self.buffer[:self.idx])
+    
+    def get_buffer(self):
+        return self.buffer
+    
+
+    
+

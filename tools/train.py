@@ -86,6 +86,9 @@ def parse_args(args):
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
+    parser.add_argument('--consis-confidence-filter', type=bool, default=False)
+    parser.add_argument('--consis-confidence-thresh', type=float, default=None)
+    parser.add_argument('--consis-confidence-per-class-thresh', type=bool, default=False)
     parser.add_argument('--consis-filter-rare-class', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--bottom-pl-fill', type=bool, default=False)
@@ -95,6 +98,8 @@ def parse_args(args):
     parser.add_argument('--oracle-mask-noise-percent', type=float, default=0.0)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
+    parser.add_argument('--TPS-warp-pl-confidence', type=bool, default=False)
+    parser.add_argument('--TPS-warp-pl-confidence-thresh', type=float, default=0.0)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
 
@@ -270,6 +275,16 @@ def main(args):
     if args.consis_filter:
         cfg.uda.consis_filter = True
     
+    if args.consis_confidence_filter:
+        cfg.uda.consis_confidence_filter = True
+    
+    if args.consis_confidence_thresh is not None:
+        cfg.uda.consis_confidence_thresh = args.consis_confidence_thresh
+        cfg.evaluation.eval_settings.consis_confidence_thresh = args.consis_confidence_thresh
+    
+    if args.consis_confidence_per_class_thresh is not None:
+        cfg.uda.consis_confidence_per_class_thresh = args.consis_confidence_per_class_thresh    
+    
     if args.consis_filter_rare_class:
         cfg.uda.consis_filter_rare_class = True
     
@@ -299,6 +314,10 @@ def main(args):
 
     if args.exclusive_warp_cutmix:
         cfg.uda.exclusive_warp_cutmix = True
+
+    if args.TPS_warp_pl_confidence:
+        cfg.uda.TPS_warp_pl_confidence = True
+        cfg.uda.TPS_warp_pl_confidence_thresh = args.TPS_warp_pl_confidence_thresh
 
     if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin
@@ -350,6 +369,7 @@ def main(args):
     #     if not (len(cfg.evaluation.eval_settings.metrics) == 1 and cfg.evaluation.eval_settings.metrics[0] == "mIoU"):
     #         raise NotImplementedError("Only mIoU is valid for multimodal")
 
+    cfg.evaluation.eval_settings.work_dir = cfg.work_dir
     print("FINISHED INIT DIST")
 
     # create work_dir
