@@ -113,6 +113,7 @@ uda = dict(
     oracle_mask_noise_percent=0.0,
     TPS_warp_pl_confidence=False,
     TPS_warp_pl_confidence_thresh=0.0,
+    max_confidence=False
 )
 # Optimizer Hyperparameters
 optimizer_config = None

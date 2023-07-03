@@ -100,6 +100,7 @@ def parse_args(args):
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
     parser.add_argument('--TPS-warp-pl-confidence', type=bool, default=False)
     parser.add_argument('--TPS-warp-pl-confidence-thresh', type=float, default=0.0)
+    parser.add_argument('--max-confidence', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
 
@@ -357,6 +358,9 @@ def main(args):
     
     if args.modality_dropout_weights is not None:
         cfg.uda.modality_dropout_weights = args.modality_dropout_weights
+    
+    if args.max_confidence:
+        cfg.uda.max_confidence = args.max_confidence
     
     cfg.uda.ignore_index = cfg.ignore_index
     

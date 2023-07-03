@@ -81,6 +81,9 @@ uda = dict(
     l_warp_lambda=1.0,
     l_mix_lambda=0.0,
     consis_filter=False,
+    consis_confidence_filter=False,
+    consis_confidence_thresh=0,
+    consis_confidence_per_class_thresh=False,
     consis_filter_rare_class=False,
     pl_fill=False,
     bottom_pl_fill=False,
@@ -100,6 +103,9 @@ uda = dict(
     oracle_mask_add_noise=False,
     oracle_mask_remove_pix=False,
     oracle_mask_noise_percent=0.0,
+    TPS_warp_pl_confidence=False,
+    TPS_warp_pl_confidence_thresh=0.0,
+    max_confidence=False
 )
 # Optimizer Hyperparameters
 optimizer_config = None

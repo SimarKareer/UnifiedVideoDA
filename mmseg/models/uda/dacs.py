@@ -94,6 +94,7 @@ class DACS(UDADecorator):
         self.oracle_mask_noise_percent = cfg['oracle_mask_noise_percent']
         self.TPS_warp_pl_confidence = cfg['TPS_warp_pl_confidence']
         self.TPS_warp_pl_confidence_thresh = cfg['TPS_warp_pl_confidence_thresh']
+        self.max_confidence = cfg["max_confidence"]
 
         self.pl_fill = cfg['pl_fill']
         self.bottom_pl_fill = cfg['bottom_pl_fill']
@@ -860,6 +861,7 @@ class DACS(UDADecorator):
             del feat_loss
 
         pseudo_label, pseudo_weight = None, None
+        need_logits = self.consis_confidence_filter or self.TPS_warp_pl_confidence or self.max_confidence
         if not self.source_only:
             target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
 
@@ -869,7 +871,7 @@ class DACS(UDADecorator):
                 if isinstance(m, DropPath):
                     m.training = False
             
-            if self.consis_confidence_filter or self.TPS_warp_pl_confidence:
+            if need_logits:
                 pseudo_label, pseudo_weight, logits_curr = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, return_logits=True)
                 pseudo_label_fut, pseudo_weight_fut, logits_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, return_logits=True) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             else:
@@ -890,7 +892,7 @@ class DACS(UDADecorator):
                     pli = pseudo_label_fut[[i]].permute(1, 2, 0)
 
                     # So technically this was unnecessary bc the pseudo_weight is always just 1 number
-                    if self.consis_confidence_filter or self.TPS_warp_pl_confidence:
+                    if need_logits:
                         pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0), logits_fut[[i]][0].permute(1,2,0)), dim=2)
                     else:
                         pli_and_weight = torch.cat((pli, pseudo_weight_fut[[i]].permute(1, 2, 0)), dim=2)
@@ -900,7 +902,7 @@ class DACS(UDADecorator):
                         subplotimg(axs[3, 0], mask.repeat(3, 1, 1)*255, "Warping Mask")
                     pltki, pseudo_weight_warped_i = warped_stack[:, :, [0]], warped_stack[:, :, 1]
 
-                    if self.consis_confidence_filter or self.TPS_warp_pl_confidence:
+                    if need_logits:
                         logits_warped_i = warped_stack[:, :, 2:]
                         logits_warped_i = logits_warped_i.permute((2, 0, 1)).float()
                     
@@ -945,6 +947,13 @@ class DACS(UDADecorator):
                         pltki[0][pltki[0] != pseudo_label[i]] = 255
                         if i == 0 and DEBUG:
                             subplotimg(axs[3][5], (pltki[0] != pseudo_label[i]).repeat(3, 1, 1) * 255, 'Consistency Map')
+
+                    if self.max_confidence:
+                        logits_curr_max_i = logits_curr.max(dim=1).values[i]
+                        logits_warped_max_i = logits_warped_i.max(dim=0).values
+                        curr_larger = (logits_curr_max_i > logits_warped_max_i) | (logits_warped_max_i == 255)
+                        pltki[0][curr_larger] = pseudo_label[i][curr_larger]
+                        pseudo_weight_warped_i[curr_larger] = pseudo_weight[i][curr_larger]
 
                     if self.TPS_warp_pl_confidence:
                         # logits for predicted values
