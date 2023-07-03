@@ -133,12 +133,11 @@ runner = dict(type='IterBasedRunner', max_iters=40000)
 
 checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=8000, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
-
+    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
-    "return_logits": True,
+    "return_logits": False,
     "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
