@@ -130,7 +130,7 @@ data = dict(
             ann_dir='train/cls',
             split='splits/train.txt',
             pipeline=gta_train_pipeline,
-            frame_offset=1,
+            frame_offset=FRAME_OFFSET,
             flow_dir=viper_train_flow_dir,
         ),
         target=dict(
