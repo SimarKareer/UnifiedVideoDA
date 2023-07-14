@@ -798,8 +798,18 @@ class DACS(UDADecorator):
                 2,
                 figsize=(8 * cols, 8 * rows),
             )
-            subplotimg(axs[0, 2], invNorm(img[0]), "Source IM 0")
-            subplotimg(axs[0, 3], invNorm(img[1]), "Source IM 1")
+
+            subplotimg(axs[0, 0], invNorm(img[0][:3]), "Source IM 0")
+            subplotimg(axs[0, 1], invNorm(img_extra["imtk"][0][:3]), "Source IM 1")
+            # subplotimg(axs[0, 1], invNorm(img[1][:3]), "Source IM 1")
+            subplotimg(axs[0, 2], invNorm(target_img[0][:3]), "Target IM 0")
+            subplotimg(axs[0, 3], invNorm(target_img_extra["imtk"][0][:3]), "Target IM 1")
+            # subplotimg(axs[0, 3], invNorm(target_img[1][:3]), "Target IM 1")
+
+            # subplotimg(axs[1, 0], img_extra["flowVis"][0], "Source flow 0")
+            # subplotimg(axs[1, 1], img_extra["flowVis"][1], "Source flow 1")
+            # subplotimg(axs[1, 2], target_img_extra["flowVis"][0], "Target flow 0")
+            # subplotimg(axs[1, 3], target_img_extra["flowVis"][1], "Target flow 1")
 
         # if self.local_iter % 5 == 0:
         #     for i in range(torch.cuda.device_count()):
