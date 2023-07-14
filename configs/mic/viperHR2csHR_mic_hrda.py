@@ -74,6 +74,7 @@ data = dict(
 )
 # MIC Parameters
 uda = dict(
+    video_discrim=False,
     # Apply masking to color-augmented target images
     mask_mode='separatetrgaug',
     # Use the same teacher alpha for MIC as for DAFormer

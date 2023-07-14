@@ -276,7 +276,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 align_corners=self.align_corners)
         return out
 
-    def _forward_train_features(self, img, masking_branch):
+    def _forward_train_features(self, img, masking_branch=None):
         mres_feats = []
         self.decode_head.debug_output = {}
         assert len(self.scales) <= 2, 'Only up to 2 scales are supported.'

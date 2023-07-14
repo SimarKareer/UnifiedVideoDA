@@ -104,6 +104,8 @@ def parse_args(args):
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
 
+    parser.add_argument("--adv-scale", type=float, default=None)
+
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
 
@@ -361,6 +363,18 @@ def main(args):
     
     if args.max_confidence:
         cfg.uda.max_confidence = args.max_confidence
+
+    if args.adv_scale:
+        #Adversarial losses
+        cfg.uda.type="DACSAdvseg"
+        cfg.uda.discriminator_type='LS'
+        cfg.uda.lr_D=1e-4
+        cfg.uda.lr_D_power=0.9
+        cfg.uda.lr_D_min=0
+        cfg.uda.lambda_adv_target=dict(main=0.001, aux=0.0002)
+        cfg.uda.source_loss_advseg=False
+        cfg.uda.adv_scale = args.adv_scale
+        cfg.uda.video_discrim = True
     
     cfg.uda.ignore_index = cfg.ignore_index
     
