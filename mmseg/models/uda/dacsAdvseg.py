@@ -76,6 +76,7 @@ class DACSAdvseg(DACS):
 
         # log_vars.pop('loss', None)  # remove the unnecessary 'loss'
         log_vars1.update(log_vars2)
+        log_vars1["Local Iteration"] = self.local_iter
         outputs = dict(
             log_vars=log_vars1, num_samples=len(data_batch['img_metas']))
         return outputs
@@ -203,7 +204,6 @@ class DACSAdvseg(DACS):
         d_trg_loss = self.adv_scale * d_trg_loss
         d_trg_loss.backward()
 
-        self.local_iter += 1
         log_vars["g_trg_loss"] = g_trg_loss.item()
         log_vars["d_src_loss"] = d_src_loss.item()
         log_vars["d_trg_loss"] = d_trg_loss.item()
