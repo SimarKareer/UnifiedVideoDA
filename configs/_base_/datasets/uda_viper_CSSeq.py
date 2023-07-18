@@ -108,6 +108,9 @@ test_pipeline = {
     "load_flow_pipeline": [
         dict(type='LoadFlowFromFile'),
     ],
+    "stub_flow_pipeline": [
+        dict(type='LoadFlowFromFileStub'),
+    ],
     "shared_pipeline": [
         dict(type='Resize', keep_ratio=True, img_scale=(2048, 1024)),
         # dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),

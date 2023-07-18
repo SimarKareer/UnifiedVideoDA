@@ -155,7 +155,7 @@ class SeqUtils():
                 for k in update_keys:
                     ims[i][k] = ims[self.zero_index][k]
                 ims[i]["gt_semantic_seg"] = torch.tensor([])
-                if self.ds == "cityscapes-seq":
+                if self.ds == "cityscapes-seq" and "valid_pseudo_mask" in ims[self.zero_index]: # during test time there is no valid pseudo mask so ignore then
                     ims[i]["valid_pseudo_mask"] = ims[self.zero_index]["valid_pseudo_mask"]
 
 
@@ -266,6 +266,14 @@ class SeqUtils():
         # img_metas["pad_shape"] = (1080, 1920, 3)
         return img_metas
 
+    def backwards_compat(self, data_out):
+        # put all the bindings that I had in dacs here.
+        data_out["img"] = data_out["img[0]"]
+        data_out["gt_semantic_seg"] = data_out["gt_semantic_seg[0]"]
+        data_out["flow"] = data_out["flow[0]"]
+        data_out["imtk"] = data_out["img[-1]"]
+        data_out["imtk_metas"] = data_out["img_metas"]
+
     def prepare_train_img(self, infos, idx, flow_infos=None):
         results = [dict(img_info=infos[i][idx], ann_info=self.get_ann_info(infos[i], idx)) for i in range(len(infos))]
         resultsFlow = [None if flow_infos[i] is None else dict(flow_info=flow_infos[i][idx]) for i in range(len(flow_infos))]
@@ -274,8 +282,6 @@ class SeqUtils():
             self.pre_pipeline(results[i])
         
         ims = [] #list of dicts where each dict has the im info associated with the frame_offset list in the config
-        # breakpoint()
-
         for i in range(len(results)):
             if self.load_gt[i]:
                 ims.append(self.pipeline["im_load_pipeline"](results[i]))
@@ -290,20 +296,19 @@ class SeqUtils():
             else:
                 flows.append(self.pipeline["stub_flow_pipeline"](self.ds))
 
+        # Shared Pipeline
         self.var_merge(ims, flows) # Puts the merged image on the base frame (zero index)
         imsAndFlows = self.pipeline["shared_pipeline"](ims[self.zero_index]) # a single dict where img is the merged image after transforms
         ims, flows = self.var_unmerge(ims, flows, imsAndFlows["img"]) # ims and flows are both lists of dicts
         self.update_shared_metas(ims)
     
-
+        # Correct flows for flip aug        
         if ims[self.zero_index]["flip"]:
             for i in range(len(ims)):
                 flows[i]["flow"][:, :, 0] = -flows[i]["flow"][:, :, 0]
 
-        # finalIms = [self.pipeline["im_pipeline"](ims[i]) for i in range(len(ims))] #add the rest of the image augs
-        # breakpoint()
+        # Rest of image and flow pipelines
         finalIms = []
-
         for i in range(len(ims)):
             finalIms.append(self.pipeline["im_pipeline"](ims[i]))
         for i in range(len(flows)): #rename to img
@@ -312,9 +317,9 @@ class SeqUtils():
         finalFlows = [self.pipeline["flow_pipeline"](flows[i]) if resultsFlow[i] else dict(img=torch.tensor([])) for i in range(len(flows))] #add the rest of the flow augs
         
 
-        # Keep testing after here
+        # Remove list dim, fix gt_sem_seg, and add flow to data_out
         data_out = {}
-        for k in ["img", "gt_semantic_seg", "valid_pseudo_mask"] if self.ds == "cityscapes-seq" else ["img", "gt_semantic_seg"]:
+        for k in ["img", "gt_semantic_seg", "valid_pseudo_mask"] if "valid_pseudo_mask" in finalIms[self.zero_index] else ["img", "gt_semantic_seg"]:
             for i, frame_name in enumerate(self.frame_offset):
                 if isinstance(finalIms[i][k], np.ndarray):
                     finalIms[i][k] = torch.from_numpy(finalIms[i][k])
@@ -328,15 +333,19 @@ class SeqUtils():
             data_out[f"flow[{frame_name}]"] = finalFlows[i]["img"]
         
 
-        # for i in self.frame_offset:
         data_out["img_metas"] = finalIms[self.zero_index]["img_metas"]
-        # data_out[f"img_metas[{i}]"] = self.get_metas(finalIms[i]) #DataContainer(self.get_metas(finalIms[i]), cpu_only=True)
 
-        for k, v in data_out.items():
-            if isinstance(v, np.ndarray):
-                data_out[k] = torch.from_numpy(v)
+        # List dims / data containers
+        for k, _ in data_out.items():
+            if isinstance(data_out[k], DataContainer) and "metas" not in k:
+                data_out[k] = data_out[k].data
+            if isinstance(data_out[k], np.ndarray):
+                data_out[k] = torch.from_numpy(data_out[k])
         
-
+        # for BW compaibility we can add all the original key names back in data_out
+        self.backwards_compat(data_out)
+        
+        # Put stuff in lists if it's eval time.
         if not self.unpack_list:
             for k, v in data_out.items():
                 if isinstance(v, torch.Tensor):

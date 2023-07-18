@@ -423,9 +423,9 @@ class CustomDataset(Dataset):
 
         if future_preds is not None:
             future_pred = future_preds[0][:, :, None]
-            future_seg_map = data["imtk_gt_semantic_seg"][0]
-            if future_seg_map.shape[0] == 1 and len(future_seg_map.shape) == 4:
-                future_seg_map = future_seg_map.squeeze(0).to(future_pred.device)
+            # future_seg_map = data["imtk_gt_semantic_seg"][0]
+            # if future_seg_map.shape[0] == 1 and len(future_seg_map.shape) == 4:
+            #     future_seg_map = future_seg_map.squeeze(0).to(future_pred.device)
     
         curr_seg_map = data["gt_semantic_seg"][0]
         
