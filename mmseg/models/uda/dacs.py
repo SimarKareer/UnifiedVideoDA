@@ -772,6 +772,28 @@ class DACS(UDADecorator):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        # rename img_extras for this test
+        img_extra["imtk"] = img_extra.pop("img[-1]")
+        img_extra["imtk_gt_semantic_seg"] = img_extra.pop("gt_semantic_seg[-1]")
+        img_extra["imtk_flow"] = img_extra.pop("flow[-1]")
+        # img_extra["imtk_metas"] = img_extra.pop("img_metas[-1]")
+        img_extra["img"] = img_extra.pop("img[0]")
+        img_extra["gt_semantic_seg"] = img_extra.pop("gt_semantic_seg[0]")
+        img_extra["flow"] = img_extra.pop("flow[0]")
+        img_extra["img_metas"] = img_extra.pop("img_metas")
+
+        target_img_extra["imtk"] = target_img_extra.pop("img[-1]")
+        target_img_extra["imtk_gt_semantic_seg"] = target_img_extra.pop("gt_semantic_seg[-1]")
+        target_img_extra["imtk_flow"] = target_img_extra.pop("flow[-1]")
+        # target_img_extra["imtk_metas"] = target_img_extra.pop("img_metas[-1]")
+        target_img_extra["img"] = target_img_extra.pop("img[0]")
+        target_img_extra["gt_semantic_seg"] = target_img_extra.pop("gt_semantic_seg[0]")
+        target_img_extra["flow"] = target_img_extra.pop("flow[0]")
+        target_img_extra["img_metas"] = target_img_extra.pop("img_metas")
+        target_img_extra["valid_pseudo_mask"] = target_img_extra.pop("valid_pseudo_mask[0]")
+        # breakpoint()
+
+
         if self.multimodal:
             return self.forward_train_multimodal(img, img_metas, img_extra, target_img, target_img_metas, target_img_extra)
 
@@ -873,7 +895,7 @@ class DACS(UDADecorator):
         pseudo_label, pseudo_weight = None, None
         need_logits = self.consis_confidence_filter or self.TPS_warp_pl_confidence or self.max_confidence
         if not self.source_only:
-            target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["imtk_metas"]
+            target_img_fut, target_img_fut_metas = target_img_extra["imtk"], target_img_extra["img_metas"]
 
             for m in self.get_ema_model().modules():
                 if isinstance(m, _DropoutNd):

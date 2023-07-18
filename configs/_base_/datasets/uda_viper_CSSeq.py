@@ -1,10 +1,13 @@
-# dataset settings
-FRAME_OFFSET = 1
+# dataset settings, for frame offset select the frames relative to 0 that you want, load_gt is whether the gt exists for that frame, flow_dir is the corresponding flow (None if unavailable)
+FRAME_OFFSET = [-2, -1, 0]
+LOAD_GT = [False, False, True]
+
+
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
-cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
+# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
+# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
 # viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
 viper_train_flow_dir = "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/forward/train/img"
 
@@ -16,8 +19,8 @@ viper_train_flow_dir = "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist
 
 
 # Backward
-# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
-# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
+cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
+cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
 
 
 img_norm_cfg = dict(
@@ -37,6 +40,9 @@ gta_train_pipeline = {
     "load_flow_pipeline": [
         dict(type='LoadFlowFromFile'),
     ],
+    "stub_flow_pipeline": [
+        dict(type='LoadFlowFromFileStub'),
+    ],
     "shared_pipeline": [
         dict(type='Resize', img_scale=(2560, 1440)),
         dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
@@ -53,7 +59,7 @@ gta_train_pipeline = {
     "flow_pipeline": [
         dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
         dict(type='DefaultFormatBundle'), #I don't know what this is
-        dict(type='Collect', keys=['img', 'gt_semantic_seg']),
+        # dict(type='Collect', keys=['img', 'gt_semantic_seg']),
     ]
 }
 
@@ -67,6 +73,9 @@ cityscapes_train_pipeline = {
     ],
     "load_flow_pipeline": [
         dict(type='LoadFlowFromFile'),
+    ],
+    "stub_flow_pipeline": [
+        dict(type='LoadFlowFromFileStub'),
     ],
     "shared_pipeline": [
         dict(type='Resize', img_scale=(2048, 1024)),
@@ -84,7 +93,7 @@ cityscapes_train_pipeline = {
     "flow_pipeline": [
         dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
         dict(type='DefaultFormatBundle'),
-        dict(type='Collect', keys=['img', 'gt_semantic_seg']),
+        # dict(type='Collect', keys=['img', 'gt_semantic_seg']),
     ]
 }
 
@@ -115,7 +124,7 @@ test_pipeline = {
     "flow_pipeline": [
         # dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=255),
         dict(type='DefaultFormatBundle'), #I don't know what this is
-        dict(type='Collect', keys=['img', 'gt_semantic_seg'])#, meta_keys=[]),
+        # dict(type='Collect', keys=['img', 'gt_semantic_seg'])#, meta_keys=[]),
     ]
 }
 
@@ -131,7 +140,8 @@ data = dict(
             split='splits/train.txt',
             pipeline=gta_train_pipeline,
             frame_offset=FRAME_OFFSET,
-            flow_dir=viper_train_flow_dir,
+            load_gt = LOAD_GT,
+            flow_dir=[None, None, viper_train_flow_dir]
         ),
         target=dict(
             type='CityscapesSeqDataset',
@@ -141,7 +151,8 @@ data = dict(
             split='splits/train.txt',
             pipeline=cityscapes_train_pipeline,
             frame_offset=FRAME_OFFSET,
-            flow_dir=cs_train_flow_dir,
+            load_gt = LOAD_GT,
+            flow_dir=[None, None, cs_train_flow_dir],
             ignore_index=ignore_index,
         )
     ),
@@ -153,7 +164,8 @@ data = dict(
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
-        flow_dir=cs_val_flow_dir,
+        load_gt = LOAD_GT,
+        flow_dir=[None, None, cs_val_flow_dir],
         ignore_index=ignore_index
     ),
     test=dict(
@@ -164,7 +176,8 @@ data = dict(
         split='splits/val.txt',
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
-        flow_dir=cs_val_flow_dir,
+        load_gt = LOAD_GT,
+        flow_dir=[None, None, cs_val_flow_dir],
         ignore_index=ignore_index
     )
 )
