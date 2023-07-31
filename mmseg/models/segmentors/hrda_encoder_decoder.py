@@ -16,6 +16,7 @@ from mmseg.core import add_prefix
 from mmseg.ops import resize
 from ..builder import SEGMENTORS
 from .encoder_decoder import EncoderDecoder
+from tools.aggregate_flows.flow.my_utils import backpropFlow
 
 
 def get_crop_bbox(img_h, img_w, crop_size, divisible=1):
@@ -171,9 +172,9 @@ class HRDAEncoderDecoder(EncoderDecoder):
             scaled_img = self.resize(img, self.feature_scale)
             return self.extract_unscaled_feat(scaled_img)
 
-    def generate_pseudo_label(self, img, img_metas):
+    def generate_pseudo_label(self, img, img_metas, flow=None):
         self.update_debug_state()
-        out = self.encode_decode(img, img_metas)
+        out = self.encode_decode(img, img_metas, flow=flow)
         if self.debug:
             self.debug_output = self.decode_head.debug_output
         return out
@@ -208,7 +209,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
                                    img_metas,
                                    gt_semantic_seg,
                                    seg_weight=None,
-                                   return_logits=False):
+                                   return_logits=False, reset_crop=True):
         """Run forward function and calculate loss for decode head in
         training.
         x: x[low/highres, mmbranch, segformer_layer] #This might change in different calls of _decode_head_forward_test
@@ -245,12 +246,12 @@ class HRDAEncoderDecoder(EncoderDecoder):
             loss_decode = self.decode_head.forward_train(x, img_metas,
                                                         gt_semantic_seg,
                                                         self.train_cfg,
-                                                        seg_weight, return_logits)
+                                                        seg_weight, return_logits, reset_crop=reset_crop)
 
         losses.update(add_prefix(loss_decode, 'decode'))
         return losses
 
-    def encode_decode(self, img, img_metas, upscale_pred=True):
+    def encode_decode(self, img, img_metas, upscale_pred=True, flow=None):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         mres_feats = []
@@ -268,6 +269,19 @@ class HRDAEncoderDecoder(EncoderDecoder):
                 self.decode_head.debug_output[f'Img {i} Scale {s}'] = \
                     scaled_img.detach()
         out = self._decode_head_forward_test(mres_feats, img_metas)
+        
+        #NOTE: basically perform score fusion after the sliding eval
+        if self.score_fusion:
+            assert flow is not None
+            #NOTE: forget to align preds via flow before score fusion
+            out2 = out[out.shape[0]//2:]
+            out2 = resize(out2, size=flow.shape[2:], mode='bilinear')
+            out2 = backpropFlow(flow.permute((0, 2, 3, 1)), out2.permute((0, 2, 3, 1))).permute((0, 3, 1, 2))
+            out2 = resize(out2, size=out.shape[2:], mode='bilinear')
+
+            out = torch.cat([out[:out.shape[0]//2], out[out.shape[0]//2:]], dim=1)
+            out = self.sf_layer(out)
+
         if upscale_pred:
             out = resize(
                 input=out,
@@ -311,7 +325,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
                       seg_weight=None,
                       return_feat=False,
                       return_logits=False,
-                      masking_branch=None):
+                      masking_branch=None,
+                      reset_crop=True):
         """Forward function for training.
 
         Args:
@@ -346,7 +361,7 @@ class HRDAEncoderDecoder(EncoderDecoder):
         loss_decode = self._decode_head_forward_train(mres_feats, img_metas,
                                                       gt_semantic_seg,
                                                       seg_weight,
-                                                      return_logits)
+                                                      return_logits, reset_crop=reset_crop)
         losses.update(loss_decode)
 
         if self.decode_head.debug and prob_vis is not None:

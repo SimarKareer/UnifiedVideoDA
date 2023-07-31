@@ -9,7 +9,11 @@ cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
 # cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
 # cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
 # viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
-viper_train_flow_dir = "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/forward/train/img"
+viper_train_flow_dir = [
+    None,
+    "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/t_neg_1/frame_dist_1/backward/train/img",
+    "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/backward/train/img"
+]
 
 # cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/train"
 # cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/val"
@@ -19,8 +23,16 @@ viper_train_flow_dir = "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist
 
 
 # Backward
-cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
-cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
+cs_train_flow_dir = [
+    None,
+    "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/future_flow/tk_1_flows/frame_dist_1/backward/train/",
+    "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
+]
+cs_val_flow_dir = [
+    None,
+    "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/future_flow/tk_1_flows/frame_dist_1/backward/val",
+    "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
+]
 
 
 img_norm_cfg = dict(
@@ -144,7 +156,7 @@ data = dict(
             pipeline=gta_train_pipeline,
             frame_offset=FRAME_OFFSET,
             load_gt = LOAD_GT,
-            flow_dir=[None, None, viper_train_flow_dir]
+            flow_dir=viper_train_flow_dir,
         ),
         target=dict(
             type='CityscapesSeqDataset',
@@ -155,7 +167,7 @@ data = dict(
             pipeline=cityscapes_train_pipeline,
             frame_offset=FRAME_OFFSET,
             load_gt = LOAD_GT,
-            flow_dir=[None, None, cs_train_flow_dir],
+            flow_dir=cs_train_flow_dir,
             ignore_index=ignore_index,
         )
     ),
@@ -168,7 +180,7 @@ data = dict(
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
         load_gt = LOAD_GT,
-        flow_dir=[None, None, cs_val_flow_dir],
+        flow_dir=cs_val_flow_dir,
         ignore_index=ignore_index
     ),
     test=dict(
@@ -180,7 +192,7 @@ data = dict(
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
         load_gt = LOAD_GT,
-        flow_dir=[None, None, cs_val_flow_dir],
+        flow_dir=cs_val_flow_dir,
         ignore_index=ignore_index
     )
 )

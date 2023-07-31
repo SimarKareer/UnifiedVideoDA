@@ -241,10 +241,26 @@ def errorVizClasses(prediction, gt):
     # out[gt == prediction] = prediction[gt == prediction]
     return out
 
-
-
-
 def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False):
+    """
+    returns im backpropped as if it was im1
+    flow: torch.Tensor H, W, 2 or B, H, W, 2
+    im: torch.Tensor H, W, 3 or B, H, W, 3
+    """
+    if len(flow_orig.shape) == 3:
+        return backpropFlowHelper(flow_orig, im_orig, return_mask_count=return_mask_count, return_mask=return_mask)
+    elif len(flow_orig.shape) == 4:
+        # shape 0 is batch size
+        output = []
+        for i in range(flow_orig.shape[0]):
+            output.append(backpropFlowHelper(flow_orig[i], im_orig[i], return_mask_count=False, return_mask=False))
+        
+        return torch.stack(output)
+        
+
+
+
+def backpropFlowHelper(flow_orig, im_orig, return_mask_count=False, return_mask=False):
     """
     returns im backpropped as if it was im1
     flow: torch.Tensor H, W, 2

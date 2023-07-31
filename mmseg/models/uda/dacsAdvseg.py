@@ -112,6 +112,12 @@ class DACSAdvseg(DACS):
                     align_corners=self.model.module.align_corners)
     
     def forward_train_videodisc(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
+        if self.model.module.score_fusion:
+            img, img_metas, img_extra = self.accel_format(img, img_metas, img_extra)
+            target_img, target_img_metas, target_img_extra = self.accel_format(target_img, target_img_metas, target_img_extra)
+        else:
+            self.legacy_format(img_extra, target_img_extra)
+
         source_label = 0
         target_label = 1
 
@@ -122,10 +128,10 @@ class DACSAdvseg(DACS):
         for param in self.model_D.module.parameters():
             param.requires_grad = False
 
-        pred = self.model.module.forward_with_aux(img, img_metas)
-        pred_tk = self.model.module.forward_with_aux(img_extra["imtk"], img_extra["imtk_metas"])
-        pred_trg = self.model.module.forward_with_aux(target_img, target_img_metas)
-        pred_trg_tk = self.model.module.forward_with_aux(target_img_extra["imtk"], target_img_extra["imtk_metas"])
+        pred = self.model.module.forward_with_aux(img, img_metas, img_extra["flow[0]"])
+        pred_tk = self.model.module.forward_with_aux(img_extra["imtk"], img_extra["imtk_metas"], img_extra["flow[-1]"])
+        pred_trg = self.model.module.forward_with_aux(target_img, target_img_metas, target_img_extra["flow[0]"])
+        pred_trg_tk = self.model.module.forward_with_aux(target_img_extra["imtk"], target_img_extra["imtk_metas"], target_img_extra["flow[-1]"])
 
         if isinstance(self.model.module, HRDAEncoderDecoder):
             self.model.module.decode_head.reset_crop()

@@ -24,7 +24,7 @@ _base_ = [
 seed = 2  # seed with median performance
 # HRDA Configuration
 model = dict(
-    type='HRDAEncoderDecoder',
+    type='ACCELHRDAEncoderDecoder',
 
     decode_head=dict(
         type='HRDAHead',

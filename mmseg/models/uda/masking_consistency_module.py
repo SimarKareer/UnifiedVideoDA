@@ -60,7 +60,9 @@ class MaskingConsistencyModule(Module):
                  target_img_metas,
                  valid_pseudo_mask,
                  pseudo_label=None,
-                 pseudo_weight=None):
+                 pseudo_weight=None,
+                 img_flow=None,
+                 target_img_flow=None):
         self.update_debug_state()
         self.debug_output = {}
         model.debug_output = {}
@@ -93,9 +95,11 @@ class MaskingConsistencyModule(Module):
             masked_lbl = gt_semantic_seg
             b, _, h, w = gt_semantic_seg.shape
             masked_seg_weight = None
+            flow = img_flow
         # Use 1x source image and 1x target image for MIC
         elif self.mask_mode in ['separate', 'separateaug']:
             assert img.shape[0] == 2
+            assert False, "Didn't implement for accel"
             masked_img = torch.stack([img[0], target_img[0]])
             masked_lbl = torch.stack(
                 [gt_semantic_seg[0], masked_plabel[0].unsqueeze(0)])
@@ -107,11 +111,13 @@ class MaskingConsistencyModule(Module):
             masked_img = img
             masked_lbl = gt_semantic_seg
             masked_seg_weight = None
+            flow = img_flow
         # Use only target images for MIC
         elif self.mask_mode in ['separatetrg', 'separatetrgaug']:
             masked_img = target_img
             masked_lbl = masked_plabel.unsqueeze(1)
             masked_seg_weight = masked_pweight
+            flow = target_img_flow
         else:
             raise NotImplementedError(self.mask_mode)
 
@@ -138,6 +144,7 @@ class MaskingConsistencyModule(Module):
             img_metas,
             masked_lbl,
             seg_weight=masked_seg_weight,
+            flow=flow
         )
         if self.mask_lambda != 1:
             masked_loss['decode.loss_seg'] *= self.mask_lambda
