@@ -27,7 +27,7 @@ class ACCELHRDAEncoderDecoder(HRDAEncoderDecoder):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.sf_layer = self.get_score_fusion_layer(self.num_classes)
-        self.score_fusion = True
+        self.accel = True
 
     def get_score_fusion_layer(self, num_classes):
         sf_layer = nn.Conv2d(num_classes * 2, num_classes, kernel_size=1, stride=1, padding=0, bias=False)

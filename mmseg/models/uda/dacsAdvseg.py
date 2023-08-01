@@ -12,6 +12,7 @@ from mmseg.models import UDA, HRDAEncoderDecoder
 from mmseg.ops import resize
 import torch.nn.functional as F
 
+from mmseg.models.segmentors.accel_hrda_encoder_decoder import ACCELHRDAEncoderDecoder
 
 @UDA.register_module()
 class DACSAdvseg(DACS):
@@ -51,6 +52,7 @@ class DACSAdvseg(DACS):
         else:
             raise NotImplementedError(self.discriminator_type)
 
+        self.accel = isinstance(self.model, ACCELHRDAEncoderDecoder)
         
     
     def adjust_learning_rate_D(self, optimizer, i_iter):
@@ -112,7 +114,7 @@ class DACSAdvseg(DACS):
                     align_corners=self.model.module.align_corners)
     
     def forward_train_videodisc(self, img, img_metas, img_extra, target_img, target_img_metas, target_img_extra):
-        if self.model.module.score_fusion:
+        if self.accel:
             img, img_metas, img_extra = self.accel_format(img, img_metas, img_extra)
             target_img, target_img_metas, target_img_extra = self.accel_format(target_img, target_img_metas, target_img_extra)
         else:

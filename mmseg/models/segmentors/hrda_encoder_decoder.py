@@ -271,8 +271,8 @@ class HRDAEncoderDecoder(EncoderDecoder):
         out = self._decode_head_forward_test(mres_feats, img_metas)
         
         #NOTE: basically perform score fusion after the sliding eval
-        if self.score_fusion:
-            assert flow is not None
+        if flow is not None:
+            assert self.accel, "Only ACCELHRDAEncoderDecoder supports flow"
             #NOTE: forget to align preds via flow before score fusion
             out2 = out[out.shape[0]//2:]
             out2 = resize(out2, size=flow.shape[2:], mode='bilinear')
