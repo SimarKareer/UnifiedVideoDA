@@ -432,7 +432,9 @@ class CustomDataset(Dataset):
         if curr_seg_map.shape[0] == 1 and len(curr_seg_map.shape) == 4:
             curr_seg_map = curr_seg_map.squeeze(0).to(curr_pred.device)
 
-        flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(curr_pred.device)
+        flow = None
+        if "flow" in data:
+            flow = data["flow"][0].squeeze(0).permute((1, 2, 0)).to(curr_pred.device)
         return_mask_count = "mask_count" in sub_metrics
         # breakpoint()
         if "pred_pred" in metrics:
@@ -995,7 +997,7 @@ class CustomDataset(Dataset):
                  gt_seg_maps=None,
                  label_map=dict(),
                  **kwargs):
-        """Evaluate the dataset.
+        """Evaluate the datas
 
         Args:
             results (list[tuple[torch.Tensor]] | list[str]): per image pre_eval
@@ -1011,7 +1013,6 @@ class CustomDataset(Dataset):
         Returns:
             dict[str, float]: Default metrics.
         """
-        # assert False, "[Simar Note] I stopped using this, in favor of pre_eval_dataloader_consis"
         if isinstance(metric, str):
             metric = [metric]
         allowed_metrics = ['mIoU', 'mDice', 'mFscore']

@@ -251,7 +251,7 @@ def main(args):
         cfg.uda.stub_training = True
         if args.eval == "viper":
             cfg.data.val = get_viper_val(True)
-            cfg.data.val["data_type"] = "rgb+flowxynorm"
+            cfg.data.val["data_type"] = "rgb"
 
     
     if args.source_only2:
@@ -296,9 +296,6 @@ def main(args):
     
     if args.bottom_pl_fill:
         cfg.uda.bottom_pl_fill = True
-    
-    if args.consis_filter and args.pl_fill:
-        raise Exception("Don't use both consis_filter and pl_fill, it's the same as just plain PL")
     
     if args.oracle_mask:
         cfg.uda.oracle_mask = True

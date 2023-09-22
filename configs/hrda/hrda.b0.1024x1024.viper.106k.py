@@ -8,7 +8,6 @@ _base_ = [
 ]
 
 # checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth'  # noqa
-checkpoint = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth" #might be wrong
 
 model = dict(
     backbone=dict(init_cfg=dict(type='Pretrained', checkpoint=checkpoint)),

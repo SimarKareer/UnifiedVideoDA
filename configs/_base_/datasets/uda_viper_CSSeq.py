@@ -6,18 +6,18 @@ LOAD_GT = [False, False, True]
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
-# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
-# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
-# viper_train_flow_dir = "/srv/share4/datasets/VIPER_Flowv3/train/flow_occ"
+
 viper_train_flow_dir = [
     None,
     "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/t_neg_1/frame_dist_1/backward/train/img",
     "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/backward/train/img"
 ]
 
-# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/train"
-# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_10/forward/val"
+# Forward (frame dist = 1)
+cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
+cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
 
+# for dist 3,6,10
 # cs_train_flow_dir = f'/srv/share4/datasets/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/train'
 # cs_val_flow_dir = f'/srv/share4/datasets/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/val'
 
@@ -35,6 +35,9 @@ cs_val_flow_dir = [
     "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
 ]
 
+# Forward
+# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
+# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -164,7 +167,7 @@ data = dict(
             data_root=cs_data_root,
             img_dir='leftImg8bit_sequence/train',
             ann_dir='gtFine/train',
-            split='splits/train.txt',
+            split='splits/train.txt', # train_2f.txt (frames t, t+1)
             pipeline=cityscapes_train_pipeline,
             frame_offset=FRAME_OFFSET,
             load_gt = LOAD_GT,

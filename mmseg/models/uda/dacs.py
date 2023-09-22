@@ -775,7 +775,7 @@ class DACS(UDADecorator):
 
         if DEBUG:
             subplotimg(axs[2, 0], pseudo_label, "PL", cmap="cityscapes")
-            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/multimodal/debug{self.local_iter}.png")
+            fig.savefig(f"./work_dirs/multimodal/debug{self.local_iter}.png")
 
         
         if self.local_iter % 100 == 0:
@@ -968,8 +968,7 @@ class DACS(UDADecorator):
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
-            if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
-
+            if DEBUG or self.l_warp_lambda > 0 and self.local_iter >= self.l_warp_begin: 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
                 masks = []

@@ -46,7 +46,7 @@ def data_loader_test():
 
             # subplotimg(axs[1, 0], data["flowVisNorm"][0], "Source flow Norm 0")
             subplotimg(axs[0, 1], data["flowVis"][0], "Source flow Norm 0")
-            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/flowRgbVis/Viper{i}.png")
+            fig.savefig(f"./work_dirs/flowRgbVis/Viper{i}.png")
 
         if i == 20:
             break
@@ -89,7 +89,7 @@ def flow_statistics_gt():
             axs[i].bar(np.arange(100), per_class_hist2[i], label="Target", alpha=0.5)
             axs[i].set_title(class_name, fontsize = '25')
             axs[i].legend()
-        fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/flowHistograms/hist.png")
+        fig.savefig(f"./work_dirs/flowHistograms/hist.png")
     
     
     viper = get_viper_train()

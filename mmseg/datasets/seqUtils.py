@@ -525,8 +525,7 @@ class SeqUtils():
         else:
             raise Exception("Unknown data_type: {}".format(self.data_type))
     
-
-        if not self.unpack_list:
+        if self.test_mode:
             for k, v in finalIms.items():
                 if isinstance(v, torch.Tensor):
                     finalIms[k] = [v]

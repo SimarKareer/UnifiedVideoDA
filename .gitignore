@@ -193,6 +193,7 @@ tools/exps/mic_viper/mic_viper_v3a2.sh
 tools/exps/mic_viper/mic_viper_v3overcap.sh
 tools/exps/lwarp2
 tools/exps/lwarp
+tools/testing
 *4.sh
 *6.sh
 *1.sh
@@ -220,4 +221,5 @@ tools/exps/mmv1/mmHRDA.sh
 tools/exps/mmv3/mmv3RGB.sh
 tools/exps/sourceEval/sourceEval.sh
 tools/exps/sourceEval/sourceEval2.sh
-tools/testing
+tools/testing/
+tools/exps/
