@@ -23,6 +23,3 @@ srun -p ${PARTITION} \
     --kill-on-bad-exit=1 \
     --constraint="a40" \
     python -u tools/test.py ${CONFIG} ${CHECKPOINT} --launcher="slurm" --eval mIoU pred_pred gt_pred M5 mIoU_gt_pred
-
-
-#GPUS=2 GPUS_PER_NODE=2 CPUS_PER_TASK=15 ACCOUNT=overcap sh tools/slurm_train.sh overcap backward_flow /coc/scratch/vvijaykumar6/mmseg/configs/viperHR2csHR_mic_hrda_eval.py /coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/lwarp/1gbaseline/iter_40000.pth

@@ -83,8 +83,6 @@ runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=40000, max_keep_ckpts=1)
 
-checkpoint = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth"
-
 evaluation = dict(interval=4000, metric='mIoU')
 # Meta Information for Result Analysis
 name = 'gtaHR2csHR_hrda_s1'

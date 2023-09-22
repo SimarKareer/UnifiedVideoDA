@@ -1,7 +1,6 @@
 _base_ = ['./hrda.b0.1024x1024.viper.106k.py']
 
 # checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b5_20220624-658746d9.pth'  # noqa
-checkpoint = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth"
 model = dict(
     backbone=dict(
         init_cfg=dict(type='Pretrained', checkpoint=checkpoint),

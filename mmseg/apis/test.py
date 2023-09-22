@@ -158,8 +158,6 @@ def single_gpu_test(model,
     # we use batch_sampler to get correct data idx
     loader_indices = data_loader.batch_sampler
     # cache=False
-    # cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
-    # use_cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
     
 
     if use_cache:
@@ -379,8 +377,9 @@ def multi_gpu_test(model,
                     logit_result_tk = [torch.from_numpy(logit_result_tk[0]).to(device)]
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
         
+        # outputs the predcitions
         # if show:
-        #     out_dir_1= "/coc/scratch/vvijaykumar6/mmseg/work_dirs/inference"
+        #     out_dir_1= "./mmseg/work_dirs/inference"
 
         #     # use the function in dacs for this
         #     # print(data["img_metas"][0].data[0][0]['ori_filename'])

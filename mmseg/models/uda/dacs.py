@@ -748,7 +748,7 @@ class DACS(UDADecorator):
 
         if DEBUG:
             subplotimg(axs[2, 0], pseudo_label, "PL", cmap="cityscapes")
-            fig.savefig(f"/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/multimodal/debug{self.local_iter}.png")
+            fig.savefig(f"./work_dirs/multimodal/debug{self.local_iter}.png")
 
         
         if self.local_iter % 100 == 0:
