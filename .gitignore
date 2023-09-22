@@ -226,3 +226,4 @@ mmseg/utils/dataset_test/npyDataset.py
 mmseg/utils/dataset_test/flow_vis_meanstd.py
 mmseg/utils/dataset_test/dataset_test2.ipynb
 mmseg/utils/dataset_test/dataset_test.ipynb
+tools/exps/
