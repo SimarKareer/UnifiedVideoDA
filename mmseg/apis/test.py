@@ -157,7 +157,7 @@ def single_gpu_test(model,
     # data_fetcher -> collate_fn(dataset[index]) -> data_sample
     # we use batch_sampler to get correct data idx
     loader_indices = data_loader.batch_sampler
-    # cache=False
+    # cache=Falsegit 
     
 
     if use_cache:
