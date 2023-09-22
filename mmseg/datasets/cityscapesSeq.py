@@ -35,7 +35,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
         SeqUtils.__init__(self)
         
         # breakpoint()
-        self.unpack_list = "train" in split
+        # self.unpack_list = "train" in split
         # assert(crop_pseudo_margins is not None)
         if crop_pseudo_margins:
             assert kwargs['pipeline']["im_pipeline"][-1]['type'] == 'Collect'
