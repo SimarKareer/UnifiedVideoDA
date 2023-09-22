@@ -220,3 +220,4 @@ tools/exps/mmv1/mmHRDA.sh
 tools/exps/mmv3/mmv3RGB.sh
 tools/exps/sourceEval/sourceEval.sh
 tools/exps/sourceEval/sourceEval2.sh
+tools/testing
