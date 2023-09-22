@@ -129,7 +129,6 @@ Segformer Backbone:
 | HRDA + MIC + PL Refine Consis Filter| `./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_mic_hrda_max_conf.sh` |
 | HRDA + MIC + PL Refine Max Confidence | `./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_mic_hrda_rare_class_filter.sh` |
 | HRDA + MIC + PL Refine Warp Frame| `./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_mic_hrda_warp_frame.sh` |
-| HRDA + MIC + PL Refine Rare Class Filter | `./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_mic_hrda_rare_class_filter.sh` |
 | HRDA + MIC + PL Refine Oracle | `./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_mic_hrda_oracle.sh` |
 <br>
 
@@ -141,7 +140,6 @@ Segformer Backbone:
 | HRDA + PL Refine Consis Filter| `./tools/experiments/viper_csSeq/pl_refinement/consis/viper_csseq_hrda_consis.sh` |
 | HRDA + PL Refine Max Confidence | `./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_hrda_max_conf.sh` |
 | HRDA + PL Refine Warp Frame| `./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_hrda_warp_frame.sh` |
-| HRDA + PL Refine Rare Class Filter | `./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_hrda_rare_class_filter.sh` |
 | HRDA + PL Refine Oracle | `./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_hrda_oracle.sh` |
 <br>
 
@@ -153,7 +151,6 @@ DLV2 Backbone:
 | HRDA + MIC + PL Refine Consis Filter| `../tools/experiments/viper_csSeq/pl_refinement/consis/viper_csseq_mic_hrda_dlv2_consis.sh` |
 | HRDA + MIC + PL Refine Max Confidence | `./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_mic_hrda_dlv2_max_conf.sh` |
 | HRDA + MIC + PL Refine Warp Frame| `./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_mic_hrda_dlv2_warp_frame.sh` |
-| HRDA + MIC + PL Refine Rare Class Filter | `./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_mic_hrda_dlv2_rare_class_filter.sh`|
 | HRDA + MIC + PL Refine Oracle | `./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_mic_hrda_dlv2_oracle.sh` |
 
 <br>
@@ -166,7 +163,6 @@ Segformer Backbone:
 | HRDA + PL Refine Consis Filter| `./tools/experiments/viper_csSeq/pl_refinement/consis/viper_csseq_hrda_dlv2_consis.sh` |
 | HRDA + PL Refine Max Confidence | `./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_hrda_dlv2_max_conf.sh` |
 | HRDA + PL Refine Warp Frame| `./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_hrda_dlv2_warp_frame.sh` |
-| HRDA + PL Refine Rare Class Filter | `./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_hrda_dlv2_rare_class_filter.sh` |
 | HRDA + PL Refine Oracle | `./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_hrda_dlv2_oracle.sh` |
 
 ### SynthiaSeq -> CityscapesSeq
