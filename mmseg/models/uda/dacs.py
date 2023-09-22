@@ -882,8 +882,7 @@ class DACS(UDADecorator):
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
             log_vars["L_warp"] = 0
-            if DEBUG or self.l_warp_lambda >= 0 and self.local_iter >= self.l_warp_begin:
-
+            if DEBUG or self.l_warp_lambda > 0 and self.local_iter >= self.l_warp_begin: 
                 pseudo_label_warped = [] #pseudo_label_fut.clone() #Note: technically don't need to clone, could be faster
                 pseudo_weight_warped = []
                 masks = []

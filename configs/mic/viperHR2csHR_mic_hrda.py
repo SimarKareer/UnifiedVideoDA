@@ -16,10 +16,6 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-# load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
-# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-# resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
-# resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -149,6 +145,3 @@ name_encoder = 'mitb5'
 name_decoder = 'hrda1-512-0.1_daformer_sepaspp_sl'
 name_uda = 'dacs_a999_fdthings_rcs0.01-2.0_cpl2_m64-0.7-spta'
 name_opt = 'adamw_6e-05_pmTrue_poly10warm_1x2_40k'
-
-# For the other configurations used in the paper, please refer to experiment.py
-#CS Invalid Metrics: "M6Sanity", "mIoU_gt_pred", "mIoU"

@@ -193,6 +193,7 @@ tools/exps/mic_viper/mic_viper_v3a2.sh
 tools/exps/mic_viper/mic_viper_v3overcap.sh
 tools/exps/lwarp2
 tools/exps/lwarp
+tools/testing
 *4.sh
 *6.sh
 *1.sh

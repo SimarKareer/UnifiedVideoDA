@@ -16,8 +16,7 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-# resume_from = "./work_dirs/synthia_baseline/synthia_mic_base_short_2gpu02-26-19-05-24/iter_16000.pth"
+
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -110,6 +109,7 @@ uda = dict(
     oracle_mask_noise_percent=0.0,
     TPS_warp_pl_confidence=False,
     TPS_warp_pl_confidence_thresh=0.0,
+    max_confidence=False
 )
 # Optimizer Hyperparameters
 optimizer_config = None
@@ -125,13 +125,13 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=3)
-evaluation = dict(interval=4000, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred", "consis_confidence_filter"],
+checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
+evaluation = dict(interval=8000, eval_settings={
+    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
-    "return_logits": True,
+    "return_logits": False,
     "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
