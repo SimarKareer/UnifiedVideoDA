@@ -221,9 +221,4 @@ tools/exps/mmv1/mmHRDA.sh
 tools/exps/mmv3/mmv3RGB.sh
 tools/exps/sourceEval/sourceEval.sh
 tools/exps/sourceEval/sourceEval2.sh
-mmseg/utils/dataset_test/Untitled.ipynb
-mmseg/utils/dataset_test/npyDataset.py
-mmseg/utils/dataset_test/flow_vis_meanstd.py
-mmseg/utils/dataset_test/dataset_test2.ipynb
-mmseg/utils/dataset_test/dataset_test.ipynb
 tools/exps/
