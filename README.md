@@ -67,9 +67,9 @@ The `accel` branch will have all experiments reported that predict on consecutiv
 All experiment scrips are located in `tools/experiments/*`, with scripts being separated by the different shifts and VideoDA techniques.
 
 
-### Discrim Branch Experiments
+## Discrim Branch Experiments
 
-**Viper -> CityscapesSeq**
+### Viper -> CityscapesSeq
 
 Note: To train with frames t and t+1 on the target dataset (CityscapesSeq), replace the path for the data split for the target dataset in `train.txt` in `configs/_base_/datasets/uda_viper_CSSeq.py`.
 
@@ -170,126 +170,9 @@ Segformer Backbone:
 | HRDA + PL Refine Oracle | `./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_hrda_dlv2_oracle.sh` |
 <br>
 
+### SynthiaSeq -> CityscapesSeq
 
-
-
-
-<ins>Pseudo-label Refinement:</ins>
-
-Note: To train with forward or backwards flow, edit `FRAME_OFFSET` (positive value = forward, negative value = backwards) in `configs/_base_/datasets/uda_viper_CSSeq.py` along with `cs_train_flow_dir` and `cs_val_flow_dir`.
-
-Consistency Filter:
-```
-# HRDA + MIC (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/consis/viper_csseq_mic_hrda_consis.sh
-
-# HRDA (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/consis/viper_csseq_hrda_consis.sh
-
-# HRDA + MIC (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/consis/viper_csseq_mic_hrda_dlv2_consis.sh
-
-# HRDA (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/consis/viper_csseq_hrda_dlv2_consis.sh
-```
-
-Max Confidence Filter:
-```
-# HRDA + MIC (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_mic_hrda_max_conf.sh
-
-# HRDA (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_hrda_max_conf.sh
-
-# HRDA + MIC (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_mic_hrda_dlv2_max_conf.sh
-
-# HRDA (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/max_conf/viper_csseq_hrda_dlv2_max_conf.sh
-```
-
-Rare Class Filter
-```
-# HRDA + MIC (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_mic_hrda_rare_class_filter.sh
-
-# HRDA (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_hrda_rare_class_filter.sh
-
-# HRDA + MIC (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_mic_hrda_dlv2_rare_class_filter.sh
-
-# HRDA (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_hrda_dlv2_rare_class_filter.sh
-```
-
-Warp Frame
-```
-# HRDA + MIC (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_mic_hrda_warp_frame.sh
-
-# HRDA (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_hrda_warp_frame.sh
-
-# HRDA + MIC (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_mic_hrda_dlv2_warp_frame.sh
-
-# HRDA (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_hrda_dlv2_warp_frame.sh
-```
-
-Oracle
-Warp Frame
-```
-# HRDA + MIC (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_mic_hrda_oracle.sh
-
-# HRDA (Segformer Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_hrda_oracle.sh
-
-# HRDA + MIC (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_mic_hrda_dlv2_oracle.sh
-
-# HRDA (DLV2 Backbone)
-./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_hrda_dlv2_oracle.sh
-```
-
-<ins>Video Discriminator:</ins>
-
-HRDA + Video Discriminator (DLV2 Backbone):
-```
-./tools/experiments/viper_csSeq/video_discrim/viper_csseq_hrda_dlv2_video_discrim.sh
-```
-
-HRDA + Video Discriminator + Consistency Filter (DLV2 Backbone):
-```
-./tools/experiments/viper_csSeq/video_discrim/viper_csseq_hrda_dlv2_video_discrim_consis.sh
-```
-
-<ins>HRDA + MIC Ablation Study:</ins>
-
-HRDA - MRFusion (DLV2 Backbone):
-```
-./tools/experiments/viper_csSeq/mic_hrda_component_ablation/viper_csseq_hrda_dlv2_no_MRFusion.sh
-```
-
-HRDA - MRFusion - Rare class sampling (DLV2 Backbone):
-```
-./tools/experiments/viper_csSeq/mic_hrda_component_ablation/viper_csseq_hrda_dlv2_no_MRFusion_no_rcs.sh
-```
-
-HRDA - MRFusion - Rare class sampling - ImgNet feature distance reg. (DLV2 Backbone):
-```
-./tools/experiments/viper_csSeq/mic_hrda_component_ablation/viper_csseq_hrda_dlv2_no_MRFusion_no_rcs_no_imnet.sh
-```
-
-
-
-
-
-
-
-
+SynthiaSeq experiment scripts follow directory structure as the Viper Experiments. You can find all relevant experiments reported in the paper at `tools/experiments/synthiaSeq_csSeq`.
 
 
 
