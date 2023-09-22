@@ -1,7 +1,7 @@
 # VideoDA
 Domain adaptation for semantic segmentation using video!
 
-This repo is built off of mmseg.  I used the [MIC repo](https://github.com/lhoyer/MIC/tree/master)
+This repo is built off of mmsegmentation, with the [MIC repo](https://github.com/lhoyer/MIC/tree/master)
 
 ## Installation
 Modification of these [instructions](https://github.com/lhoyer/MIC/tree/master/seg).
@@ -76,32 +76,32 @@ All experiment scrips are located in `tools/experiments/*`, with scripts being s
 Note: To train with frames t and t+1, replace the path for the data split for the target dataset in `train.txt` in `configs/_base_/datasets/uda_viper_CSSeq.py`.
 
 
-HRDA + MIC (Segformer backbone)
+HRDA + MIC (Segformer backbone):
 ```
 ./tools/experiments/viper_csSeq/baselines/viper_csseq_mic_hrda.sh
 ```
 
-HRDA (Segformer backbone)
+HRDA (Segformer backbone):
 ```
 ./tools/experiments/viper_csSeq/baselines/viper_csseq_hrda.sh
 ```
 
-HRDA + MIC (DLV2 backbone)
+HRDA + MIC (DLV2 backbone):
 ```
 ./tools/experiments/viper_csSeq/baselines/viper_csseq_mic_hrda_dlv2.sh
 ```
 
-HRDA (DLV2 backbone)
+HRDA (DLV2 backbone):
 ```
 ./tools/experiments/viper_csSeq/baselines/viper_csseq_hrda_dlv2.sh
 ```
 
-HRDA Source only (Segformer backbone)
+HRDA Source only (Segformer backbone):
 ```
 ./tools/experiments/viper_csSeq/baselines/viper_source_hrda.sh
 ```
 
-HRDA Source only (DLV2 backbone)
+HRDA Source only (DLV2 backbone):
 ```
 ./tools/experiments/viper_csSeq/baselines/viper_source_hrda_dlv2.sh
 ```
@@ -200,17 +200,17 @@ HRDA + Video Discriminator + Consistency Filter (DLV2 Backbone):
 
 <ins>HRDA + MIC Ablation Study:</ins>
 
-HRDA - MRFusion
+HRDA - MRFusion (DLV2 Backbone):
 ```
 ./tools/experiments/viper_csSeq/mic_hrda_component_ablation/viper_csseq_hrda_dlv2_no_MRFusion.sh
 ```
 
-HRDA - MRFusion - Rare class sampling
+HRDA - MRFusion - Rare class sampling (DLV2 Backbone):
 ```
 ./tools/experiments/viper_csSeq/mic_hrda_component_ablation/viper_csseq_hrda_dlv2_no_MRFusion_no_rcs.sh
 ```
 
-HRDA - MRFusion - Rare class sampling - ImgNet feature distance reg.
+HRDA - MRFusion - Rare class sampling - ImgNet feature distance reg. (DLV2 Backbone):
 ```
 ./tools/experiments/viper_csSeq/mic_hrda_component_ablation/viper_csseq_hrda_dlv2_no_MRFusion_no_rcs_no_imnet.sh
 ```
