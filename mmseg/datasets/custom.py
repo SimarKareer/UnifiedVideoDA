@@ -1013,7 +1013,6 @@ class CustomDataset(Dataset):
         Returns:
             dict[str, float]: Default metrics.
         """
-        # assert False, "[Simar Note] I stopped using this, in favor of pre_eval_dataloader_consis"
         if isinstance(metric, str):
             metric = [metric]
         allowed_metrics = ['mIoU', 'mDice', 'mFscore']
