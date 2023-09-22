@@ -997,7 +997,7 @@ class CustomDataset(Dataset):
                  gt_seg_maps=None,
                  label_map=dict(),
                  **kwargs):
-        """Evaluate the dataset.
+        """Evaluate the datas
 
         Args:
             results (list[tuple[torch.Tensor]] | list[str]): per image pre_eval

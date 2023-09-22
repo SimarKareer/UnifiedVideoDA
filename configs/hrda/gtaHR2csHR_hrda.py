@@ -5,7 +5,6 @@
 # ---------------------------------------------------------------
 
 # Default HRDA Configuration for GTA->Cityscapes
-# SIMAR: currently I've messeg around here and it's set up for VIPER.  I should separate this into a separate file.
 _base_ = [
     '../_base_/default_runtime.py',
     # DAFormer Network Architecture
