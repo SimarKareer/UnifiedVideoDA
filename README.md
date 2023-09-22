@@ -168,7 +168,6 @@ Segformer Backbone:
 | HRDA + PL Refine Warp Frame| `./tools/experiments/viper_csSeq/pl_refinement/warp_frame/viper_csseq_hrda_dlv2_warp_frame.sh` |
 | HRDA + PL Refine Rare Class Filter | `./tools/experiments/viper_csSeq/pl_refinement/rare_class_filter/viper_csseq_hrda_dlv2_rare_class_filter.sh` |
 | HRDA + PL Refine Oracle | `./tools/experiments/viper_csSeq/pl_refinement/oracle/viper_csseq_hrda_dlv2_oracle.sh` |
-<br>
 
 ### SynthiaSeq -> CityscapesSeq
 
