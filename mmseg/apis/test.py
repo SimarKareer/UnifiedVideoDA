@@ -367,11 +367,12 @@ def multi_gpu_test(model,
             result[0] = torch.from_numpy(result[0]).to(device)
 
             result_tk = None
+            logit_result_tk = None
+
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=return_logits, **refined_data)
 
-                logit_result_tk = None
                 if return_logits:
                     logit_result_tk = result_tk
                     result_tk = [np.argmax(logit_result_tk[0], axis=0)]

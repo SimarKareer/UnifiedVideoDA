@@ -14,14 +14,14 @@ import cityscapesscripts.helpers.labels as CSLabels
 import pdb
 
 @DATASETS.register_module()
-class BDDSeqDataset(SeqUtils, CityscapesSeqDataset):
+class BDDSeqDataset(CityscapesSeqDataset):
     """BDD-Seq dataset.
 
     The ``img_suffix`` is fixed to '.jpg' and ``seg_map_suffix`` is
     fixed to '_gtFine_labelIds.png' for BDD-seq dataset.
     """
 
-    def __init__(self, split, img_suffix='.jpg', seg_map_suffix='.png', frame_offset=-2, **kwargs):
+    def __init__(self, split, img_suffix='.jpg', seg_map_suffix='.png', frame_offset=-2, flow_suffix=".png", **kwargs):
         # breakpoint()
 
         CityscapesSeqDataset.__init__(
@@ -30,5 +30,6 @@ class BDDSeqDataset(SeqUtils, CityscapesSeqDataset):
             img_suffix=img_suffix,
             seg_map_suffix=seg_map_suffix,
             frame_offset=frame_offset,
+            flow_suffix=flow_suffix,
             **kwargs)
         SeqUtils.__init__(self)
