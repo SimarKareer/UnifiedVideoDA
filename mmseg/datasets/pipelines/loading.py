@@ -190,6 +190,8 @@ class LoadFlowFromFileStub(object):
             flow = torch.zeros(1024, 2048, 2)
         elif "SynthiaSeq" == dataset:
             flow = torch.zeros(760, 1280, 2)
+        elif "bdd" == dataset:
+            flow = torch.zeros(720, 1280, 2)
         # flow = torch.zeros(2, 1024, 1024)
         # results["flow"] = flow
 

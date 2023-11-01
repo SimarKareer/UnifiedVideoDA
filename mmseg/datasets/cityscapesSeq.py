@@ -21,7 +21,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
     fixed to '_gtFine_labelIds.png' for Cityscapes-seq dataset.
     """
 
-    def __init__(self, split, load_gt, img_suffix='_leftImg8bit.png', seg_map_suffix='_gtFine_labelTrainIds.png', frame_offset=1, flow_dir=None, crop_pseudo_margins=None, data_type="rgb", **kwargs):
+    def __init__(self, split, load_gt, img_suffix='_leftImg8bit.png', seg_map_suffix='_gtFine_labelTrainIds.png', frame_offset=1, flow_dir=None, crop_pseudo_margins=None, data_type="rgb", flow_suffix=None, ds=None, **kwargs):
         # breakpoint()
 
         CityscapesDataset.__init__(
@@ -33,6 +33,8 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
             load_annotations=False,
             **kwargs)
         SeqUtils.__init__(self)
+
+        self.flow_suffix = flow_suffix if flow_suffix is not None else img_suffix
         
         # breakpoint()
         self.unpack_list = "train" in split
@@ -52,7 +54,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
         self.flow_dir = flow_dir
         for i, offset in enumerate(frame_offset):
             self.seq_imgs.append(self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=offset))
-            seq_flow = None if flow_dir == None or flow_dir[i] == None else self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, img_prefix=flow_dir[i], frame_offset=offset)
+            seq_flow = None if flow_dir == None or flow_dir[i] == None else self.load_annotations_seq(self.img_dir, self.flow_suffix, self.ann_dir, self.seg_map_suffix, self.split, img_prefix=flow_dir[i], frame_offset=offset)
             self.seq_flows.append(seq_flow)
         
         zero_index = frame_offset.index(0)
@@ -60,7 +62,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
         self.img_infos = self.seq_imgs[zero_index]
         self.zero_index = zero_index
 
-        self.ds = "cityscapes-seq"
+        self.ds = "cityscapes-seq" if ds is None else ds
         
         self.data_type = data_type
 

@@ -66,7 +66,6 @@ class ACCELHRDAEncoderDecoder(HRDAEncoderDecoder):
         else:
             with_grad = super().forward(img_with_grad, img_metas, gt_semantic_seg, seg_weight=seg_weight, return_feat=return_feat, return_logits=True, masking_branch=masking_branch, reset_crop=False)
 
-        # breakpoint()
         fused_logits = []
 
         logit_name = "main" if with_aux else "decode.logits"
