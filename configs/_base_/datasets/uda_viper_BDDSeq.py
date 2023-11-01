@@ -13,7 +13,7 @@ bdd_val_flow_dir = "/coc/flash9/datasets/bdd100k_flow/t_t-1/frame_dist_2/backwar
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
-crop_size = (1024, 1024)
+crop_size = (720, 720)
 ignore_index = [5, 3, 16, 12, 201, 255]
 
 gta_train_pipeline = {
@@ -59,7 +59,7 @@ bdd_train_pipeline = {
         dict(type='LoadFlowFromFile'),
     ],
     "shared_pipeline": [
-        dict(type='Resize', img_scale=(2048, 1024)), # not sure since bdd is 720 x 1280
+        dict(type='Resize', img_scale=(1280, 720)), # not sure since bdd is 720 x 1280
         dict(type='RandomCrop', crop_size=crop_size),
         dict(type='RandomFlip', prob=0.5),
     ],
@@ -90,7 +90,7 @@ test_pipeline = {
         dict(type='LoadFlowFromFile'),
     ],
     "shared_pipeline": [
-        dict(type='Resize', keep_ratio=True, img_scale=(2048, 1024)),
+        dict(type='Resize', keep_ratio=True, img_scale=(1280, 720)),
         # dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
         dict(type='RandomFlip', prob=0.0),
     ],
