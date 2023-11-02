@@ -195,7 +195,6 @@ tools/exps/lwarp2
 tools/exps/lwarp
 *4.sh
 *6.sh
-*1.sh
 *5.sh
 # *_*.sh
 computationGraph.dot
