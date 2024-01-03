@@ -367,7 +367,8 @@ def multi_gpu_test(model,
 
             result_tk = None
             logit_result_tk = None
-            if (len(metrics) > 1 or metrics[0] != "mIoU")  and "imtk" in data:
+
+            if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
                 result_tk = model(return_loss=False, logits=return_logits, **refined_data)
 
@@ -376,37 +377,7 @@ def multi_gpu_test(model,
                     result_tk = [np.argmax(logit_result_tk[0], axis=0)]
                     logit_result_tk = [torch.from_numpy(logit_result_tk[0]).to(device)]
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
-        
-        # outputs the predcitions
-        # if show:
-        #     out_dir_1= "./mmseg/work_dirs/inference"
-
-        #     # use the function in dacs for this
-        #     # print(data["img_metas"][0].data[0][0]['ori_filename'])
-        #     # print(data["imtk_metas"][0].data[0][0]['ori_filename'][:-4])
-
-        #     img_parts_t = data["imtk_metas"][0].data[0][0]['ori_filename'].split('/')
-        #     img_parts_tk = data["imtk_metas"][0].data[0][0]['ori_filename'].split('/')
-
-        #     out_dir_1 = osp.join(out_dir_1, img_parts_t[0])
-
-        #     if not os.path.exists(out_dir_1):
-        #         os.makedirs(out_dir_1)
-
-        #     name_t = img_parts_t[1][:-4] + "_t.png"
-        #     name_tk = img_parts_tk[1][:-4] + "_tk.png"
-
-        #     # print(name_t, name_tk)
-        #     out_file_t = osp.join(out_dir_1, name_t)
-        #     out_file_tk = osp.join(out_dir_1, name_tk)
-
-        #     print(out_file_t , out_file_tk)
-
-        #     pred_t = output_preds(result[0].cpu(), cmap='cityscapes')
-        #     pred_t.save(out_file_t)
-
-        #     pred_tk = output_preds(result_tk[0].cpu(), cmap='cityscapes')
-        #     pred_tk.save(out_file_tk)
+    
 
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"

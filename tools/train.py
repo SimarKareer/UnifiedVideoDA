@@ -75,7 +75,7 @@ def parse_args(args):
     parser.add_argument('--optimizer', type=str, default=None, choices=["adamw", "sgd"])
 
     parser.add_argument('--analysis', type=bool, default=False)
-    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq"])
+    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq", "bdd"])
     parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--debug-mode', type=bool, default=False)
     parser.add_argument('--pre-exp-check', type=bool, default=False)

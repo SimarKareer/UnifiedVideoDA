@@ -6,40 +6,52 @@
 _base_ = [
     '../_base_/default_runtime.py',
     # DAFormer Network Architecture
-    '../_base_/models/deeplabv2red_r50-d8.py',
-    # GTA->Cityscapes High-Resolution Data Loading
-    '../_base_/datasets/uda_synthiaSeq_CSSeq.py',
+    '../_base_/models/daformer_sepaspp_mitb5.py',
+    # VIPER->BDD High-Resolution Data Loading
+    '../_base_/datasets/uda_viper_BDDSeq.py',
     # DAFormer Self-Training
-    '../_base_/uda/dacs_a999_fdthings.py',
+    '../_base_/uda/dacs_a999_fdthings_viper.py',
     # AdamW Optimizer
     '../_base_/schedules/adamw.py',
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
+# load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
+# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
+# resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
-model=dict(
-    pretrained='open-mmlab://resnet101_v1c',
-    backbone=dict(
-        depth=101),
-    decode_head=dict(
-        single_scale_head='DLV2Head',
-        type='HRDAHead',
-        attention_classwise=True,
-        hr_loss_weight=0.1),
+model = dict(
     type='HRDAEncoderDecoder',
+
+    decode_head=dict(
+        type='HRDAHead',
+        # Use the DAFormer decoder for each scale.
+        single_scale_head='DAFormerHead',
+        # Learn a scale attention for each class channel of the prediction.
+        attention_classwise=True,
+        # Set the detail loss weight $\lambda_d=0.1$.
+        hr_loss_weight=0.1),
+    # Use the full resolution for the detail crop and half the resolution for
+    # the context crop.
     scales=[1, 0.5],
+    # Use a relative crop size of 0.5 (=512/1024) for the detail crop.
     hr_crop_size=(512, 512),
+    # Use LR features for the Feature Distance as in the original DAFormer.
     feature_scale=0.5,
+    # Make the crop coordinates divisible by 8 (output stride = 4,
+    # downscale factor = 2) to ensure alignment during fusion.
     crop_coord_divisible=8,
+    # Use overlapping slide inference for detail crops for pseudo-labels.
     hr_slide_inference=True,
+    # Use overlapping slide inference for fused crops during test time.
     test_cfg=dict(
         mode='slide',
         batched_slide=True,
         stride=[512, 512],
         crop_size=[1024, 1024]))
-
 data = dict(
     train=dict(
         # Rare Class Sampling
@@ -119,13 +131,10 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
+
 checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=8000, eval_settings={
-<<<<<<< HEAD
     "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
-=======
-    "metrics": ["mIoU"],
->>>>>>> discrim
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
@@ -133,9 +142,9 @@ evaluation = dict(interval=8000, eval_settings={
     "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
-name = 'synthiaSeqHR2csHR_mic_hrda_s2'
+name = 'viperHR2bddHR_mic_hrda_s2'
 exp = 'basic'
-name_dataset = 'synthiaSeqHR2cityscapesHR_1024x1024'
+name_dataset = 'viperHR2bddHR_1024x1024'
 name_architecture = 'hrda1-512-0.1_daformer_sepaspp_sl_mitb5'
 name_encoder = 'mitb5'
 name_decoder = 'hrda1-512-0.1_daformer_sepaspp_sl'

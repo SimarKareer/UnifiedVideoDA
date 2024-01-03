@@ -265,7 +265,8 @@ def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False)
     indices[0] = (torch.arange(flow.shape[1])[:, None]).to(dev) + flow[1]
     indices[1] = (torch.arange(flow.shape[2])[None, :]).to(dev) + flow[0]
 
-    flow[:, indices[0] >= 840] = 0
+    topLimit = 840 if flow.shape[1] == 1024 else int(flow.shape[1] * .7)
+    flow[:, indices[0] >= topLimit] = 0
     flow[:, indices[0] < 0] = 0
     flow[:, indices[1] >= W] = 0
     flow[:, indices[1] < 0] = 0
