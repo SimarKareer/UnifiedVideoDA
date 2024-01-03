@@ -8,7 +8,7 @@ synthia_train_flow_dir = '/srv/share4/datasets/SynthiaSeq_Flow/frame_dist_1/forw
 
 # Backward
 bdd_train_flow_dir= "/coc/flash9/datasets/bdd100k_flow/t_t-1/frame_dist_2/backward/train/images"
-bdd_val_flow_dir = "/coc/flash9/datasets/bdd100k_flow/t_t-1/frame_dist_2/backward/val/images"
+bdd_val_flow_dir = "/coc/flash9/datasets/bdd100k_flow/t_t-1/frame_dist_2/backward/val_orig_10k/images"
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -139,8 +139,8 @@ data = dict(
     val=dict(
         type='BDDSeqDataset',
         data_root=bdd_data_root,
-        img_dir='val/images',
-        ann_dir='val/labels',
+        img_dir='val_orig_10k/images',
+        ann_dir='val_orig_10k/labels',
         split='splits/valid_imgs_val.txt',
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
@@ -150,8 +150,8 @@ data = dict(
     test=dict(
         type='BDDSeqDataset',
         data_root=bdd_data_root,
-        img_dir='val/images',
-        ann_dir='val/labels',
+        img_dir='val_orig_10k/images',
+        ann_dir='val_orig_10k/labels',
         split='splits/valid_imgs_val.txt',
         pipeline=test_pipeline,
         frame_offset=FRAME_OFFSET,
