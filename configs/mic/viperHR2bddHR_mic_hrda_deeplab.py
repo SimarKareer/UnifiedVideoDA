@@ -7,38 +7,52 @@ _base_ = [
     '../_base_/default_runtime.py',
     # DAFormer Network Architecture
     '../_base_/models/deeplabv2red_r50-d8.py',
-    # GTA->Cityscapes High-Resolution Data Loading
-    '../_base_/datasets/uda_synthiaSeq_CSSeq_512x512.py',
+    # VIPER->BDD High-Resolution Data Loading
+    '../_base_/datasets/uda_viper_BDDSeq.py',
     # DAFormer Self-Training
-    '../_base_/uda/dacs_a999_fdthings.py',
+    '../_base_/uda/dacs_a999_fdthings_viper.py',
     # AdamW Optimizer
     '../_base_/schedules/adamw.py',
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-
+# load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
+# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
+# resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
-model = dict(
+model=dict(
     pretrained='open-mmlab://resnet101_v1c',
     backbone=dict(
         depth=101),
-    type='EncoderDecoder',
     decode_head=dict(
-        type='DLV2Head'),
+        single_scale_head='DLV2Head',
+        type='HRDAHead',
+        attention_classwise=True,
+        hr_loss_weight=0.1),
+    # type='HRDAEncoderDecoder',
+    type='ACCELHRDAEncoderDecoder',
+    scales=[1, 0.5],
+    hr_crop_size=(360, 360),
+    feature_scale=0.5,
+    crop_coord_divisible=8,
+    hr_slide_inference=True,
     test_cfg=dict(
         mode='slide',
         batched_slide=True,
-        stride=[256, 256],
-        crop_size=[512, 512]))
+        stride=[360, 360],
+        crop_size=[720, 720]))
+
 data = dict(
     train=dict(
         # Rare Class Sampling
         # min_crop_ratio=2.0 for HRDA instead of min_crop_ratio=0.5 for
         # DAFormer as HRDA is trained with twice the input resolution, which
         # means that the inputs have 4 times more pixels.
-        rare_class_sampling=None,
+        rare_class_sampling=dict(
+            min_pixels=3000, class_temp=0.01, min_crop_ratio=2.0),
         # Pseudo-Label Cropping v2 (from HRDA):
         # Generate mask of the pseudo-label margins in the data loader before
         # the image itself is cropped to ensure that the pseudo-label margins
@@ -53,6 +67,7 @@ data = dict(
 )
 # MIC Parameters
 uda = dict(
+    video_discrim=False,
     # Apply masking to color-augmented target images
     mask_mode='separatetrgaug',
     # Use the same teacher alpha for MIC as for DAFormer
@@ -109,9 +124,9 @@ launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
+
 checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=8000, eval_settings={
-    # "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
     "metrics": ["mIoU"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
@@ -120,9 +135,9 @@ evaluation = dict(interval=8000, eval_settings={
     "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
-name = 'synthiaSeqHR2csHR_mic_hrda_s2'
+name = 'viperHR2bddHR_mic_hrda_s2'
 exp = 'basic'
-name_dataset = 'synthiaSeqHR2cityscapesHR_1024x1024'
+name_dataset = 'viperHR2bddHR_1024x1024'
 name_architecture = 'hrda1-512-0.1_daformer_sepaspp_sl_mitb5'
 name_encoder = 'mitb5'
 name_decoder = 'hrda1-512-0.1_daformer_sepaspp_sl'

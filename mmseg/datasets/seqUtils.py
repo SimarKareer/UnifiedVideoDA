@@ -271,8 +271,41 @@ class SeqUtils():
         data_out["img"] = data_out["img[0]"]
         data_out["gt_semantic_seg"] = data_out["gt_semantic_seg[0]"]
         data_out["flow"] = data_out["flow[0]"]
-        data_out["imtk"] = data_out["img[-1]"]
-        data_out["imtk_metas"] = data_out["img_metas"]
+
+        # alternatively, we can remap -4, -2, 0 to [-2, -1, 0]
+
+        if self.frame_offset == [-4, -2, 0]:
+            target_frame_offset = [-2, -1, 0]
+            new_data_out = {}
+            for old_dist, new_dist in zip(self.frame_offset, target_frame_offset):
+                for k in data_out.keys():
+                    if f"[{old_dist}]" in k:
+                        # print("Replacing: ", k, old_dist, new_dist)
+                        # print("adding key to new_data_out: ", k.replace(f"[{old_dist}]", f"[{new_dist}]"))
+                        new_data_out[k.replace(f"[{old_dist}]", f"[{new_dist}]")] = data_out[k]
+                    elif "[" not in k:
+                        # print("directly copying key: ", k)
+                        new_data_out[k] = data_out[k]
+        elif self.frame_offset == [-2, -1, 0]:
+            new_data_out = data_out
+        else:
+            assert False, "Unrecognized frame offset, define backwards compat for that offset here"
+
+            # data_out["img[-1]"] = data_out["img"]
+            # data_out["imtk"] = data_out["img[-2]"]
+
+
+        # if self.frame_offset == [-4, -2, 0]:
+        #     data_out["imtk"] = data_out["img[-2]"]
+        #     data_out["offsets"] = torch.tensor([[-4, -2, 0]])
+        # elif self.frame_offset == [-2, -1, 0]:
+        new_data_out["imtk"] = new_data_out["img[-1]"]
+        # new_data_out["offsets"] = torch.tensor([[-2, -1, 0]])
+        # else:
+        #     assert False, "Unrecognized frame offset, define imtk for that offset here"
+        new_data_out["imtk_metas"] = new_data_out["img_metas"]
+
+        return new_data_out
 
     def prepare_train_img(self, infos, idx, flow_infos=None):
         results = [dict(img_info=infos[i][idx], ann_info=self.get_ann_info(infos[i], idx)) for i in range(len(infos))]
@@ -343,7 +376,7 @@ class SeqUtils():
                 data_out[k] = torch.from_numpy(data_out[k])
         
         # for BW compaibility we can add all the original key names back in data_out
-        self.backwards_compat(data_out)
+        data_out = self.backwards_compat(data_out)
         
         # Put stuff in lists if it's eval time.
         if not self.unpack_list:

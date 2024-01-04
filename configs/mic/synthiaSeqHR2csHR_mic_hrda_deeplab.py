@@ -16,6 +16,8 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
+# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
+# resume_from = "./work_dirs/synthia_baseline/synthia_mic_base_short_2gpu02-26-19-05-24/iter_16000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -28,7 +30,8 @@ model=dict(
         type='HRDAHead',
         attention_classwise=True,
         hr_loss_weight=0.1),
-    type='HRDAEncoderDecoder',
+    type='ACCELHRDAEncoderDecoder',
+    # type='HRDAEncoderDecoder',
     scales=[1, 0.5],
     hr_crop_size=(512, 512),
     feature_scale=0.5,
@@ -62,6 +65,7 @@ data = dict(
 )
 # MIC Parameters
 uda = dict(
+    video_discrim=False,
     # Apply masking to color-augmented target images
     mask_mode='separatetrgaug',
     # Use the same teacher alpha for MIC as for DAFormer
@@ -112,7 +116,6 @@ optimizer_config = None
 #             head=dict(lr_mult=10.0),
 #             pos_block=dict(decay_mult=0.0),
 #             norm=dict(decay_mult=0.0))))
-# lr_config=None turns off LR schedule
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
@@ -120,15 +123,15 @@ runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=8000, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
-    "sub_metrics": ["mask_count"],
+    "metrics": ["mIoU"],
+    "sub_metrics": [],
     "pixelwise accuracy": True,
     "confusion matrix": True,
     "return_logits": False,
     "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
-name = 'synthiaSeqHR2csHR_mic_hrda_s2'
+name = 'synthiaSeqHR2csHR_mic_hrda_s2_corrected'
 exp = 'basic'
 name_dataset = 'synthiaSeqHR2cityscapesHR_1024x1024'
 name_architecture = 'hrda1-512-0.1_daformer_sepaspp_sl_mitb5'
