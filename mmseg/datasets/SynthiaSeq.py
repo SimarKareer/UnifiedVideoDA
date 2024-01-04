@@ -16,7 +16,7 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
     """Synthia Seq dataset with options for loading flow and neightboring frames.
     """
 
-    def __init__(self, split, load_gt, img_suffix='.png', seg_map_suffix='_labelTrainIds_updated.png', frame_offset=1, flow_dir=None, data_type="rgb", **kwargs):
+    def __init__(self, split, load_gt, img_suffix='.png', seg_map_suffix='_labelTrainIds_updated.png', frame_offset=1, flow_dir=None, data_type="rgb", flow_suffix=None, ds=None, **kwargs):
         SynthiaDataset.__init__(
             self, #must explicitly pass self
             split=split,
@@ -25,6 +25,8 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
             load_annotations=False,
             **kwargs)
         SeqUtils.__init__(self)
+
+        self.flow_suffix = flow_suffix if flow_suffix is not None else img_suffix
         
         self.seq_imgs = []
         self.seq_flows = []
@@ -33,7 +35,7 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
         self.flow_dir = flow_dir
         for i, offset in enumerate(frame_offset):
             self.seq_imgs.append(self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=offset))
-            seq_flow = None if flow_dir == None or flow_dir[i] == None else self.load_annotations_seq(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, img_prefix=flow_dir[i], frame_offset=offset)
+            seq_flow = None if flow_dir == None or flow_dir[i] == None else self.load_annotations_seq(self.img_dir, self.flow_suffix, self.ann_dir, self.seg_map_suffix, self.split, img_prefix=flow_dir[i], frame_offset=offset)
             self.seq_flows.append(seq_flow)
         
         zero_index = frame_offset.index(0)
@@ -41,7 +43,7 @@ class SynthiaSeqDataset(SeqUtils, SynthiaDataset):
         self.img_infos = self.seq_imgs[zero_index]
         self.zero_index = zero_index
 
-        self.ds = "SynthiaSeq"
+        self.ds = "SynthiaSeq" if ds is None else ds
         self.data_type = data_type
 
 

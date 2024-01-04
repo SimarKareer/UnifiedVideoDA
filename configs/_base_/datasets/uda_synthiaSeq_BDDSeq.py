@@ -1,16 +1,16 @@
 # dataset settings
 FRAME_OFFSET_BDD = [-4, -2, 0]
-FRAME_OFFSET_VIPER = [-2, -1, 0]
+FRAME_OFFSET_SYNTHIA = [-2, -1, 0]
 LOAD_GT = [False, False, True]
 
-dataset_type = 'ViperSeqDataset'
-viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
+dataset_type = 'SynthiaSeqDataset'
+synthia_data_root = '/srv/share4/datasets/SynthiaSeq/SYNTHIA-SEQS-04-DAWN'
 bdd_data_root = '/coc/flash9/datasets/bdd100k/videoda-subset'
 
-viper_train_flow_dir = [
+synthia_train_flow_dir = [
     None,
-    "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/t_neg_1/frame_dist_1/backward/train/img",
-    "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/backward/train/img"
+    '/srv/share4/datasets/SynthiaSeq_Flow/frame_dist_1/backward/train/RGB/Stereo_Left/Omni_F',
+    '/srv/share4/datasets/SynthiaSeq_Flow/frame_dist_1/backward/train/RGB/Stereo_Left/Omni_F'
 ]
 
 # Backward
@@ -30,9 +30,9 @@ img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
 crop_size = (720, 720)
-ignore_index = [5, 3, 16, 12, 201, 255]
+ignore_index = [3, 4, 9, 14, 15, 16, 17, 18, 201, 255] 
 
-gta_train_pipeline = {
+synthia_train_pipeline = {
     "im_load_pipeline": [
         dict(type='LoadImageFromFile'),
         dict(type='LoadAnnotations'),
@@ -47,7 +47,7 @@ gta_train_pipeline = {
         dict(type='LoadFlowFromFileStub'),
     ],
     "shared_pipeline": [
-        dict(type='Resize', img_scale=(2560, 1440)),
+        dict(type='Resize', img_scale=(2560, 1520)),
         dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
         dict(type='RandomFlip', prob=0.5),
     ],
@@ -139,15 +139,15 @@ data = dict(
     train=dict(
         type='UDADataset',
         source=dict(
-            type='ViperSeqDataset',
-            data_root=viper_data_root,
-            img_dir='train/img',
-            ann_dir='train/cls',
-            split='splits/train.txt',
-            pipeline=gta_train_pipeline,
-            frame_offset=FRAME_OFFSET_VIPER,
+            type='SynthiaSeqDataset',
+            data_root=synthia_data_root,
+            img_dir='RGB/Stereo_Left/Omni_F',
+            ann_dir='GT/LABELS/Stereo_Left/Omni_F',
+            split='splits/flow/backward/train2.txt',
+            pipeline=synthia_train_pipeline,
+            frame_offset=FRAME_OFFSET_SYNTHIA,
             load_gt = LOAD_GT,
-            flow_dir=viper_train_flow_dir,
+            flow_dir=synthia_train_flow_dir, 
         ),
         target=dict(
             type='BDDSeqDataset',
