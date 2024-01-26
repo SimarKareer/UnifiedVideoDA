@@ -21,7 +21,7 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
     fixed to '_gtFine_labelIds.png' for Cityscapes-seq dataset.
     """
 
-    def __init__(self, split, load_gt, img_suffix='_leftImg8bit.png', seg_map_suffix='_gtFine_labelTrainIds.png', frame_offset=1, flow_dir=None, crop_pseudo_margins=None, data_type="rgb",flow_suffix=None, **kwargs):
+    def __init__(self, split, load_gt, img_suffix='_leftImg8bit.png', seg_map_suffix='_gtFine_labelTrainIds.png', frame_offset=1, flow_dir=None, crop_pseudo_margins=None, data_type="rgb",flow_suffix=None, ds=None, **kwargs):
         # breakpoint()
 
         CityscapesDataset.__init__(
@@ -63,12 +63,17 @@ class CityscapesSeqDataset(SeqUtils, CityscapesDataset):
         self.img_infos = self.seq_imgs[zero_index]
         self.zero_index = zero_index
 
+        # setting indices for all frames used
+        self.im_idx = frame_offset[2]
+        self.imtk_idx = frame_offset[1]
+        self.imtktk_idx = frame_offset[0]
+
         # old (discrim)
         # self.fut_images = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=-frame_offset)
         # self.img_infos = self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
         # self.flows = None if self.flow_dir == None else self.load_annotations_seq(self.img_dir, self.flow_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=0)
 
-        self.ds = "cityscapes-seq"
+        self.ds = "cityscapes-seq" if ds is None else ds
         
         self.data_type = data_type
 

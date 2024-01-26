@@ -31,6 +31,11 @@ class ViperSeqDataset(SeqUtils, ViperDataset):
         self.frame_offset = frame_offset
         self.load_gt = load_gt
         self.flow_dir = flow_dir
+
+        self.im_idx = frame_offset[2]
+        self.imtk_idx = frame_offset[1]
+        self.imtktk_idx = frame_offset[0]
+        
         for i, offset in enumerate(frame_offset):
             self.seq_imgs.append(self.load_annotations_seq(self.img_dir, self.img_suffix, self.ann_dir, self.seg_map_suffix, self.split, frame_offset=offset))
             seq_flow = None if flow_dir == None or flow_dir[i] == None else self.load_annotations_seq(self.img_dir, ".png", self.ann_dir, self.seg_map_suffix, self.split, img_prefix=flow_dir[i], frame_offset=offset)

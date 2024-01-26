@@ -21,15 +21,17 @@ class BDDSeqDataset(CityscapesSeqDataset):
     fixed to '_gtFine_labelIds.png' for BDD-seq dataset.
     """
 
-    def __init__(self, split, img_suffix='.jpg', seg_map_suffix='.png', frame_offset=-2, flow_suffix=".png", **kwargs):
+    def __init__(self, split, load_gt, img_suffix='.jpg', seg_map_suffix='.png', frame_offset=-2, flow_suffix=".png", **kwargs):
         # breakpoint()
 
         CityscapesSeqDataset.__init__(
             self, #must explicitly pass self
             split,
+            load_gt,
             img_suffix=img_suffix,
             seg_map_suffix=seg_map_suffix,
             frame_offset=frame_offset,
             flow_suffix=flow_suffix,
+            ds="bdd",
             **kwargs)
         SeqUtils.__init__(self)

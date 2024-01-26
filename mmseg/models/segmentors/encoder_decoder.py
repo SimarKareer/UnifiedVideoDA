@@ -422,13 +422,13 @@ class EncoderDecoder(BaseSegmentor):
                         flow_imgs.append(flow[:, :, y1:y2, x1:x2] if flow is not None else None)
                     crops.append((y1, y2, x1, x2))
             crop_imgs = torch.cat(crop_imgs, dim=0)
-            flow_imgs = torch.cat(flow_imgs, dim=0)
             if flow is not None:
+                flow_imgs = torch.cat(flow_imgs, dim=0)
                 assert(img.shape[0] == 2 and crop_imgs.shape[0] == 6), "Hardcoded channel reordering for flow"
                 # Currently the channels are im1, im1tk, im2, im2tk, im3, im3tk (where each are sliding crops.)  ACCEL needs im1, im2, im3, im1tk, im2tk, im3tk
                 crop_imgs = crop_imgs[[0, 2, 4, 1, 2, 3]]
 
-            crop_seg_logits = self.encode_decode(crop_imgs, img_meta, flow=flow_imgs)
+            crop_seg_logits = self.encode_decode(crop_imgs, img_meta, flow=(flow_imgs if flow is not None else None))
 
             for i in range(len(crops)):
                 y1, y2, x1, x2 = crops[i]

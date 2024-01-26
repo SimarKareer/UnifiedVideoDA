@@ -53,8 +53,8 @@ class DACSAdvseg(DACS):
             raise NotImplementedError(self.discriminator_type)
 
         self.accel = isinstance(self.model, ACCELHRDAEncoderDecoder)
+
         
-    
     def adjust_learning_rate_D(self, optimizer, i_iter):
         coeff = (1 - i_iter / self.max_iters)**self.lr_D_power
         lr = (self.lr_D - self.lr_D_min) * coeff + self.lr_D_min
@@ -130,11 +130,17 @@ class DACSAdvseg(DACS):
         for param in self.model_D.module.parameters():
             param.requires_grad = False
 
-        pred = self.model.module.forward_with_aux(img, img_metas, img_extra["flow[0]"])
-        pred_tk = self.model.module.forward_with_aux(img_extra["imtk"], img_extra["imtk_metas"], img_extra["flow[-1]"])
-        pred_trg = self.model.module.forward_with_aux(target_img, target_img_metas, target_img_extra["flow[0]"])
-        pred_trg_tk = self.model.module.forward_with_aux(target_img_extra["imtk"], target_img_extra["imtk_metas"], target_img_extra["flow[-1]"])
-
+        if self.accel:
+            pred = self.model.module.forward_with_aux(img, img_metas, img_extra[f"flow[{self.im_idx}]"])
+            pred_tk = self.model.module.forward_with_aux(img_extra["imtk"], img_extra["imtk_metas"], img_extra[f"flow[{self.imtk_idx}]"])
+            pred_trg = self.model.module.forward_with_aux(target_img, target_img_metas, target_img_extra[f"flow[{self.im_idx}]"])
+            pred_trg_tk = self.model.module.forward_with_aux(target_img_extra["imtk"], target_img_extra["imtk_metas"], target_img_extra[f"flow[{self.imtk_idx}]"]) 
+        else:
+            pred = self.model.module.forward_with_aux(img, img_metas)
+            pred_tk = self.model.module.forward_with_aux(img_extra["imtk"], img_extra["imtk_metas"])
+            pred_trg = self.model.module.forward_with_aux(target_img, target_img_metas)
+            pred_trg_tk = self.model.module.forward_with_aux(target_img_extra["imtk"], target_img_extra["imtk_metas"])
+            
         if isinstance(self.model.module, HRDAEncoderDecoder):
             self.model.module.decode_head.reset_crop()
         

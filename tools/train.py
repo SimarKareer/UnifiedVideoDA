@@ -105,6 +105,7 @@ def parse_args(args):
     parser.add_argument('--l-warp-begin', type=int, default=None)
 
     parser.add_argument("--adv-scale", type=float, default=None)
+    parser.add_argument("--accel", type=bool, default=False)
 
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
@@ -377,7 +378,12 @@ def main(args):
         cfg.uda.adv_scale = args.adv_scale
         cfg.uda.video_discrim = True
     
+    if args.accel:
+        cfg.model.type = "ACCELHRDAEncoderDecoder"
     cfg.uda.ignore_index = cfg.ignore_index
+    cfg.uda.im_idx = cfg.im_idx
+    cfg.uda.imtk_idx = cfg.imtk_idx
+    cfg.uda.imtktk_idx = cfg.imtktk_idx
     
     # if args.modality:
     #     cfg.uda.multimodal = True

@@ -73,6 +73,7 @@ class DACS(UDADecorator):
 
     def __init__(self, **cfg):
         super(DACS, self).__init__(**cfg)
+
         self.local_iter = 0
         self.debug_mode = cfg["debug_mode"]
         self.max_iters = cfg['max_iters']
@@ -120,6 +121,12 @@ class DACS(UDADecorator):
         self.multimodal = cfg["modality"] != "rgb"
         self.modality = cfg["modality"]
         self.modality_dropout_weights = cfg["modality_dropout_weights"]
+
+        # keeping track of which frame img/info idx
+        self.im_idx =  cfg["im_idx"]
+        self.imtk_idx = cfg["imtk_idx"]
+        self.imtktk_idx = cfg["imtktk_idx"]
+
 
         self.ignore_index = cfg["ignore_index"]
         assert self.mix == 'class'
@@ -593,38 +600,41 @@ class DACS(UDADecorator):
         """
         Use img_extra to stack imt and imt-1, imt-1, imt-2 in the batch dimension
         """
-        img_extra["img"] = torch.cat((img_extra["img[0]"], img_extra["img[-1]"]), dim=0)
+        img_extra["img"] = torch.cat((img_extra[f"img[{self.im_idx}]"], img_extra[f"img[{self.imtk_idx}]"]), dim=0)
         img = img_extra["img"]
-        img_extra["imtk"] = torch.cat((img_extra["img[-1]"], img_extra["img[-2]"]), dim=0)
+        img_extra["imtk"] = torch.cat((img_extra[f"img[{self.imtk_idx}]"], img_extra[f"img[{self.imtktk_idx}]"]), dim=0)
 
         # if img_extra["gt_semantic_seg[-1]"].numel() != 0:
         #     img_extra["gt_semantic_seg"] = torch.cat((img_extra["gt_semantic_seg[0]"], img_extra["gt_semantic_seg[-1]"]), dim=0)
 
-        if "valid_pseudo_mask[0]" in img_extra:
-            img_extra["valid_pseudo_mask"] = img_extra.pop("valid_pseudo_mask[0]")
+        if f"valid_pseudo_mask[{self.im_idx}]" in img_extra:
+            img_extra["valid_pseudo_mask"] = img_extra.pop(f"valid_pseudo_mask[{self.im_idx}]")
 
         return img, img_metas, img_extra
 
     def legacy_format(self, img_extra, target_img_extra):
             # rename img_extras for this test
-            img_extra["imtk"] = img_extra.pop("img[-1]")
-            img_extra["imtk_gt_semantic_seg"] = img_extra.pop("gt_semantic_seg[-1]")
-            img_extra["imtk_flow"] = img_extra.pop("flow[-1]")
-            # img_extra["imtk_metas"] = img_extra.pop("img_metas[-1]")
-            img_extra["img"] = img_extra.pop("img[0]")
-            img_extra["gt_semantic_seg"] = img_extra.pop("gt_semantic_seg[0]")
-            img_extra["flow"] = img_extra.pop("flow[0]")
-            img_extra["img_metas"] = img_extra.pop("img_metas")
 
-            target_img_extra["imtk"] = target_img_extra.pop("img[-1]")
-            target_img_extra["imtk_gt_semantic_seg"] = target_img_extra.pop("gt_semantic_seg[-1]")
-            target_img_extra["imtk_flow"] = target_img_extra.pop("flow[-1]")
-            # target_img_extra["imtk_metas"] = target_img_extra.pop("img_metas[-1]")
-            target_img_extra["img"] = target_img_extra.pop("img[0]")
-            target_img_extra["gt_semantic_seg"] = target_img_extra.pop("gt_semantic_seg[0]")
-            target_img_extra["flow"] = target_img_extra.pop("flow[0]")
-            target_img_extra["img_metas"] = target_img_extra.pop("img_metas")
-            target_img_extra["valid_pseudo_mask"] = target_img_extra.pop("valid_pseudo_mask[0]")
+            # img_extra["imtk"] = img_extra.pop(f"img[{self.imtk_idx}]")
+            img_extra["imtk"] = img_extra[f"img[{self.imtk_idx}]"]
+
+            # img_extra["imtk_gt_semantic_seg"] = img_extra.pop(f"gt_semantic_seg[{self.imtk_idx}]")
+            # img_extra["imtk_flow"] = img_extra.pop(f"flow[{self.imtk_idx}]")
+            
+            img_extra["img"] = img_extra[f"img[{self.im_idx}]"]
+            # img_extra["gt_semantic_seg"] = img_extra.pop(f"gt_semantic_seg[{self.im_idx}]")
+            # img_extra["flow"] = img_extra.pop(f"flow[{self.im_idx}]")
+            # img_extra["img_metas"] = img_extra.pop("img_metas")
+
+            # target_img_extra["imtk"] = target_img_extra.pop(f"img[{self.imtk_idx}]")
+            # target_img_extra["imtk_gt_semantic_seg"] = target_img_extra.pop(f"gt_semantic_seg[{self.imtk_idx}]")
+            # target_img_extra["imtk_flow"] = target_img_extra.pop(f"flow[{self.imtk_idx}]")
+
+            target_img_extra["img"] = target_img_extra[f"img[{self.im_idx}]"]
+            # target_img_extra["gt_semantic_seg"] = target_img_extra.pop(f"gt_semantic_seg[{self.im_idx}]")
+            # target_img_extra["flow"] = target_img_extra.pop(f"flow[{self.im_idx}]")
+            # target_img_extra["img_metas"] = target_img_extra.pop("img_metas")
+            target_img_extra["valid_pseudo_mask"] = target_img_extra[f"valid_pseudo_mask[{self.im_idx}]"]
             # breakpoint()
 
 
@@ -644,7 +654,6 @@ class DACS(UDADecorator):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-
         if self.accel: # ACCEL
             img, img_metas, img_extra = self.accel_format(img, img_metas, img_extra)
             target_img, target_img_metas, target_img_extra = self.accel_format(target_img, target_img_metas, target_img_extra)
@@ -712,8 +721,10 @@ class DACS(UDADecorator):
         means, stds = get_mean_std(img_metas, dev)
 
         # Train on source images
-        clean_losses = self.model(img, img_metas, gt_semantic_seg, flow=img_extra["flow[0]"], return_feat=True)
-        # clean_losses = self.model(img, img_metas, gt_semantic_seg, return_feat=True)
+        if self.accel:
+            clean_losses = self.model(img, img_metas, gt_semantic_seg, flow=img_extra[f"flow[{self.im_idx}]"], return_feat=True)
+        else:
+            clean_losses = self.model(img, img_metas, gt_semantic_seg, return_feat=True)
         src_feat = clean_losses.pop('features')
         seg_debug['Source'] = self.get_model().debug_output
         clean_loss, clean_log_vars = self._parse_losses(clean_losses)
@@ -735,7 +746,12 @@ class DACS(UDADecorator):
 
         # ImageNet feature distance
         if self.enable_fdist:
-            feat_loss, feat_log = self.calc_feat_dist(img[:img.shape[0]//2], gt_semantic_seg,
+            #TODO: FIX THIS based on if accel or not 
+            if self.accel:
+                feat_loss, feat_log = self.calc_feat_dist(img[:img.shape[0]//2], gt_semantic_seg,
+                                                        src_feat)
+            else:
+                feat_loss, feat_log = self.calc_feat_dist(img, gt_semantic_seg,
                                                       src_feat)
             log_vars.update(add_prefix(feat_log, 'src'))
             feat_loss.backward()
@@ -763,11 +779,11 @@ class DACS(UDADecorator):
                     m.training = False
             
             if need_logits:
-                pseudo_label, pseudo_weight, logits_curr = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, return_logits=True, flow=target_img_extra["flow[0]"])
-                pseudo_label_fut, pseudo_weight_fut, logits_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, return_logits=True, flow=target_img_extra["flow[-1]"]) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+                pseudo_label, pseudo_weight, logits_curr = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, return_logits=True, flow=target_img_extra[f"flow[{self.im_idx}]"] if self.accel else None)
+                pseudo_label_fut, pseudo_weight_fut, logits_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, return_logits=True, flow=target_img_extra[f"flow[{self.imtk_idx}]"] if self.accel else None) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             else:
-                pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, flow=target_img_extra["flow[0]"])
-                pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, flow=target_img_extra["flow[-1]"]) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
+                pseudo_label, pseudo_weight = self.get_pl(target_img, target_img_metas, seg_debug, "Target", valid_pseudo_mask, flow=target_img_extra[f"flow[{self.im_idx}]"] if self.accel else None)
+                pseudo_label_fut, pseudo_weight_fut = self.get_pl(target_img_fut, target_img_fut_metas, None, None, valid_pseudo_mask, flow=target_img_extra[f"flow[{self.imtk_idx}]"] if self.accel else None) #This mask isn't dynamic so it's fine to use same for pl and pl_fut
             
             self.add_iou_metrics(pseudo_label, target_img_extra["gt_semantic_seg"], log_vars, name="PL Target-only")
             gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
@@ -989,10 +1005,10 @@ class DACS(UDADecorator):
 
                 if self.warp_cutmix:
                     if self.accel:
-                        mixed_im_warp, mixed_lbl_warp, mixed_seg_weight_warp, _, mixed_flow = self.get_mixed_im(pseudo_weight_warped, pseudo_label_warped, img, target_img, gt_semantic_seg, means, stds, img_extra["flow[0]"], target_img_extra["flow[0]"])
+                        mixed_im_warp, mixed_lbl_warp, mixed_seg_weight_warp, _, mixed_flow = self.get_mixed_im(pseudo_weight_warped, pseudo_label_warped, img, target_img, gt_semantic_seg, means, stds, img_extra[f"flow[{self.im_idx}]"], target_img_extra[f"flow[{self.im_idx}]"])
                         custom_loss = self.model(mixed_im_warp, target_img_metas, mixed_lbl_warp.view(B, 1, H, W), seg_weight=mixed_seg_weight_warp, flow=mixed_flow)
                     else:
-                        mixed_im_warp, mixed_lbl_warp, mixed_seg_weight_warp, _ = self.get_mixed_im(pseudo_weight_warped, pseudo_label_warped, img, target_img, gt_semantic_seg, means, stds)
+                        mixed_im_warp, mixed_lbl_warp, mixed_seg_weight_warp, _ = self.get_mixed_im(pseudo_weight_warped, pseudo_label_warped, img, target_img, gt_semantic_seg, means, stds, None, None)
                         custom_loss = self.model(mixed_im_warp, target_img_metas, mixed_lbl_warp.view(B, 1, H, W), seg_weight=mixed_seg_weight_warp)
 
                     if DEBUG:
@@ -1013,10 +1029,10 @@ class DACS(UDADecorator):
                         )
                     elif choice == 1: # Cutmix but no warp
                         if self.accel:
-                            mixed_img, mixed_lbl, mixed_seg_weight, mix_masks, mixed_flow = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, img_extra["flow[0]"], target_img_extra["flow[0]"])
+                            mixed_img, mixed_lbl, mixed_seg_weight, mix_masks, mixed_flow = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, img_extra[f"flow[{self.im_idx}]"], target_img_extra[f"flow[{self.im_idx}]"])
                             custom_loss = self.model(mixed_img, img_metas, mixed_lbl, seg_weight=mixed_seg_weight, return_feat=False, flow=mixed_flow)
                         else:
-                            mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds)
+                            mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, None, None)
                             custom_loss = self.model(mixed_img, img_metas, mixed_lbl, seg_weight=mixed_seg_weight, return_feat=False)
 
                         if DEBUG:
@@ -1031,9 +1047,10 @@ class DACS(UDADecorator):
                         # (mix_loss * self.l_mix_lambda).backward()
                 else:
                     if self.accel:
+                        custom_loss = self.model(target_img, target_img_metas, pseudo_label_warped.view(B, 1, H, W), seg_weight=pseudo_weight_warped, flow=target_img_extra[f"flow[{self.im_idx}]"])
                         custom_loss = self.model(target_img, target_img_metas, pseudo_label_warped.view(B, 1, H, W), seg_weight=pseudo_weight_warped)
                     else:
-                        custom_loss = self.model(target_img, target_img_metas, pseudo_label_warped.view(B, 1, H, W), seg_weight=pseudo_weight_warped, flow=target_img_extra["flow[0]"])
+                        custom_loss = self.model(target_img, target_img_metas, pseudo_label_warped.view(B, 1, H, W), seg_weight=pseudo_weight_warped)
                 warped_pl_loss, warped_pl_log_vars = self._parse_losses(custom_loss)
                 warped_pl_loss = warped_pl_loss * self.l_warp_lambda
                 log_vars["L_warp"] = warped_pl_log_vars["loss"]
@@ -1103,7 +1120,7 @@ class DACS(UDADecorator):
             if self.l_mix_lambda > 0:
                 # Apply mixing
                 if self.accel:
-                    mixed_img, mixed_lbl, mixed_seg_weight, mix_masks, mixed_flow = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, img_extra["flow[0]"], target_img_extra["flow[0]"])
+                    mixed_img, mixed_lbl, mixed_seg_weight, mix_masks, mixed_flow = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, img_extra[f"flow[{self.im_idx}]"], target_img_extra[f"flow[{self.im_idx}]"])
                     mix_losses = self.model(mixed_img, img_metas, mixed_lbl, seg_weight=mixed_seg_weight, return_feat=False, return_logits=True, flow=mixed_flow)
                 else:
                     mixed_img, mixed_lbl, mixed_seg_weight, mix_masks = self.get_mixed_im(pseudo_weight, pseudo_label, img, target_img, gt_semantic_seg, means, stds, None, None)
@@ -1140,7 +1157,7 @@ class DACS(UDADecorator):
                 masked_loss = self.mic(self.model, img, img_metas,
                                     gt_semantic_seg, target_img,
                                     target_img_metas, valid_pseudo_mask,
-                                    pseudo_label, pseudo_weight, img_extra["flow[0]"], target_img_extra["flow[0]"])
+                                    pseudo_label, pseudo_weight, img_extra[f"flow[{self.im_idx}]"], target_img_extra[f"flow[{self.im_idx}]"])
                 seg_debug.update(self.mic.debug_output)
                 masked_loss = add_prefix(masked_loss, 'masked')
                 masked_loss, masked_log_vars = self._parse_losses(masked_loss)

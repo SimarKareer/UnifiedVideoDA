@@ -1,43 +1,40 @@
 # dataset settings, for frame offset select the frames relative to 0 that you want, load_gt is whether the gt exists for that frame, flow_dir is the corresponding flow (None if unavailable)
-FRAME_OFFSET = [-2, -1, 0]
-LOAD_GT = [False, False, True]
 
+# accel setup
+im_idx = 0 # curr frame 
+imtk_idx = -1 # past frame 
+imtktk_idx = -2 # second past frame
+
+FRAME_OFFSET = [imtktk_idx, imtk_idx, im_idx]
+LOAD_GT = [False, False, True]
 
 dataset_type = 'ViperSeqDataset'
 viper_data_root = '/coc/testnvme/datasets/VideoDA/VIPER'
 cs_data_root = '/coc/testnvme/datasets/VideoDA/cityscapes-seq'
 
+
+# accel (Note: for single-frame setup: Do [None, None, flow dir])
 viper_train_flow_dir = [
     None,
     "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/t_neg_1/frame_dist_1/backward/train/img",
     "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/backward/train/img"
 ]
+# viper_train_flow_dir = [None, None, "/coc/testnvme/datasets/VideoDA/VIPER_gen_flow/frame_dist_1/backward/train/img"]
 
-# Forward (frame dist = 1)
-cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
-cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
-
-# for dist 3,6,10
-# cs_train_flow_dir = f'/srv/share4/datasets/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/train'
-# cs_val_flow_dir = f'/srv/share4/datasets/cityscapes-seq_Flow/flow_test_bed/frame_dist_{FRAME_OFFSET}/forward/val'
-
-
-# Backward
+# Backward (for single-frame setup: Do [None, None, flow dir])
 cs_train_flow_dir = [
     None,
     "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/future_flow/tk_1_flows/frame_dist_1/backward/train/",
     "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"
 ]
+# cs_train_flow_dir = [None, None, "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/train"]
+
 cs_val_flow_dir = [
     None,
     # "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/future_flow/tk_1_flows/frame_dist_1/backward/val",
     None,
     "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow_test_bed/frame_dist_1/backward/val"
 ]
-
-# Forward
-# cs_train_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/train"
-# cs_val_flow_dir = "/coc/testnvme/datasets/VideoDA/cityscapes-seq_Flow/flow/forward/val"
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)

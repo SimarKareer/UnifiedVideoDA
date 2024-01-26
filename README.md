@@ -55,12 +55,81 @@ The following files are where key changes were made:
 **Experiment Scripts**
 - `tools/experiments/*`
 
+## Dataset Setup (Cityscapes-Seq, Synthia-Seq, Viper)
+
+[TODO] 
+- download instructions to do this
+- show dataset structure for each
+- sample gen stats (may have to grab viper script from hrda repo)
+
+## Creating BDDVid VideoDA Shift
+We introduce support for a new target domain dataset derived from BDD10k, which to our knowledge has not been studied previously in the context of Video-DAS. BDD10k has a series of 10,000 driving images across a variety of conditions.  Of these 10,000 images, we identify 3,429 with valid corresponding video clips in the BDD100k dataset, making this subset suitable for Video-DAS. We refer to this subset as BDDVid. Next, we split these 3,429 images into 2,999 train samples and 430 evaluation samples. In BDD10k, the labeled frame is generally the 10th second in the 40-second clip, but not always. To mitigate this, we ultimately only evaluate images in BDD10k that perfectly correspond with the segmentation annotation, while at training time we use frames directly extracted from BDD100k video clips. The following instructions below will give detail in how to set up BDDVid Dataset.
+
+1. **Download Segmentation Labels for BDD10k (https://bdd-data.berkeley.edu/portal.html#download) images.**
+
+2. **Download all BDD100k video parts: **
+
+    `cd datasets/BDDVid/setup/download`
+
+    `python download.py --file_name bdd100k_video_links.txt`
+
+    Note: Make sure to specify the correct output directory in `download.py` for where you want the video zips to be stored.
+
+3. **Unzip all video files**
+
+    `cd ../unzip`
+
+    `python unzip.py`
+
+    Note: Make sure to specify the directory for where the video zips are stored and the output directory for where files should be unzipped in `unzip.py`
+
+4. **Unpack each video sequence and extract the corresponding frame**
+
+    `cd ../unpack_video`
+
+    Create a text file with paths to each video unzipped. Refer to `video_path_train.txt` and `video_path_val.txt` as an example.
+
+    `python unpack_video.py`
+
+    Note: You will run the script twice, based on the split we are unpacking for (train or val). Edit the `split` varibale to specify train or val, and the `file_path` variable, which refers to the list of all video paths for the given split.
+
+    Also, note that through experimentation and analysis, we determined frame 307 in the videos is the closest to the images in the BDD10k dataset. We deal with the possible slight label mismatch problem in later steps to counter this issue.
+
+5. **Download [BDD10k](https://bdd-data.berkeley.edu/portal.html#download) ("10k Images") and its labels ("Segmentation" tab), and unzip them.**
+
+6. **Copy Segmentation labels for train and val in BDDVid**
+
+    `cd ../bdd10k_img_labels`
+    `python grab_labels.py`
+
+    Note: Run this 2 times for each split (train, val). Edit the `orig_dataset` with the path to the original BDD10k  dataset train split, which was downlaoded in step 5.
+
+7. **Fix Image-Label Mismatch**
+
+    We will be creating 2 new folders to deal with the image-label mismatch at frame 307 described in step (4).
+
+    (1) `train_orig_10k`
+        - same as train, but the 307 frame is from the original BDD10k dataset. Use this directory for supervised BDD jobs
+
+    (2) `val_orig_10k`
+        - same as val, but the 307 frame is from the original BDD10k dataset. *ALWAYS* use this split, as we want to compute validation over the actual image and label. 
+
+    `python get_orig_images.py`
+
+    Note: Run this 2 times for each split (train, val). Edit the `orig_dataset` with the path to the original BDD10k dataset train spit, which was downloaded in step 5.
 
 
-## Reproducing Results
+BDDVid is finally setup! For UDA jobs, use the `train` and `val_orig_10k` split. For supervised jobs with BDDVid, use `train_orig_10k` and `val_orig_10k`.
+
+
+
+## Generated FLows
+[TODO] INSERT link and description to flow dataset
+
+
+## Reproducing Experiment Results
 
 All experiments conducted in the paper have corresponding scripts for reproducability inside the repository. 
-
 
 All experiment scripts are located in `tools/experiments/*`, with scripts being separated by the different shifts and VideoDA techniques.
 
@@ -168,5 +237,6 @@ Segformer Backbone:
 ### Other Shifts
 
 SynthiaSeq -> CityscapesSeq, SynthiaSeq -> BDDVid, ViperSeq --> BDDVid experiment scripts follow directory structure as the Viper Experiments. You can find all relevant experiments reported in the paper at `tools/experiments/*`.
+
 
 

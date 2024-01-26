@@ -25,6 +25,8 @@ from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_
 import torchvision.transforms as transforms
 import pickle as pkl
 from PIL import Image
+from mmseg.models.segmentors.accel_hrda_encoder_decoder import ACCELHRDAEncoderDecoder
+
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -345,17 +347,24 @@ def multi_gpu_test(model,
     it = 0
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
+            # img[0] and all are indices for the frame offsets, which are by defualt [0,-1,-2]. O is curr frame, -1 is imtk, -2 is imtktk
             if "flowVis" in data and model.module.multimodal:
                 refined_data = {
                     "img_metas": data["img_metas"], 
                     "img": [torch.cat([data["img"][0], three_channel_flow(data["flowVis"][0])], dim=1)]
                 }
-            else:
+            elif isinstance(model, ACCELHRDAEncoderDecoder):
                 refined_data = {
                     "img_metas": data["img_metas"], 
                     "img": [torch.cat((data["img[0]"][0], data["img[-1]"][0]), dim=0)],
                     "flow": data["flow[0]"][0]
                 }
+            else:
+                refined_data = {
+                    "img_metas": data["img_metas"], 
+                    "img": data["img[0]"]
+                }
+
             result = model(return_loss=False, logits=return_logits, **refined_data)
 
             logit_result = None
