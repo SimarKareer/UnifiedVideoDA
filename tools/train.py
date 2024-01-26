@@ -75,7 +75,7 @@ def parse_args(args):
     parser.add_argument('--optimizer', type=str, default=None, choices=["adamw", "sgd"])
 
     parser.add_argument('--analysis', type=bool, default=False)
-    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq"])
+    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq", "bdd"])
     parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--debug-mode', type=bool, default=False)
     parser.add_argument('--pre-exp-check', type=bool, default=False)
@@ -112,6 +112,10 @@ def parse_args(args):
     # parser.add_argument("--modality", type=str, default=None)
     parser.add_argument("--imnet-feature-dist-lambda", type=float, default=None)
     parser.add_argument("--modality-dropout-weights", nargs=3, metavar=("RGB Dropout", "Flow Dropout", "Neither Dropout"), type=float, default=None)
+    # hardcode slurm ntasks in environment
+
+    if "SLURM_NTASKS" not in os.environ:
+        os.environ["SLURM_NTASKS"] = str(1)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)

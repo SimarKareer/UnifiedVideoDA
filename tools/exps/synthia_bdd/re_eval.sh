@@ -1,0 +1,8 @@
+python tools/train.py configs/mic/synthiaSeqHR2bddHR_mic_hrda_deeplab.py --launcher=slurm --eval bdd --load-from ./work_dirs/synthia_bdd/bddcomb_synthiaSeq_noaccel_novideodisc_consis_11-01-14-13-00/iter_40000.pth --wandbid reeval_bddcomb_synthiaSeq_noaccel_novideodisc_consis_11-01-14-13-00
+python tools/train.py configs/mic/synthiaSeqHR2bddHR_mic_hrda_deeplab.py --launcher=slurm --eval bdd --load-from ./work_dirs/synthia_bdd/bddcomb_synthiaSeq_noaccel_videodisc_consis_11-01-14-13-00/iter_40000.pth --wandbid reeval_bddcomb_synthiaSeq_noaccel_videodisc_consis_11-01-14-13-00
+python tools/train.py configs/mic/synthiaSeqHR2bddHR_mic_hrda_deeplab.py --launcher=slurm --eval bdd --load-from ./work_dirs/synthia_bdd/bddcomb_synthiaSeq_noaccel_videodisc_noconsis_11-01-14-13-00/iter_40000.pth --wandbid reeval_bddcomb_synthiaSeq_noaccel_videodisc_noconsis_11-01-14-13-00
+python tools/train.py configs/mic/synthiaSeqHR2bddHR_mic_hrda_deeplab.py --launcher=slurm --eval bdd --load-from ./work_dirs/synthia_bdd/bddcomb_synthiaSeq_baseline_no_mic_11-01-14-13-00/iter_40000.pth --wandbid reeval_bddcomb_synthiaSeq_baseline_no_mic_11-01-14-13-00
+python tools/train.py configs/mic/synthiaSeqHR2bddHR_mic_hrda_deeplab.py --launcher=slurm --eval bdd --load-from /coc/scratch/vvijaykumar6/mmseg/work_dirs/analysisPaper/viper/synthia_hrda_dlv2_baseline_source08-27-10-57-15/iter_40000.pth --wandbid reeval_synthia_bdd_source_eval_vivek
+
+
+python tools/train.py configs/mic/synthiaSeqHR2bddHR_mic_hrda_deeplab.py --launcher=slurm --eval bdd --load-from ./work_dirs/synthia_bdd/bdd_dg_supervised_11-02-21-26-00_v2/iter_40000.pth --wandbid reeval_bdd_sup_on_synthia_eval

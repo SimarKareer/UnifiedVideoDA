@@ -62,6 +62,7 @@ data = dict(
 )
 # MIC Parameters
 uda = dict(
+    video_discrim=False,
     # Apply masking to color-augmented target images
     mask_mode='separatetrgaug',
     # Use the same teacher alpha for MIC as for DAFormer
@@ -120,7 +121,7 @@ runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
 evaluation = dict(interval=8000, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
+    "metrics": ["mIoU"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
