@@ -122,9 +122,9 @@ We introduce support for a new target domain dataset derived from BDD10k, which 
 BDDVid is finally setup! For UDA jobs, use the `train` and `val_orig_10k` split. For supervised jobs with BDDVid, use `train_orig_10k` and `val_orig_10k`.
 
 
+## Generated Flows Dataset
 
-## Generated FLows
-[TODO] INSERT link and description to flow dataset
+In order to leverage temporal information in videos, we heavily rely on the use of between sequential frames for many of our approaches. For each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows [here](https://github.com/drinkingcoder/FlowFormer-Official) for each dataset, and provide instructions for downloading each datasets flows.
 
 
 ## Reproducing Experiment Results
