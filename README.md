@@ -57,10 +57,41 @@ The following files are where key changes were made:
 
 ## Dataset Setup (Cityscapes-Seq, Synthia-Seq, Viper)
 
-[TODO] 
-- download instructions to do this
-- show dataset structure for each
-- sample gen stats (may have to grab viper script from hrda repo)
+Please download the following datasets, which will be used in Video-DAS experiments
+
+Datasets:
+* [Cityscapes-Seq](https://www.cityscapes-dataset.com/)
+```bash
+mmseg/datasets/cityscapesSeq/                       % dataset root
+mmseg/datasets/cityscapesSeq/leftImg8bit_sequence   % leftImg8bit_sequence_trainvaltest.zip
+mmseg/datasets/cityscapesSeq/gtFine                 % gtFine_trainvaltest.zip
+```
+
+* [Viper](https://playing-for-benchmarks.org/download/): 
+```bash
+mmseg/datasets/viper/                            % dataset root
+mmseg/datasets/viper/train/img                   % Images: Frames: *0, *1, *[2-9]; Sequences: 01-77; Format: jpg
+mmseg/datasets/viper/train/cls                   % Semantic Class Labels: Frames: *0, *1, *[2-9]; Sequences: 01-77; Format: png
+```
+
+* [Synthia-Seq](http://synthia-dataset.cvc.uab.cat/SYNTHIA_SEQS/SYNTHIA-SEQS-04-DAWN.rar) 
+
+We will use `SEQS-04-DAWN/RGB/Stereo_Left/Omni_F` and `SEQS-04-DAWN/GT/LABELS/Stereo_Left/Omni_F`
+```bash
+mmseg/datasets/viper/SynthiaSeq/                      % SYNTHIA-Seq dataset root
+mmseg/datasets/viper/SynthiaSeq/SYNTHIA-SEQS-04-DAWN      %SYNTHIA-SEQS-04-DAWN
+```
+
+After downlaoding all datasets, we must generate sample class statistics on our source datasets (Viper, Synthia-Seq) and convert class labels into Cityscapes-Seq classes.
+
+For both Viper and Synthia-Seq, perform the following:
+```bash
+python tools/convert_datasets/viper.py datasets/viper --gt-dir train/cls/
+
+python tools/convert_datasets/synthiaSeq.py datasets/SynthiaSeq/SYNTHIA-SEQS-04-DAWN --gt-dir GT/LABELS/Stereo_Left/Omni_F
+
+
+```
 
 ## Creating BDDVid VideoDA Shift
 We introduce support for a new target domain dataset derived from BDD10k, which to our knowledge has not been studied previously in the context of Video-DAS. BDD10k has a series of 10,000 driving images across a variety of conditions.  Of these 10,000 images, we identify 3,429 with valid corresponding video clips in the BDD100k dataset, making this subset suitable for Video-DAS. We refer to this subset as BDDVid. Next, we split these 3,429 images into 2,999 train samples and 430 evaluation samples. In BDD10k, the labeled frame is generally the 10th second in the 40-second clip, but not always. To mitigate this, we ultimately only evaluate images in BDD10k that perfectly correspond with the segmentation annotation, while at training time we use frames directly extracted from BDD100k video clips. The following instructions below will give detail in how to set up BDDVid Dataset.
@@ -69,27 +100,33 @@ We introduce support for a new target domain dataset derived from BDD10k, which 
 
 2. **Download all BDD100k video parts: **
 
-    `cd datasets/BDDVid/setup/download`
-
-    `python download.py --file_name bdd100k_video_links.txt`
+    ```bash
+    cd datasets/BDDVid/setup/download
+    python download.py --file_name bdd100k_video_links.txt
+    ```
 
     Note: Make sure to specify the correct output directory in `download.py` for where you want the video zips to be stored.
 
 3. **Unzip all video files**
 
-    `cd ../unzip`
-
-    `python unzip.py`
+    ```bash
+    cd ../unzip
+    python unzip.py
+    ```
 
     Note: Make sure to specify the directory for where the video zips are stored and the output directory for where files should be unzipped in `unzip.py`
 
 4. **Unpack each video sequence and extract the corresponding frame**
 
-    `cd ../unpack_video`
+   ```bash
+   cd ../unpack_video
+   ```
 
     Create a text file with paths to each video unzipped. Refer to `video_path_train.txt` and `video_path_val.txt` as an example.
 
-    `python unpack_video.py`
+    ```bash
+    python unpack_video.py
+    ```
 
     Note: You will run the script twice, based on the split we are unpacking for (train or val). Edit the `split` varibale to specify train or val, and the `file_path` variable, which refers to the list of all video paths for the given split.
 
@@ -99,8 +136,10 @@ We introduce support for a new target domain dataset derived from BDD10k, which 
 
 6. **Copy Segmentation labels for train and val in BDDVid**
 
-    `cd ../bdd10k_img_labels`
-    `python grab_labels.py`
+    ```bash
+    cd ../bdd10k_img_labels
+    python grab_labels.py
+    ```
 
     Note: Run this 2 times for each split (train, val). Edit the `orig_dataset` with the path to the original BDD10k  dataset train split, which was downlaoded in step 5.
 
@@ -114,7 +153,9 @@ We introduce support for a new target domain dataset derived from BDD10k, which 
     (2) `val_orig_10k`
         - same as val, but the 307 frame is from the original BDD10k dataset. *ALWAYS* use this split, as we want to compute validation over the actual image and label. 
 
-    `python get_orig_images.py`
+    ```bash
+    python get_orig_images.py
+    ```
 
     Note: Run this 2 times for each split (train, val). Edit the `orig_dataset` with the path to the original BDD10k dataset train spit, which was downloaded in step 5.
 
