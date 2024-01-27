@@ -75,7 +75,7 @@ def parse_args(args):
     parser.add_argument('--optimizer', type=str, default=None, choices=["adamw", "sgd"])
 
     parser.add_argument('--analysis', type=bool, default=False)
-    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq"])
+    parser.add_argument('--eval', type=str, default=None, choices=["viper", "csseq", "bdd"])
     parser.add_argument('--source-only2', type=bool, default=False)
     parser.add_argument('--debug-mode', type=bool, default=False)
     parser.add_argument('--pre-exp-check', type=bool, default=False)
@@ -86,6 +86,9 @@ def parse_args(args):
     parser.add_argument('--l-warp-lambda', type=float, default=None)
     parser.add_argument('--l-mix-lambda', type=float, default=None)
     parser.add_argument('--consis-filter', type=bool, default=False)
+    parser.add_argument('--consis-confidence-filter', type=bool, default=False)
+    parser.add_argument('--consis-confidence-thresh', type=float, default=None)
+    parser.add_argument('--consis-confidence-per-class-thresh', type=bool, default=False)
     parser.add_argument('--consis-filter-rare-class', type=bool, default=False)
     parser.add_argument('--pl-fill', type=bool, default=False)
     parser.add_argument('--bottom-pl-fill', type=bool, default=False)
@@ -95,8 +98,14 @@ def parse_args(args):
     parser.add_argument('--oracle-mask-noise-percent', type=float, default=0.0)
     parser.add_argument('--warp-cutmix', type=bool, default=False)
     parser.add_argument('--exclusive-warp-cutmix', type=bool, default=False)
+    parser.add_argument('--TPS-warp-pl-confidence', type=bool, default=False)
+    parser.add_argument('--TPS-warp-pl-confidence-thresh', type=float, default=0.0)
+    parser.add_argument('--max-confidence', type=bool, default=False)
     parser.add_argument('--no-masking', type=bool, default=False)
     parser.add_argument('--l-warp-begin', type=int, default=None)
+
+    parser.add_argument("--adv-scale", type=float, default=None)
+    parser.add_argument("--accel", type=bool, default=False)
 
     parser.add_argument("--class-mask-warp", type=str, default=None, choices=["thing", "stuff"])
     parser.add_argument("--class-mask-cutmix", type=str, default=None, choices=["thing", "stuff"])
@@ -104,6 +113,10 @@ def parse_args(args):
     # parser.add_argument("--modality", type=str, default=None)
     parser.add_argument("--imnet-feature-dist-lambda", type=float, default=None)
     parser.add_argument("--modality-dropout-weights", nargs=3, metavar=("RGB Dropout", "Flow Dropout", "Neither Dropout"), type=float, default=None)
+    # hardcode slurm ntasks in environment
+
+    if "SLURM_NTASKS" not in os.environ:
+        os.environ["SLURM_NTASKS"] = str(1)
     args = parser.parse_args(args)
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -243,7 +256,7 @@ def main(args):
         cfg.uda.stub_training = True
         if args.eval == "viper":
             cfg.data.val = get_viper_val(True)
-            cfg.data.val["data_type"] = "rgb+flowxynorm"
+            cfg.data.val["data_type"] = "rgb"
 
     
     if args.source_only2:
@@ -270,6 +283,16 @@ def main(args):
     if args.consis_filter:
         cfg.uda.consis_filter = True
     
+    if args.consis_confidence_filter:
+        cfg.uda.consis_confidence_filter = True
+    
+    if args.consis_confidence_thresh is not None:
+        cfg.uda.consis_confidence_thresh = args.consis_confidence_thresh
+        cfg.evaluation.eval_settings.consis_confidence_thresh = args.consis_confidence_thresh
+    
+    if args.consis_confidence_per_class_thresh is not None:
+        cfg.uda.consis_confidence_per_class_thresh = args.consis_confidence_per_class_thresh    
+    
     if args.consis_filter_rare_class:
         cfg.uda.consis_filter_rare_class = True
     
@@ -278,9 +301,6 @@ def main(args):
     
     if args.bottom_pl_fill:
         cfg.uda.bottom_pl_fill = True
-    
-    if args.consis_filter and args.pl_fill:
-        raise Exception("Don't use both consis_filter and pl_fill, it's the same as just plain PL")
     
     if args.oracle_mask:
         cfg.uda.oracle_mask = True
@@ -299,6 +319,10 @@ def main(args):
 
     if args.exclusive_warp_cutmix:
         cfg.uda.exclusive_warp_cutmix = True
+
+    if args.TPS_warp_pl_confidence:
+        cfg.uda.TPS_warp_pl_confidence = True
+        cfg.uda.TPS_warp_pl_confidence_thresh = args.TPS_warp_pl_confidence_thresh
 
     if args.l_warp_begin is not None:
         cfg.uda.l_warp_begin = args.l_warp_begin
@@ -339,7 +363,27 @@ def main(args):
     if args.modality_dropout_weights is not None:
         cfg.uda.modality_dropout_weights = args.modality_dropout_weights
     
+    if args.max_confidence:
+        cfg.uda.max_confidence = args.max_confidence
+
+    if args.adv_scale:
+        #Adversarial losses
+        cfg.uda.type="DACSAdvseg"
+        cfg.uda.discriminator_type='LS'
+        cfg.uda.lr_D=1e-4
+        cfg.uda.lr_D_power=0.9
+        cfg.uda.lr_D_min=0
+        cfg.uda.lambda_adv_target=dict(main=0.001, aux=0.0002)
+        cfg.uda.source_loss_advseg=False
+        cfg.uda.adv_scale = args.adv_scale
+        cfg.uda.video_discrim = True
+    
+    if args.accel:
+        cfg.model.type = "ACCELHRDAEncoderDecoder"
     cfg.uda.ignore_index = cfg.ignore_index
+    cfg.uda.im_idx = cfg.im_idx
+    cfg.uda.imtk_idx = cfg.imtk_idx
+    cfg.uda.imtktk_idx = cfg.imtktk_idx
     
     # if args.modality:
     #     cfg.uda.multimodal = True
@@ -350,6 +394,7 @@ def main(args):
     #     if not (len(cfg.evaluation.eval_settings.metrics) == 1 and cfg.evaluation.eval_settings.metrics[0] == "mIoU"):
     #         raise NotImplementedError("Only mIoU is valid for multimodal")
 
+    cfg.evaluation.eval_settings.work_dir = cfg.work_dir
     print("FINISHED INIT DIST")
 
     # create work_dir

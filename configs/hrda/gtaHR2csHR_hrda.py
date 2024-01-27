@@ -5,7 +5,6 @@
 # ---------------------------------------------------------------
 
 # Default HRDA Configuration for GTA->Cityscapes
-# SIMAR: currently I've messeg around here and it's set up for VIPER.  I should separate this into a separate file.
 _base_ = [
     '../_base_/default_runtime.py',
     # DAFormer Network Architecture
@@ -82,8 +81,6 @@ gpu_model = 'NVIDIATITANRTX'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
 checkpoint_config = dict(by_epoch=False, interval=40000, max_keep_ckpts=1)
-
-checkpoint = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/HRDA/gtaHR2csHR_hrda_246ef/iter_40000_relevant.pth"
 
 evaluation = dict(interval=4000, metric='mIoU')
 # Meta Information for Result Analysis

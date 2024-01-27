@@ -98,9 +98,9 @@ class UDADecorator(BaseSegmentor):
         """
         return self.get_model().inference(img, img_meta, rescale)
 
-    def simple_test(self, img, img_meta, rescale=True, logits=False):
+    def simple_test(self, img, img_meta, rescale=True, logits=False, flow=None):
         """Simple test with single image."""
-        return self.get_model().simple_test(img, img_meta, rescale, logits=logits)
+        return self.get_model().simple_test(img, img_meta, rescale, logits=logits, flow=flow)
 
     def aug_test(self, imgs, img_metas, rescale=True):
         """Test with augmentations.

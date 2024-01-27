@@ -21,8 +21,12 @@ from tqdm import tqdm
 import torch.distributed as dist
 import matplotlib.pyplot as plt
 from mmseg.utils.custom_utils import three_channel_flow
-from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis
+from mmseg.models.utils.visualization import prepare_debug_out, subplotimg, get_segmentation_error_vis, output_preds
 import torchvision.transforms as transforms
+import pickle as pkl
+from PIL import Image
+from mmseg.models.segmentors.accel_hrda_encoder_decoder import ACCELHRDAEncoderDecoder
+
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -155,9 +159,7 @@ def single_gpu_test(model,
     # data_fetcher -> collate_fn(dataset[index]) -> data_sample
     # we use batch_sampler to get correct data idx
     loader_indices = data_loader.batch_sampler
-    # cache=False
-    # cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
-    # use_cache = "/coc/testnvme/skareer6/Projects/VideoDA/mmsegmentation/work_dirs/sourceModelCache5/" #just for develpoment. RM LATER
+    # cache=Falsegit 
     
 
     if use_cache:
@@ -310,7 +312,7 @@ def multi_gpu_test(model,
     assert [efficient_test, pre_eval, format_only].count(True) <= 1, \
         '``efficient_test``, ``pre_eval`` and ``format_only`` are mutually ' \
         'exclusive, only one of them could be true .'
-    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"]
+    metrics, sub_metrics, return_pixelwise_acc, return_confusion_matrix, return_logits, consis_confidence_thresh = eval_settings["metrics"], eval_settings["sub_metrics"], eval_settings["pixelwise accuracy"], eval_settings["confusion matrix"], eval_settings['return_logits'], eval_settings['consis_confidence_thresh']
 
     device = model.module.model.device
     print("TESTING METRICS: ", metrics)
@@ -345,29 +347,52 @@ def multi_gpu_test(model,
     it = 0
     for batch_indices, data in zip(loader_indices, data_loader):
         with torch.no_grad():
+            # img[0] and all are indices for the frame offsets, which are by defualt [0,-1,-2]. O is curr frame, -1 is imtk, -2 is imtktk
             if "flowVis" in data and model.module.multimodal:
                 refined_data = {
                     "img_metas": data["img_metas"], 
                     "img": [torch.cat([data["img"][0], three_channel_flow(data["flowVis"][0])], dim=1)]
                 }
+            elif isinstance(model, ACCELHRDAEncoderDecoder):
+                refined_data = {
+                    "img_metas": data["img_metas"], 
+                    "img": [torch.cat((data["img[0]"][0], data["img[-1]"][0]), dim=0)],
+                    "flow": data["flow[0]"][0]
+                }
             else:
                 refined_data = {
                     "img_metas": data["img_metas"], 
-                    "img": data["img"]
+                    "img": data["img[0]"]
                 }
-            result = model(return_loss=False, logits=False, **refined_data)
+
+            result = model(return_loss=False, logits=return_logits, **refined_data)
+
+            logit_result = None
+            if return_logits:
+                logit_result = result
+                result = [np.argmax(logit_result[0], axis=0)]
+                logit_result = [torch.from_numpy(logit_result[0]).to(device)]
+                
             result[0] = torch.from_numpy(result[0]).to(device)
 
             result_tk = None
+            logit_result_tk = None
+
             if len(metrics) > 1 or metrics[0] != "mIoU":
                 refined_data = {"img_metas": data["imtk_metas"], "img": data["imtk"]}
-                result_tk = model(return_loss=False, logits=False, **refined_data)
+                result_tk = model(return_loss=False, logits=return_logits, **refined_data)
+
+                if return_logits:
+                    logit_result_tk = result_tk
+                    result_tk = [np.argmax(logit_result_tk[0], axis=0)]
+                    logit_result_tk = [torch.from_numpy(logit_result_tk[0]).to(device)]
                 result_tk[0] = torch.from_numpy(result_tk[0]).to(device)
-        
+    
+
         if metrics:
             assert "gt_semantic_seg" in data, "Not compatible with current dataloader"
 
-            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix)
+            eval_vals = dataset.pre_eval_dataloader_consis(curr_preds=result, data=data, future_preds=result_tk, metrics=eval_metrics, sub_metrics=sub_metrics, return_pixelwise_acc=return_pixelwise_acc, return_confusion_matrix=return_confusion_matrix, result_logits=logit_result, result_tk_logits=logit_result_tk, consis_confidence_thresh=consis_confidence_thresh)
 
             if out_dir:
                 intersection, union, _,_  = eval_vals[0]
@@ -422,6 +447,18 @@ def multi_gpu_test(model,
         dataset.confusion_matrix[met] = dataset.confusion_matrix[met].cuda()
         dist.all_reduce(dataset.confusion_matrix[met], op=dist.ReduceOp.SUM)
 
+    def dict_cpu(d1):
+        return {k: v.cpu() for k, v in d1.items()}
+
+    if rank == 0:
+        all_metrics = {"cml_intersect": dict_cpu(dataset.cml_intersect),
+                "cml_union": dict_cpu(dataset.cml_union),
+                "pixelwise_correct": dict_cpu(dataset.pixelwise_correct),
+                "pixelwise_total": dict_cpu(dataset.pixelwise_total),
+                "confusion_matrix": dict_cpu(dataset.confusion_matrix)}
+        with open(os.path.join(eval_settings['work_dir'], "eval_results.pkl"), 'wb') as f:
+            pkl.dump(all_metrics, f)
+    
     if rank == 0:
         dataset.formatAllMetrics(metrics=metrics, sub_metrics=sub_metrics)
     dataset.init_cml_metrics()

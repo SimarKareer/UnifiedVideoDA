@@ -157,3 +157,27 @@ def subplotimg(ax,
     ax.imshow(img, **kwargs)
     if title is not None:
         ax.set_title(title)
+
+def output_preds(img, palette=Cityscapes_palette, **kwargs):
+    if img is None:
+        return
+    with torch.no_grad():
+        if torch.is_tensor(img):
+            img = img.cpu()
+        if len(img.shape) == 2:
+            if torch.is_tensor(img):
+                img = img.numpy()
+        elif img.shape[0] == 1:
+            if torch.is_tensor(img):
+                img = img.numpy()
+            img = img.squeeze(0)
+        elif img.shape[0] == 3:
+            img = img.permute(1, 2, 0)
+            if not torch.is_tensor(img):
+                img = img.numpy()
+        if kwargs.get('cmap', '') == 'cityscapes':
+            kwargs.pop('cmap')
+            if torch.is_tensor(img):
+                img = img.numpy()
+            img = colorize_mask(img, palette)
+    return img

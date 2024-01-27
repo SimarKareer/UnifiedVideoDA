@@ -103,7 +103,7 @@ class EncoderDecoder(BaseSegmentor):
 
         return out
 
-    def encode_decode(self, img, img_metas, upscale_pred=True):
+    def encode_decode(self, img, img_metas, upscale_pred=True, flow=None):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         x = self.extract_feat(img)
@@ -383,7 +383,7 @@ class EncoderDecoder(BaseSegmentor):
             del self.debug_output
 
     # TODO refactor
-    def slide_inference(self, img, img_meta, rescale):
+    def slide_inference(self, img, img_meta, rescale, flow=None):
         """Inference by sliding-window with overlap.
 
         If h_crop > h_img or w_crop > w_img, the small patch will be used to
@@ -393,7 +393,11 @@ class EncoderDecoder(BaseSegmentor):
         h_stride, w_stride = self.test_cfg.stride
         h_crop, w_crop = self.test_cfg.crop_size
         batched_slide = self.test_cfg.get('batched_slide', False)
-        batch_size, _, h_img, w_img = img.size()
+        if flow is not None:
+            assert self.accel, "Only ACCELHRDAEncoderDecoder supports flow"
+            batch_size, _, h_img, w_img = flow.size()
+        else:
+            batch_size, _, h_img, w_img = img.size()
         num_classes = self.num_classes
         h_grids = max(h_img - h_crop + h_stride - 1, 0) // h_stride + 1
         w_grids = max(w_img - w_crop + w_stride - 1, 0) // w_stride + 1
@@ -401,6 +405,8 @@ class EncoderDecoder(BaseSegmentor):
         count_mat = img.new_zeros((batch_size, 1, h_img, w_img))
         if batched_slide:
             crop_imgs, crops = [], []
+            if flow is not None:
+                flow_imgs = []
             for h_idx in range(h_grids):
                 for w_idx in range(w_grids):
                     y1 = h_idx * h_stride
@@ -411,9 +417,19 @@ class EncoderDecoder(BaseSegmentor):
                     x1 = max(x2 - w_crop, 0)
                     crop_img = img[:, :, y1:y2, x1:x2]
                     crop_imgs.append(crop_img)
+                    if flow is not None:
+                        assert(flow.shape[0] == 1), "Assumed batch size of 1"
+                        flow_imgs.append(flow[:, :, y1:y2, x1:x2] if flow is not None else None)
                     crops.append((y1, y2, x1, x2))
             crop_imgs = torch.cat(crop_imgs, dim=0)
-            crop_seg_logits = self.encode_decode(crop_imgs, img_meta)
+            if flow is not None:
+                flow_imgs = torch.cat(flow_imgs, dim=0)
+                assert(img.shape[0] == 2 and crop_imgs.shape[0] == 6), "Hardcoded channel reordering for flow"
+                # Currently the channels are im1, im1tk, im2, im2tk, im3, im3tk (where each are sliding crops.)  ACCEL needs im1, im2, im3, im1tk, im2tk, im3tk
+                crop_imgs = crop_imgs[[0, 2, 4, 1, 2, 3]]
+
+            crop_seg_logits = self.encode_decode(crop_imgs, img_meta, flow=(flow_imgs if flow is not None else None))
+
             for i in range(len(crops)):
                 y1, y2, x1, x2 = crops[i]
                 crop_seg_logit = \
@@ -424,6 +440,8 @@ class EncoderDecoder(BaseSegmentor):
 
                 count_mat[:, :, y1:y2, x1:x2] += 1
         else:
+            if flow is not None:
+                assert False, "Didn't implement ACCEL here"
             for h_idx in range(h_grids):
                 for w_idx in range(w_grids):
                     y1 = h_idx * h_stride
@@ -433,7 +451,7 @@ class EncoderDecoder(BaseSegmentor):
                     y1 = max(y2 - h_crop, 0)
                     x1 = max(x2 - w_crop, 0)
                     crop_img = img[:, :, y1:y2, x1:x2]
-                    crop_seg_logit = self.encode_decode(crop_img, img_meta)
+                    crop_seg_logit = self.encode_decode(crop_img, img_meta, flow=flow)
                     preds += F.pad(crop_seg_logit,
                                    (int(x1), int(preds.shape[3] - x2), int(y1),
                                     int(preds.shape[2] - y2)))
@@ -457,7 +475,7 @@ class EncoderDecoder(BaseSegmentor):
     def whole_inference(self, img, img_meta, rescale):
         """Inference with full image."""
 
-        seg_logit = self.encode_decode(img, img_meta)
+        seg_logit = self.encode_decode(img, img_meta, flow=flow)
         if rescale:
             # support dynamic shape for onnx
             if torch.onnx.is_in_onnx_export():
@@ -473,7 +491,7 @@ class EncoderDecoder(BaseSegmentor):
 
         return seg_logit
 
-    def inference(self, img, img_meta, rescale):
+    def inference(self, img, img_meta, rescale, flow=None):
         """Inference with slide/whole style.
 
         Args:
@@ -493,9 +511,9 @@ class EncoderDecoder(BaseSegmentor):
         ori_shape = img_meta[0]['ori_shape']
         assert all(_['ori_shape'] == ori_shape for _ in img_meta)
         if self.test_cfg.mode == 'slide':
-            seg_logit = self.slide_inference(img, img_meta, rescale)
+            seg_logit = self.slide_inference(img, img_meta, rescale, flow=flow)
         else:
-            seg_logit = self.whole_inference(img, img_meta, rescale)
+            seg_logit = self.whole_inference(img, img_meta, rescale, flow=flow)
         if hasattr(self.decode_head, 'debug_output_attention') and \
                 self.decode_head.debug_output_attention:
             output = seg_logit
@@ -512,14 +530,14 @@ class EncoderDecoder(BaseSegmentor):
 
         return output
 
-    def simple_test(self, img, img_meta, rescale=True, logits=False):
+    def simple_test(self, img, img_meta, rescale=True, logits=False, flow=None):
         """Simple test with single image."""
         if logits:
-            seg_logit = self.inference(img, img_meta, rescale)
+            seg_logit = self.inference(img, img_meta, rescale, flow=flow)
             seg_logit = seg_logit.cpu().numpy()
             return seg_logit
 
-        seg_logit = self.inference(img, img_meta, rescale)
+        seg_logit = self.inference(img, img_meta, rescale, flow=flow)
         if hasattr(self.decode_head, 'debug_output_attention') and \
                 self.decode_head.debug_output_attention:
             seg_pred = seg_logit[:, 0]

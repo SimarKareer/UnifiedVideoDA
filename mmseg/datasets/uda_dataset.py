@@ -132,7 +132,7 @@ class UDADataset(object):
         s1 = self.source[i1]
         if self.rcs_min_crop_ratio > 0:
             for j in range(10):
-                n_class = torch.sum(s1['gt_semantic_seg'].data == c)
+                n_class = torch.sum(s1['gt_semantic_seg[0]'].data == c)
                 # mmcv.print_log(f'{j}: {n_class}', 'mmseg')
                 if n_class > self.rcs_min_pixels * self.rcs_min_crop_ratio:
                     break
@@ -183,8 +183,8 @@ class UDADataset(object):
         Generate output, make sure s1 and s2 have already been synchronize cropped!
         """
         out = {
-            "img": s1["img"], "img_metas": s1["img_metas"], "img_extra": s1, 
-            'target_img': s2['img'], 'target_img_metas': s2['img_metas'], "target_img_extra": s2,
+            "img": s1["img[0]"], "img_metas": s1["img_metas"], "img_extra": s1, 
+            'target_img': s2['img[0]'], 'target_img_metas': s2['img_metas'], "target_img_extra": s2,
         }
 
         return out

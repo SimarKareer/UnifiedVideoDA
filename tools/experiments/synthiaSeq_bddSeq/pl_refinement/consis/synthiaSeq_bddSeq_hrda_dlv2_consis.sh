@@ -1,0 +1,3 @@
+#!/bin/bash
+EXP_NAME=synthiaSeq_csSeq_hrda_video_disrim_pl_refinement_consis
+python ./tools/train.py configs/mic/synthiaSeqHR2bddHR_mic_hrda_deeplab.py --launcher=slurm --l-warp-lambda=1.0 --l-warp-begin=1500 --l-mix-lambda=0.0 --warp-cutmix True --bottom-pl-fill True --consis-filter True --no-masking True --seed 1 --deterministic --work-dir=./work_dirs/synthia_bdd/$EXP_NAME --auto-resume True --wandbid $EXP_NAME$T

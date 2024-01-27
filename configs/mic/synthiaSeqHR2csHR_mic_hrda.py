@@ -16,8 +16,7 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-# resume_from = "./work_dirs/synthia_baseline/synthia_mic_base_short_2gpu02-26-19-05-24/iter_16000.pth"
+
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -65,7 +64,7 @@ data = dict(
         target=dict(crop_pseudo_margins=[30, 240, 30, 30]),
     ),
     # Use one separate thread/worker for data loading.
-    workers_per_gpu=2,
+    workers_per_gpu=3,
     # Batch size
     samples_per_gpu=2,
 )
@@ -83,29 +82,58 @@ uda = dict(
     mask_lambda=1,
     # Use random patch masking with a patch size of 64x64
     # and a mask ratio of 0.7
-    l_warp_lambda=0,
-    l_mix_lambda=1.0,
+    l_warp_lambda=1.0,
+    l_mix_lambda=0.0,
+    consis_filter=False,
+    consis_confidence_filter=False,
+    consis_confidence_thresh=0,
+    consis_confidence_per_class_thresh=False,
+    consis_filter_rare_class=False,
+    pl_fill=False,
+    bottom_pl_fill=False,
     source_only2=False,
+    oracle_mask=False,
+    warp_cutmix=False,
+    stub_training=False,
+    l_warp_begin=1500,
     mask_generator=dict(
         type='block', mask_ratio=0.7, mask_block_size=64, _delete_=True),
     debug_mode=False,
+    class_mask_warp=None,
+    class_mask_cutmix=None,
+    exclusive_warp_cutmix=False,
+    modality="rgb",
+    modality_dropout_weights=None,
+    oracle_mask_add_noise=False,
+    oracle_mask_remove_pix=False,
+    oracle_mask_noise_percent=0.0,
+    TPS_warp_pl_confidence=False,
+    TPS_warp_pl_confidence_thresh=0.0,
+    max_confidence=False
 )
 # Optimizer Hyperparameters
 optimizer_config = None
-optimizer = dict(
-    lr=6e-05,
-    paramwise_cfg=dict(
-        custom_keys=dict(
-            head=dict(lr_mult=10.0),
-            pos_block=dict(decay_mult=0.0),
-            norm=dict(decay_mult=0.0))))
+# optimizer = dict(
+#     lr=6e-05,
+#     paramwise_cfg=dict(
+#         custom_keys=dict(
+#             head=dict(lr_mult=10.0),
+#             pos_block=dict(decay_mult=0.0),
+#             norm=dict(decay_mult=0.0))))
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
 runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=4000, max_keep_ckpts=8)
-evaluation = dict(interval=2000, metric='mIoU', metrics=["mIoU", "pred_pred", "gt_pred", "M5", "mIoU_gt_pred"])
+checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
+evaluation = dict(interval=8000, eval_settings={
+    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
+    "sub_metrics": ["mask_count"],
+    "pixelwise accuracy": True,
+    "confusion matrix": True,
+    "return_logits": False,
+    "consis_confidence_thresh": 0.95
+})
 # Meta Information for Result Analysis
 name = 'synthiaSeqHR2csHR_mic_hrda_s2_corrected'
 exp = 'basic'

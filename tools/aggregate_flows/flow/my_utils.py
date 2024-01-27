@@ -241,10 +241,26 @@ def errorVizClasses(prediction, gt):
     # out[gt == prediction] = prediction[gt == prediction]
     return out
 
-
-
-
 def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False):
+    """
+    returns im backpropped as if it was im1
+    flow: torch.Tensor H, W, 2 or B, H, W, 2
+    im: torch.Tensor H, W, 3 or B, H, W, 3
+    """
+    if len(flow_orig.shape) == 3:
+        return backpropFlowHelper(flow_orig, im_orig, return_mask_count=return_mask_count, return_mask=return_mask)
+    elif len(flow_orig.shape) == 4:
+        # shape 0 is batch size
+        output = []
+        for i in range(flow_orig.shape[0]):
+            output.append(backpropFlowHelper(flow_orig[i], im_orig[i], return_mask_count=False, return_mask=False))
+        
+        return torch.stack(output)
+        
+
+
+
+def backpropFlowHelper(flow_orig, im_orig, return_mask_count=False, return_mask=False):
     """
     returns im backpropped as if it was im1
     flow: torch.Tensor H, W, 2
@@ -265,7 +281,8 @@ def backpropFlow(flow_orig, im_orig, return_mask_count=False, return_mask=False)
     indices[0] = (torch.arange(flow.shape[1])[:, None]).to(dev) + flow[1]
     indices[1] = (torch.arange(flow.shape[2])[None, :]).to(dev) + flow[0]
 
-    flow[:, indices[0] >= 840] = 0
+    topLimit = 840 if flow.shape[1] == 1024 else int(flow.shape[1] * .7)
+    flow[:, indices[0] >= topLimit] = 0
     flow[:, indices[0] < 0] = 0
     flow[:, indices[1] >= W] = 0
     flow[:, indices[1] < 0] = 0
@@ -489,10 +506,11 @@ palette_to_id = [
     ([50,0,90], 31)
 ]
 
-def rare_class_or_filter(pl1, pl2):
+def rare_class_or_filter(pl1, pl2, rare_common_compare=False):
         """
         pl1: (B, H, W)
         pl2: (B, H, W)
+        rare_common_compare: boolean that determines whether to do priority of rarity between classes, or just abs if it belongs to "rare" or "common" group
         returns a pseudolabel which keeps consistent pixels, and masks out inconsistent pixels except when the pixel is rare.  In the case that both pl1 and pl2 are rare take the more rare pixel
         """
         # most to least rare
@@ -514,13 +532,21 @@ def rare_class_or_filter(pl1, pl2):
         # print("output1", output)
         output[consistent_pixels] = pl1[consistent_pixels]
         # print("output2", output)
+        
+        if rare_common_compare:
+            #only take prediction if one is rare and other is common
+            pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl2_rarity >= rarity_thresh)
+            output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
 
+            pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl1_rarity >= rarity_thresh)
+            output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
 
-        pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl1_rarity < pl2_rarity)
-        output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
+        else:
+            pl1_rarer_and_inconsistent = inconsis_pixels & (pl1_rarity < rarity_thresh) & (pl1_rarity < pl2_rarity)
+            output[pl1_rarer_and_inconsistent] = pl1[pl1_rarer_and_inconsistent]
 
-        pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl2_rarity < pl1_rarity)
-        output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
+            pl2_rarer_and_inconsistent = inconsis_pixels & (pl2_rarity < rarity_thresh) & (pl2_rarity < pl1_rarity)
+            output[pl2_rarer_and_inconsistent] = pl2[pl2_rarer_and_inconsistent]
         # breakpoint()
 
         return output
@@ -529,3 +555,49 @@ invNorm = transforms.Compose([
     transforms.Normalize(mean = [ 0., 0., 0. ], std = [ 1/0.229, 1/0.224, 1/0.225 ]), #Using some other dataset mean and std
     transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ], std = [ 1., 1., 1. ])
 ])
+
+class CircularTensor:
+    def __init__(self, max_length):
+        self.max_length = max_length
+        self.buffer = torch.zeros(max_length, dtype=torch.double)
+        self.idx = 0
+        self.full = False
+    def append(self, data):
+        if data.ndim > 1:
+            raise Exception("Passed in data does not have ndim = 1")
+        
+        if data.size()[0] > self.max_length:
+            raise Exception("Data length is greater than max_length")
+        
+        # now dealign with adding to list
+        
+        idx_start = self.idx % self.max_length
+        idx_end = (self.idx + data.size()[0]) % self.max_length
+
+        if idx_start >= idx_end:
+            if not self.full:
+                self.full = True
+
+            len1 = self.max_length - idx_start
+            self.buffer[idx_start: self.max_length] = data[:len1]
+            self.buffer[:idx_end] = data[len1:]
+        else:
+            self.buffer[idx_start: idx_end] = data
+        
+        self.idx = idx_end
+    
+    def get_mean(self):
+        
+        if self.full:
+            return torch.mean(self.buffer)
+        else:
+            if self.idx == 0:
+                return 0
+            return torch.mean(self.buffer[:self.idx])
+    
+    def get_buffer(self):
+        return self.buffer
+    
+
+    
+

@@ -133,6 +133,12 @@ class LoadAnnotations(object):
                                 results['ann_info']['seg_map'])
         else:
             filename = results['ann_info']['seg_map']
+        
+        if not os.path.exists(filename):
+            results["gt_semantic_seg"] = np.zeros((1024, 2048))
+            results["seg_fields"].append("gt_semantic_seg")
+            return results
+        
         img_bytes = self.file_client.get(filename)
         gt_semantic_seg = mmcv.imfrombytes(
             img_bytes, flag='unchanged',
@@ -167,7 +173,8 @@ class LoadFlowFromFile(object):
         pass
 
     def __call__(self, results):
-        flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
+        # flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
+        flow_path = results['flow_info']["filename"]
         if not os.path.exists(flow_path):
             raise FileNotFoundError(f"Flow file not found: {flow_path}")
         flow = loadFlowVec(flow_path).astype(np.float32)
@@ -181,20 +188,16 @@ class LoadFlowFromFileStub(object):
     def __init__(self):
         pass
 
-    def __call__(self, results):
-        flow_path = osp.join(results['flow_prefix'], results['flow_info']["filename"])
-        # flow = loadFlow(flow_path)
-        # results["flow"] = flow
-        # print("Flow path given: ", flow_path, flow.shape)
-        # print("flow path: ", flow_path)
-        # breakpoint()
+    def __call__(self, dataset):
         
-        if "VIPER" in flow_path:
+        if "VIPER" == dataset:
             flow = torch.zeros(1080, 1920, 2)
-        elif "cityscapes-seq" in flow_path:
+        elif "cityscapes-seq" == dataset:
             flow = torch.zeros(1024, 2048, 2)
-        elif "SynthiaSeq" in flow_path:
+        elif "SynthiaSeq" == dataset:
             flow = torch.zeros(760, 1280, 2)
+        elif "bdd" == dataset:
+            flow = torch.zeros(720, 1280, 2)
         # flow = torch.zeros(2, 1024, 1024)
         # results["flow"] = flow
 

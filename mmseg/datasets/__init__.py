@@ -30,6 +30,7 @@ from .cityscapesSeq import CityscapesSeqDataset
 from .seqUtils import SeqUtils
 from .SynthiaSeq import SynthiaSeqDataset
 from .synthia import SynthiaDataset
+from .bddSeq import BDDSeqDataset
 
 __all__ = [
     'CustomDataset', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
@@ -39,5 +40,5 @@ __all__ = [
     'STAREDataset', 'DarkZurichDataset', 'NightDrivingDataset',
     'COCOStuffDataset', 'LoveDADataset', 'MultiImageMixDataset',
     'iSAIDDataset', 'ISPRSDataset', 'PotsdamDataset', "ViperDataset",
-    "ViperSeqDataset", "SeqUtils", "SynthiaSeqDataset", "SynthiaDataset"
+    "ViperSeqDataset", "SeqUtils", "SynthiaSeqDataset", "SynthiaDataset", "BDDSeqDataset"
 ]

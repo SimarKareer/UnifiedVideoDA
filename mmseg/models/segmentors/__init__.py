@@ -4,5 +4,6 @@
 from .base import BaseSegmentor
 from .encoder_decoder import EncoderDecoder
 from .hrda_encoder_decoder import HRDAEncoderDecoder
+from .accel_hrda_encoder_decoder import ACCELHRDAEncoderDecoder
 
-__all__ = ['BaseSegmentor', 'EncoderDecoder', 'HRDAEncoderDecoder']
+__all__ = ['BaseSegmentor', 'EncoderDecoder', 'HRDAEncoderDecoder', 'ACCELHRDAEncoderDecoder']

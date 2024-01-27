@@ -35,7 +35,7 @@ class SeqUtils():
         return filtered_infos1, filtered_infos2, filtered_infos3
 
 
-    def load_annotations_seq(self, img_dir, img_suffix, ann_dir, seg_map_suffix, split, frame_offset=0):
+    def load_annotations_seq(self, img_dir, img_suffix, ann_dir, seg_map_suffix, split, img_prefix="", frame_offset=0):
         """Load annotation from directory.
 
         Args:
@@ -68,14 +68,14 @@ class SeqUtils():
                     number_length = len(img_name.split('_')[-1])
                     # img_name = f"{img_name.split('_')[0]}_{int(img_name.split('_')[1]) - frame_offset:05d}"
                     name_split = img_name.split('_')
-                    num = int(name_split[-1]) - frame_offset
+                    num = int(name_split[-1]) + frame_offset
                     prefix = "_".join(name_split[:-1])
                     #deals with reading split files with no '_' in img names
                     if prefix == '':
                         img_name = f"{'{num:0{number_length}}'.format(num=num, number_length=number_length)}"
                     else:
                         img_name = f"{prefix}_{'{num:0{number_length}}'.format(num=num, number_length=number_length)}"
-                    img_info = dict(filename=img_name + img_suffix)
+                    img_info = dict(filename=os.path.join(img_prefix, img_name) + img_suffix)
                     if ann_dir is not None:
                         seg_map = img_name + seg_map_suffix
                         img_info['ann'] = dict(seg_map=seg_map)
@@ -108,12 +108,13 @@ class SeqUtils():
                 False).
         """
         try:
-            if self.flows is None:
-                imt_imtk_flow = self.prepare_train_img_singular(self.img_infos, idx)
-            else:
-                assert(self.fut_images is not None)
-                assert(self.flows is not None)
-                imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
+            # if self.flows is None:
+            #     imt_imtk_flow = self.prepare_train_img_singular(self.img_infos, idx)
+            # else:
+            #     assert(self.fut_images is not None)
+            #     assert(self.flows is not None)
+            #     imt_imtk_flow = self.prepare_train_img(self.img_infos, idx, im_tk_infos=self.fut_images, flow_infos=self.flows)
+            imt_imtk_flow = self.prepare_train_img(self.seq_imgs, idx, self.seq_flows)
         except FileNotFoundError as e:
             if self.no_crash_dataset:
                 print("Skipping image due to error: ", e)
@@ -126,6 +127,38 @@ class SeqUtils():
 
         return imt_imtk_flow
     
+    def var_merge(self, ims, flows):
+        ims[self.zero_index]["img"] = np.concatenate(
+            (
+                [i["img"] for i in ims] + [f["flow"] for f in flows]
+            ), axis=2
+        )
+
+    def var_unmerge(self, ims, flows, mergedImsFlows):
+        # add assert
+
+        idx = 0
+        for i in range(len(ims)):
+            ims[i]["img"] = mergedImsFlows[:, :, idx:idx+3]
+            idx += 3
+        
+        for i in range(len(flows)):
+            flows[i]["flow"] = mergedImsFlows[:, :, idx:idx+2]
+            idx += 2
+        
+        return ims, flows
+
+    def update_shared_metas(self, ims):
+        for i in range(len(ims)):
+            if i != self.zero_index:
+                update_keys = ['flip_direction', 'keep_ratio', 'flip', 'scale', 'scale_idx']
+                for k in update_keys:
+                    ims[i][k] = ims[self.zero_index][k]
+                ims[i]["gt_semantic_seg"] = torch.tensor([])
+                if self.ds == "cityscapes-seq" and "valid_pseudo_mask" in ims[self.zero_index]: # during test time there is no valid pseudo mask so ignore then
+                    ims[i]["valid_pseudo_mask"] = ims[self.zero_index]["valid_pseudo_mask"]
+
+
     def merge(self, ims, imtk, flows=None):
         # print("merge input: ", ims["img"].data, imtk["img"].data, flows["flow"].data)
         # print("merge input: ", type(ims["img"]), type(imtk["img"]), type(flows["flow"]))
@@ -223,7 +256,143 @@ class SeqUtils():
 
         return finalIms
 
-    def prepare_train_img(self, infos, idx, im_tk_infos=None, flow_infos=None, load_tk_gt=False):
+    def get_metas(self, loaded_images):
+        img_metas = {}
+        for k, v in loaded_images.items():
+            if k not in ["img", "gt_semantic_seg", "img_info", "ann_info", "seg_prefix", "img_prefix", "seg_fields"]:
+                img_metas[k] = v
+
+        # img_metas["img_shape"] = (1080, 1920, 3)
+        # img_metas["pad_shape"] = (1080, 1920, 3)
+        return img_metas
+
+    def backwards_compat(self, data_out):
+        # put all the bindings that I had in dacs here.
+        data_out["img"] = data_out[f"img[{self.im_idx}]"]
+        data_out["gt_semantic_seg"] = data_out[f"gt_semantic_seg[{self.im_idx}]"]
+        data_out["flow"] = data_out[f"flow[{self.im_idx}]"]
+
+        # alternatively, we can remap -4, -2, 0 to [-2, -1, 0]
+
+        if self.frame_offset == [-4, -2, 0]:
+            target_frame_offset = [-2, -1, 0]
+            new_data_out = {}
+            for old_dist, new_dist in zip(self.frame_offset, target_frame_offset):
+                for k in data_out.keys():
+                    if f"[{old_dist}]" in k:
+                        # print("Replacing: ", k, old_dist, new_dist)
+                        # print("adding key to new_data_out: ", k.replace(f"[{old_dist}]", f"[{new_dist}]"))
+                        new_data_out[k.replace(f"[{old_dist}]", f"[{new_dist}]")] = data_out[k]
+                    elif "[" not in k:
+                        # print("directly copying key: ", k)
+                        new_data_out[k] = data_out[k]
+        elif self.frame_offset == [-2, -1, 0]:
+            new_data_out = data_out
+        else:
+            assert False, "Unrecognized frame offset, define backwards compat for that offset here"
+
+            # data_out["img[-1]"] = data_out["img"]
+            # data_out["imtk"] = data_out["img[-2]"]
+
+
+        # if self.frame_offset == [-4, -2, 0]:
+        #     data_out["imtk"] = data_out["img[-2]"]
+        #     data_out["offsets"] = torch.tensor([[-4, -2, 0]])
+        # elif self.frame_offset == [-2, -1, 0]:
+        new_data_out["imtk"] = new_data_out[f"img[{self.imtk_idx}]"]
+        # new_data_out["offsets"] = torch.tensor([[-2, -1, 0]])
+        # else:
+        #     assert False, "Unrecognized frame offset, define imtk for that offset here"
+        new_data_out["imtk_metas"] = new_data_out["img_metas"]
+
+        return new_data_out
+
+    def prepare_train_img(self, infos, idx, flow_infos=None):
+        results = [dict(img_info=infos[i][idx], ann_info=self.get_ann_info(infos[i], idx)) for i in range(len(infos))]
+        resultsFlow = [None if flow_infos[i] is None else dict(flow_info=flow_infos[i][idx]) for i in range(len(flow_infos))]
+
+        for i in range(len(results)):
+            self.pre_pipeline(results[i])
+        
+        ims = [] #list of dicts where each dict has the im info associated with the frame_offset list in the config
+        for i in range(len(results)):
+            if self.load_gt[i]:
+                ims.append(self.pipeline["im_load_pipeline"](results[i]))
+            else:
+                ims.append(self.pipeline["load_no_ann_pipeline"](results[i]))
+        
+
+        flows = [] #Same like ims but with flows
+        for i in range(len(resultsFlow)):
+            if self.flow_dir and self.flow_dir[i]:
+                flows.append(self.pipeline["load_flow_pipeline"](resultsFlow[i]))
+            else:
+                flows.append(self.pipeline["stub_flow_pipeline"](self.ds))
+
+        # Shared Pipeline
+        self.var_merge(ims, flows) # Puts the merged image on the base frame (zero index)
+        imsAndFlows = self.pipeline["shared_pipeline"](ims[self.zero_index]) # a single dict where img is the merged image after transforms
+        ims, flows = self.var_unmerge(ims, flows, imsAndFlows["img"]) # ims and flows are both lists of dicts
+        self.update_shared_metas(ims)
+    
+        # Correct flows for flip aug        
+        if ims[self.zero_index]["flip"]:
+            for i in range(len(ims)):
+                flows[i]["flow"][:, :, 0] = -flows[i]["flow"][:, :, 0]
+
+        # Rest of image and flow pipelines
+        finalIms = []
+        for i in range(len(ims)):
+            finalIms.append(self.pipeline["im_pipeline"](ims[i]))
+        for i in range(len(flows)): #rename to img
+            # if resultsFlow[i]:
+            flows[i]["img"] = flows[i].pop("flow")
+        finalFlows = [self.pipeline["flow_pipeline"](flows[i]) if resultsFlow[i] else dict(img=torch.tensor([])) for i in range(len(flows))] #add the rest of the flow augs
+        
+
+        # Remove list dim, fix gt_sem_seg, and add flow to data_out
+        data_out = {}
+        for k in ["img", "gt_semantic_seg", "valid_pseudo_mask"] if "valid_pseudo_mask" in finalIms[self.zero_index] else ["img", "gt_semantic_seg"]:
+            for i, frame_name in enumerate(self.frame_offset):
+                if isinstance(finalIms[i][k], np.ndarray):
+                    finalIms[i][k] = torch.from_numpy(finalIms[i][k])
+
+                data_out[f"{k}[{frame_name}]"] = finalIms[i][k]
+                if k == "gt_semantic_seg":
+                    data_out[f"{k}[{frame_name}]"] = data_out[f"{k}[{frame_name}]"].unsqueeze(0).long()
+                
+        
+        for i, frame_name in enumerate(self.frame_offset):
+            data_out[f"flow[{frame_name}]"] = finalFlows[i]["img"]
+        
+
+        data_out["img_metas"] = finalIms[self.zero_index]["img_metas"]
+
+        # List dims / data containers
+        for k, _ in data_out.items():
+            if isinstance(data_out[k], DataContainer) and "metas" not in k:
+                data_out[k] = data_out[k].data
+            if isinstance(data_out[k], np.ndarray):
+                data_out[k] = torch.from_numpy(data_out[k])
+        
+        # for BW compaibility we can add all the original key names back in data_out
+        data_out = self.backwards_compat(data_out)
+        
+        # Put stuff in lists if it's eval time.
+        if not self.unpack_list:
+            for k, v in data_out.items():
+                if isinstance(v, torch.Tensor):
+                    data_out[k] = [v]
+                elif k == "img_metas" or k == "imtk_metas":
+                    data_out[k] = [v]
+
+        # before returning change the stubbed flows so they can't be used incorrectly
+        return data_out
+
+        
+
+
+    def prepare_train_img_old(self, infos, idx, im_tk_infos=None, flow_infos=None, load_tk_gt=False):
         """Get training data and annotations after pipeline.
 
         Args:
@@ -389,8 +558,7 @@ class SeqUtils():
         else:
             raise Exception("Unknown data_type: {}".format(self.data_type))
     
-
-        if not self.unpack_list:
+        if self.test_mode:
             for k, v in finalIms.items():
                 if isinstance(v, torch.Tensor):
                     finalIms[k] = [v]

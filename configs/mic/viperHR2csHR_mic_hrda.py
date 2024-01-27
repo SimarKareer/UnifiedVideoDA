@@ -16,10 +16,6 @@ _base_ = [
     # Linear Learning Rate Warmup with Subsequent Linear Decay
     '../_base_/schedules/poly10warm.py'
 ]
-# load_from = "work_dirs/lwarp/lwarp1mix0/latest.pth"
-# load_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
-# resume_from = "/coc/testnvme/skareer6/Projects/VideoDA/experiments/mmsegmentationExps/work_dirs/lwarpv3/warp1e-1mix1-FILL-PLWeight02-23-23-24-23/iter_4000.pth"
-# resume_from = "./work_dirs/lwarp/1gbaseline/iter_40000.pth"
 # Random Seed
 seed = 2  # seed with median performance
 # HRDA Configuration
@@ -74,6 +70,7 @@ data = dict(
 )
 # MIC Parameters
 uda = dict(
+    video_discrim=False,
     # Apply masking to color-augmented target images
     mask_mode='separatetrgaug',
     # Use the same teacher alpha for MIC as for DAFormer
@@ -89,6 +86,9 @@ uda = dict(
     l_warp_lambda=1.0,
     l_mix_lambda=0.0,
     consis_filter=False,
+    consis_confidence_filter=False,
+    consis_confidence_thresh=0,
+    consis_confidence_per_class_thresh=False,
     consis_filter_rare_class=False,
     pl_fill=False,
     bottom_pl_fill=False,
@@ -108,6 +108,9 @@ uda = dict(
     oracle_mask_add_noise=False,
     oracle_mask_remove_pix=False,
     oracle_mask_noise_percent=0.0,
+    TPS_warp_pl_confidence=False,
+    TPS_warp_pl_confidence_thresh=0.0,
+    max_confidence=False
 )
 # Optimizer Hyperparameters
 optimizer_config = None
@@ -122,14 +125,17 @@ optimizer_config = None
 n_gpus = None
 launcher = "slurm" #"slurm"
 gpu_model = 'A40'
-runner = dict(type='IterBasedRunner', max_iters=15000)
+runner = dict(type='IterBasedRunner', max_iters=40000)
 # Logging Configuration
-checkpoint_config = dict(by_epoch=False, interval=3000, max_keep_ckpts=2)
-evaluation = dict(interval=3000, eval_settings={
-    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5", "M5Fixed", "mIoU_gt_pred"],
+
+checkpoint_config = dict(by_epoch=False, interval=8000, max_keep_ckpts=1)
+evaluation = dict(interval=8000, eval_settings={
+    "metrics": ["mIoU", "pred_pred", "gt_pred", "M5Fixed"],
     "sub_metrics": ["mask_count"],
     "pixelwise accuracy": True,
     "confusion matrix": True,
+    "return_logits": False,
+    "consis_confidence_thresh": 0.95
 })
 # Meta Information for Result Analysis
 name = 'viperHR2csHR_mic_hrda_s2'
@@ -140,6 +146,3 @@ name_encoder = 'mitb5'
 name_decoder = 'hrda1-512-0.1_daformer_sepaspp_sl'
 name_uda = 'dacs_a999_fdthings_rcs0.01-2.0_cpl2_m64-0.7-spta'
 name_opt = 'adamw_6e-05_pmTrue_poly10warm_1x2_40k'
-
-# For the other configurations used in the paper, please refer to experiment.py
-#CS Invalid Metrics: "M6Sanity", "mIoU_gt_pred", "mIoU"
