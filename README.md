@@ -165,7 +165,7 @@ BDDVid is finally setup! For UDA jobs, use the `train` and `val_orig_10k` split.
 
 ## Generated Flows Dataset
 
-In order to leverage temporal information in videos, we heavily rely on the use of between sequential frames for many of our approaches. For each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows [here](https://github.com/drinkingcoder/FlowFormer-Official) for each dataset, and provide instructions for downloading each datasets flows.
+In order to leverage temporal information in videos, we heavily rely on the use of between sequential frames for many of our approaches. For each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows [here](https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows) for each dataset, and provide instructions for downloading each datasets flows.
 
 
 ## Reproducing Experiment Results
