@@ -57,30 +57,28 @@ The following files are where key changes were made:
 
 ## Dataset Setup (Cityscapes-Seq, Synthia-Seq, Viper)
 
-Please download the following datasets, which will be used in Video-DAS experiments
+Please download the following datasets, which will be used in Video-DAS experiments.  Download to `mmseg/datasets` with the following structure and key folders
+```
+datasets/
+├── cityscapes-seq
+│   ├── gtFine % gtFine_trainvaltest.zip
+│   ├── leftImg8bit_sequence % gtFine_trainvaltest.zip
+└── VIPER
+    ├── val
+    ├── test
+    ├── train
+        └── img % Images: Frames: *0, *1, *[2-9]; Sequences: 01-77; Format: jpg
+        └── cls % Semantic Class Labels: Frames: *0, *1, *[2-9]; Sequences: 01-77; Format: png
+└── SynthiaSeq
+    └── SYNTHIA-SEQS-04-DAWN
+        └── RGB
+        └── GT
+```
 
-Datasets:
+Download Links:
 * [Cityscapes-Seq](https://www.cityscapes-dataset.com/)
-```bash
-mmseg/datasets/cityscapesSeq/                       % dataset root
-mmseg/datasets/cityscapesSeq/leftImg8bit_sequence   % leftImg8bit_sequence_trainvaltest.zip
-mmseg/datasets/cityscapesSeq/gtFine                 % gtFine_trainvaltest.zip
-```
-
 * [Viper](https://playing-for-benchmarks.org/download/): 
-```bash
-mmseg/datasets/viper/                            % dataset root
-mmseg/datasets/viper/train/img                   % Images: Frames: *0, *1, *[2-9]; Sequences: 01-77; Format: jpg
-mmseg/datasets/viper/train/cls                   % Semantic Class Labels: Frames: *0, *1, *[2-9]; Sequences: 01-77; Format: png
-```
-
 * [Synthia-Seq](http://synthia-dataset.cvc.uab.cat/SYNTHIA_SEQS/SYNTHIA-SEQS-04-DAWN.rar) 
-
-We will use `SEQS-04-DAWN/RGB/Stereo_Left/Omni_F` and `SEQS-04-DAWN/GT/LABELS/Stereo_Left/Omni_F`
-```bash
-mmseg/datasets/viper/SynthiaSeq/                      % SYNTHIA-Seq dataset root
-mmseg/datasets/viper/SynthiaSeq/SYNTHIA-SEQS-04-DAWN      %SYNTHIA-SEQS-04-DAWN
-```
 
 After downlaoding all datasets, we must generate sample class statistics on our source datasets (Viper, Synthia-Seq) and convert class labels into Cityscapes-Seq classes.
 
@@ -89,12 +87,12 @@ For both Viper and Synthia-Seq, perform the following:
 python tools/convert_datasets/viper.py datasets/viper --gt-dir train/cls/
 
 python tools/convert_datasets/synthiaSeq.py datasets/SynthiaSeq/SYNTHIA-SEQS-04-DAWN --gt-dir GT/LABELS/Stereo_Left/Omni_F
-
-
 ```
 
-## Creating BDDVid VideoDA Shift
-We introduce support for a new target domain dataset derived from BDD10k, which to our knowledge has not been studied previously in the context of Video-DAS. BDD10k has a series of 10,000 driving images across a variety of conditions.  Of these 10,000 images, we identify 3,429 with valid corresponding video clips in the BDD100k dataset, making this subset suitable for Video-DAS. We refer to this subset as BDDVid. Next, we split these 3,429 images into 2,999 train samples and 430 evaluation samples. In BDD10k, the labeled frame is generally the 10th second in the 40-second clip, but not always. To mitigate this, we ultimately only evaluate images in BDD10k that perfectly correspond with the segmentation annotation, while at training time we use frames directly extracted from BDD100k video clips. The following instructions below will give detail in how to set up BDDVid Dataset.
+## Dataset Setup (BDDVid)
+We introduce support for a new target domain dataset derived from BDD10k. BDD10k has a series of 10,000 driving images across a variety of conditions.  Of these 10,000 images, we identify 3,429 with valid corresponding video clips in the BDD100k dataset, making this subset suitable for Video-DAS. We refer to this subset as BDDVid. Next, we split these 3,429 images into 2,999 train samples and 430 evaluation samples. In BDD10k, the labeled frame is generally the 10th second in the 40-second clip, but not always. To mitigate this, we ultimately only evaluate images in BDD10k that perfectly correspond with the segmentation annotation, while at training time we use frames directly extracted from BDD100k video clips. 
+
+The following instructions below will give detail in how to set up BDDVid Dataset.
 
 1. **Download Segmentation Labels for BDD10k (https://bdd-data.berkeley.edu/portal.html#download) images.**
 
@@ -163,9 +161,9 @@ We introduce support for a new target domain dataset derived from BDD10k, which 
 BDDVid is finally setup! For UDA jobs, use the `train` and `val_orig_10k` split. For supervised jobs with BDDVid, use `train_orig_10k` and `val_orig_10k`.
 
 
-## Generated Flows Dataset
+## Dataset Setup (Optical Flow)
 
-In order to leverage temporal information in videos, we heavily rely on the use of between sequential frames for many of our approaches. For each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows [here](https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows) for each dataset, and provide instructions for downloading each datasets flows.
+A number of our methods rely on optical flow between successive frames, thus for each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows [here](https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows) for each dataset, and provide instructions for downloading each datasets flows.
 
 
 ## Reproducing Experiment Results
