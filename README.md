@@ -8,7 +8,7 @@ Modification of these [instructions](https://github.com/lhoyer/MIC/tree/master/s
 
 1. `conda create -n mic python=3.8.5`
 2. `pip install -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html`
-3. Install my mmcv from scratch.  [full instructions if necessary](https://mmcv.readthedocs.io/en/latest/get_started/build.html)
+3. Install my mmcv from scratch (in `submodules/`).  [full instructions if necessary](https://mmcv.readthedocs.io/en/latest/get_started/build.html)
     - `git submodule update --recursive` will pull my mmcv submodule
     - Simply run `MMCV_WITH_OPS=1 pip install -e . -v` inside the `submodules/mmcv` directory
 4. `pip install -e .` inside mmseg root dir
