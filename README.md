@@ -1,5 +1,6 @@
-# VideoDA
-Domain adaptation for semantic segmentation using video!
+# Unified VideoDA
+Codebase for "We're Not Using Videos Effectively: An Updated Domain Adaptive Video Segmentation Baseline"
+A unified framework for studying domain adaptive semantic segmentation using either videos or images!
 
 This repo is built off of mmsegmentation, with the [MIC repo](https://github.com/lhoyer/MIC/tree/master)
 
@@ -12,48 +13,6 @@ Modification of these [instructions](https://github.com/lhoyer/MIC/tree/master/s
     - `git submodule update --recursive` will pull my mmcv submodule
     - Simply run `MMCV_WITH_OPS=1 pip install -e . -v` inside the `submodules/mmcv` directory
 4. `pip install -e .` inside mmseg root dir
-
-
-## Key Contributions to mmsegmentation Repo
-We have made a number of key contributions to this open source mmsegmentation repo to support video domain adaptative segmentation experiments for future researchers to build off of. 
-
-Firstly, we consolidated the HRDA + MIC works into the  mmsegmentation repository. By adding the SOTA ImageDA work into this repository,researchers have the capability of easily switching between models, backbones, segmentation heads, and architectures for experimentation and ablation studies.
-
-We added key datasets for the VideoDA benchmark (ViperSeq -> CityscapesSeq, SynthiaSeq -> CityscapesSeq) to mmsegmentation, along with our own constructed shift (ViperSeq -> BDDVid, SynthiaSeq -> BDDVid) , and allowed for the capability of loading consecutive images along with the corresponding optical flow based on a frame distance specified. This enables researchers to easily start work on VideoDA related problems or benchmark current ImageDA appraoches on this setting.
-
-In additon, we provide implementations of common VideoDA techniques such as Video Discriminators, ACCEL architectures + consistent mixup, and a variety of pseudo-label refinement strategies.
-
-All experiments we report in our paper have been made avaiabile in the repository, with each experiment's corresponding bash script to help with reproducability. The next section covers these scripts.
-
-The following files are where key changes were made:
-
-**VideoDA Dataset Support**
-- `mmseg/datasets/viperSeq.py`
-- `mmseg/datasets/cityscapesSeq.py`
-- `mmseg/datasets/SynthiaSeq.py`
-- `mmseg/datasets/SynthiaSeq.py`
-- `mmseg/datasets/bddSeq.py`
-
-**Consecutive Frame/Optical Flow Support**
-- `mmseg/datasets/seqUtils.py`
-- `tools/aggregate_flows/flow/my_utils.py`
-- `tools/aggregate_flows/flow/util_flow.py`
-
-**VideoDA techinques**
-- Video Discriminator:
-    - `mmseg/models/uda/dacsAdvseg.py`
-- PL Refinement:
-    - `mmseg/models/uda/dacs.py`
-- ACCEL + Consistent Mixup:
-    - `mmseg/models/segmentors/accel_hrda_encoder_decoder.py`
-    - `mmseg/models/utils/dacs_transforms.py`
-
-**Dataset and Model Configurations**
-- `configs/_base_/datasets/*`
-- `configs/mic/*`
-
-**Experiment Scripts**
-- `tools/experiments/*`
 
 ## Dataset Setup (Cityscapes-Seq, Synthia-Seq, Viper)
 
@@ -163,10 +122,61 @@ BDDVid is finally setup! For UDA jobs, use the `train` and `val_orig_10k` split.
 
 ## Dataset Setup (Optical Flow)
 
-A number of our methods rely on optical flow between successive frames, thus for each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows [here](https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows) for each dataset, and provide instructions for downloading each datasets flows.
+A number of our methods rely on optical flow between successive frames, thus for each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows for each dataset on [Hugging Face](https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows), and provide instructions for downloading each datasets flows.
 
 ## Reproducing Experiments
 See [`./experiments.md`](./experiments.md) for commands to run any experiment in the paper.  The HRDA baseline can be run via `python tools/train.py configs/mic/viperHR2bddHR_mic_hrda.py --launcher=slurm --l-warp-lambda=0.0 --l-mix-lambda=1.0 --seed 1 --deterministic --work-dir=./work_dirs/<dirname> --nowandb True`
+
+## Key Contributions to mmsegmentation Repo
+We have made a number of key contributions to this open source mmsegmentation repo to support video domain adaptative segmentation experiments for future researchers to build off of. 
+
+Firstly, we consolidated the HRDA + MIC works into the  mmsegmentation repository. By adding the SOTA ImageDA work into this repository,researchers have the capability of easily switching between models, backbones, segmentation heads, and architectures for experimentation and ablation studies.
+
+We added key datasets for the VideoDA benchmark (ViperSeq -> CityscapesSeq, SynthiaSeq -> CityscapesSeq) to mmsegmentation, along with our own constructed shift (ViperSeq -> BDDVid, SynthiaSeq -> BDDVid) , and allowed for the capability of loading consecutive images along with the corresponding optical flow based on a frame distance specified. This enables researchers to easily start work on VideoDA related problems or benchmark current ImageDA appraoches on this setting.
+
+In additon, we provide implementations of common VideoDA techniques such as Video Discriminators, ACCEL architectures + consistent mixup, and a variety of pseudo-label refinement strategies.
+
+All experiments we report in our paper have been made avaiabile in the repository, with each experiment's corresponding bash script to help with reproducability. The next section covers these scripts.
+
+The following files are where key changes were made:
+
+**VideoDA Dataset Support**
+- `mmseg/datasets/viperSeq.py`
+- `mmseg/datasets/cityscapesSeq.py`
+- `mmseg/datasets/SynthiaSeq.py`
+- `mmseg/datasets/SynthiaSeq.py`
+- `mmseg/datasets/bddSeq.py`
+
+**Consecutive Frame/Optical Flow Support**
+- `mmseg/datasets/seqUtils.py`
+- `tools/aggregate_flows/flow/my_utils.py`
+- `tools/aggregate_flows/flow/util_flow.py`
+
+**VideoDA techinques**
+- Video Discriminator:
+    - `mmseg/models/uda/dacsAdvseg.py`
+- PL Refinement:
+    - `mmseg/models/uda/dacs.py`
+- ACCEL + Consistent Mixup:
+    - `mmseg/models/segmentors/accel_hrda_encoder_decoder.py`
+    - `mmseg/models/utils/dacs_transforms.py`
+
+**Dataset and Model Configurations**
+- `configs/_base_/datasets/*`
+- `configs/mic/*`
+
+**Experiment Scripts**
+- `tools/experiments/*`
+
+## Citation
+```
+@inproceedings{kareer2024NotUsingVideosCorrectly
+    title={We're are Not Using Videos Effectively: An Updated Video Domain Adaptation Baseline},
+    author={Simar Kareer, Vivek Vijaykumar, Harsh Maheshwari, Prithvi Chattopadhyay, Judy Hoffman, Viraj Prabhu},
+    booktitle={Transactions on Machine Learning Research (TMLR)},<br></br>
+    &emsp;&emsp;year={2024}
+}
+```
 
 
 
