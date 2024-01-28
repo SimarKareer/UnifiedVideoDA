@@ -35,7 +35,7 @@ datasets/
 
 Download Links:
 * [Cityscapes-Seq](https://www.cityscapes-dataset.com/)
-* [Viper](https://playing-for-benchmarks.org/download/): 
+* [Viper](https://playing-for-benchmarks.org/download/)
 * [Synthia-Seq](http://synthia-dataset.cvc.uab.cat/SYNTHIA_SEQS/SYNTHIA-SEQS-04-DAWN.rar) 
 
 After downlaoding all datasets, we must generate sample class statistics on our source datasets (Viper, Synthia-Seq) and convert class labels into Cityscapes-Seq classes.
