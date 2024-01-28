@@ -121,7 +121,48 @@ BDDVid is finally setup! For UDA jobs, use the `train` and `val_orig_10k` split.
 
 ## Dataset Setup (Optical Flow)
 
-A number of our methods rely on optical flow between successive frames, thus for each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows for each dataset on [Hugging Face](https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows), and provide instructions for downloading each datasets flows.
+A number of our methods rely on optical flow between successive frames, thus for each dataset, we generated flows using [FlowFormer](https://github.com/drinkingcoder/FlowFormer-Official). We have hosted all our generated flows for each dataset on [Hugging Face](https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows).
+
+Simply run 
+```bash
+git lfs install
+git clone https://huggingface.co/datasets/hoffman-lab/Unified-VideoDA-Generated-Flows
+```
+This will produce the following file tree
+```
+Unified-VideoDA-Generated-Flows/
+├── SynthiaSeq_Flows
+│   └── frame_dist_1
+│       └── im
+│           ├── synthiaSeq_im_backward_flow.tar.gz
+│           ├── synthiaSeq_im_forward_flow.tar.gz
+├── BDDVid_Flows
+│   └── frame_dist_2
+│       ├── imtk
+│       │   └── bddvid_imtk_backward_flow.tar.gz
+│       └── im
+│           └── bddvid_im_backward_flow.tar.gz
+├── Viper_Flows
+│   └── frame_dist_1
+│       ├── imtk
+│       │   └── viper_imtk_backward_flow.tar.gz
+│       └── im
+│           ├── viper_im_forward_flow.tar.gz
+│           └── viper_im_backward_flow.tar.gz
+├── CityscapesSeq_Flows
+│   └── frame_dist_1
+│       ├── imtk
+│       │   ├── csSeq_imtk_forward_flow.tar.gz
+│       │   └── csSeq_imtk_backward_flow.tar.gz
+│       └── im
+│           ├── csSeq_im_backward_flow.tar.gz
+│           └── csSeq_im_forward_flow.tar.gz
+```
+Finally unpack each tar file.  For instance:
+```
+cd Unified-VideoDA-Generated-Flows/SynthiaSeq_Flows/frame_dist_1/im
+tar -xvzf synthiaSeq_im_backward_flow.tar.gz.tar.gz
+```
 
 ## Reproducing Experiments
 See [`./experiments.md`](./experiments.md) for commands to run any experiment in the paper.  The HRDA baseline can be run via `python tools/train.py configs/mic/viperHR2bddHR_mic_hrda.py --launcher=slurm --l-warp-lambda=0.0 --l-mix-lambda=1.0 --seed 1 --deterministic --work-dir=./work_dirs/<dirname> --nowandb True`
