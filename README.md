@@ -167,12 +167,12 @@ tar -xvzf synthiaSeq_im_backward_flow.tar.gz.tar.gz
 ## Reproducing Experiments
 See [`./experiments.md`](./experiments.md) for commands to run any experiment in the paper.  The HRDA baseline can be run via `python tools/train.py configs/mic/viperHR2bddHR_mic_hrda.py --launcher=slurm --l-warp-lambda=0.0 --l-mix-lambda=1.0 --seed 1 --deterministic --work-dir=./work_dirs/<dirname> --nowandb True`
 
-## Key Contributions to mmsegmentation Repo
+## Key Contributions
 We have made a number of key contributions to this open source mmsegmentation repo to support video domain adaptative segmentation experiments for future researchers to build off of. 
 
-Firstly, we consolidated the HRDA + MIC works into the  mmsegmentation repository. By adding the SOTA ImageDA work into this repository,researchers have the capability of easily switching between models, backbones, segmentation heads, and architectures for experimentation and ablation studies.
+Firstly, we consolidated both ImageDA and VideoDA techniques into the mmsegmentation repository. This enables researchers to easily switch between models, backbones, segmentation heads, and architectures.
 
-We added key datasets for the VideoDA benchmark (ViperSeq -> CityscapesSeq, SynthiaSeq -> CityscapesSeq) to mmsegmentation, along with our own constructed shift (ViperSeq -> BDDVid, SynthiaSeq -> BDDVid) , and allowed for the capability of loading consecutive images along with the corresponding optical flow based on a frame distance specified. This enables researchers to easily start work on VideoDA related problems or benchmark current ImageDA appraoches on this setting.
+We include key datasets for the VideoDA benchmark (ViperSeq -> CityscapesSeq, SynthiaSeq -> CityscapesSeq) to mmsegmentation, along with our own constructed shift (ViperSeq -> BDDVid, SynthiaSeq -> BDDVid), and allowed for the capability of loading consecutive images along with the corresponding optical flow based on a frame distance specified. This enables researchers to easily start work on VideoDA related problems or benchmark current ImageDA appraoches on this setting.
 
 In additon, we provide implementations of common VideoDA techniques such as Video Discriminators, ACCEL architectures + consistent mixup, and a variety of pseudo-label refinement strategies.
 
@@ -213,8 +213,8 @@ The following files are where key changes were made:
 @inproceedings{kareer2024NotUsingVideosCorrectly
     title={We're are Not Using Videos Effectively: An Updated Video Domain Adaptation Baseline},
     author={Simar Kareer, Vivek Vijaykumar, Harsh Maheshwari, Prithvi Chattopadhyay, Judy Hoffman, Viraj Prabhu},
-    booktitle={Transactions on Machine Learning Research (TMLR)},<br></br>
-    &emsp;&emsp;year={2024}
+    booktitle={Transactions on Machine Learning Research (TMLR)},
+    year={2024}
 }
 ```
 
