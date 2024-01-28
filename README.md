@@ -1,6 +1,5 @@
 # Unified VideoDA
 Codebase for "We're Not Using Videos Effectively: An Updated Domain Adaptive Video Segmentation Baseline"
-A unified framework for studying domain adaptive semantic segmentation using either videos or images!
 
 This repo is built off of mmsegmentation, with the [MIC repo](https://github.com/lhoyer/MIC/tree/master)
 
