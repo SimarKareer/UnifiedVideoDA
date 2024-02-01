@@ -1,5 +1,7 @@
 # Unified VideoDA
-Codebase for "We're Not Using Videos Effectively: An Updated Domain Adaptive Video Segmentation Baseline" (TMLR 2024).  [Project Page](https://simarkareer.com/videoDAPage/)
+Codebase for "We're Not Using Videos Effectively: An Updated Domain Adaptive Video Segmentation Baseline" (TMLR 2024).
+
+[Project Page](https://simarkareer.com/videoDAPage/)
 
 This repo is built off of mmsegmentation, with the [MIC repo](https://github.com/lhoyer/MIC/tree/master)
 
