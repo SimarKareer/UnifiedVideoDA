@@ -176,7 +176,7 @@ We include key datasets for the VideoDA benchmark (ViperSeq -> CityscapesSeq, Sy
 
 In additon, we provide implementations of common VideoDA techniques such as Video Discriminators, ACCEL architectures + consistent mixup, and a variety of pseudo-label refinement strategies.
 
-All experiments we report in our paper have been made avaiabile in the repository, with each experiment's corresponding bash script to help with reproducability. The next section covers these scripts.
+All experiments we report in our paper have been made avaiabile in the repository, with each experiment's corresponding bash script to help with reproducability.
 
 The following files are where key changes were made:
 
