@@ -213,7 +213,7 @@ The following files are where key changes were made:
 ## Citation
 ```
 @inproceedings{kareer2024NotUsingVideosCorrectly
-    title={We're are Not Using Videos Effectively: An Updated Video Domain Adaptation Baseline},
+    title={We're Not Using Videos Effectively: An Updated Video Domain Adaptation Baseline},
     author={Simar Kareer, Vivek Vijaykumar, Harsh Maheshwari, Prithvi Chattopadhyay, Judy Hoffman, Viraj Prabhu},
     booktitle={Transactions on Machine Learning Research (TMLR)},
     year={2024}
